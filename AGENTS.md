@@ -78,7 +78,7 @@
 - `collectionBehavior`：`[.canJoinAllSpaces, .stationary, .ignoresCycle]`。
 - 窗口接收鼠标点击。点在组件之外的空白处什么都不发生。
 - 需要输入文字的组件（待办输入框等）：窗口子类重写 `canBecomeKey` 返回 `true`。点击输入框时让窗口临时成为 key window，失去焦点后归还。
-- **安全区域**：读取 `NSScreen.visibleFrame`（排除 Dock 和菜单栏后的区域），换算成相对窗口的边距，通过 bridge 推送给网页，在网页里设成 CSS 变量 `--safe-top/right/bottom/left`。所有组件都布局在安全区域内。屏幕参数变化时（`NSApplication.didChangeScreenParametersNotification`）重新计算。
+- **安全区域**：读取 `NSScreen.visibleFrame`（排除 Dock 和菜单栏后的区域），换算成相对窗口的边距，通过 bridge 推送给网页，在网页里设成 CSS 变量 `--safe-top/right/bottom/left`。所有组件都布局在安全区域内。屏幕参数变化时（`NSApplication.didChangeScreenParametersNotification`）重新计算。（M1-02 已实测：Dock 位置、自动隐藏的变化都会触发这个通知，不需要轮询。计算函数为 `SafeAreaInsets.compute`。）
 - 多显示器：每块屏幕一个窗口，屏幕接入或拔出时增删窗口。
 
 ## 省电要求（Intel Mac）
