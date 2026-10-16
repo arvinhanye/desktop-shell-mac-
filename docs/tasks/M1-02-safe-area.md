@@ -147,5 +147,16 @@
 
 ## 审查记录
 
-- **结论**：
-- **意见**：
+- **结论**：代码审查通过，可执行检查全部通过；**等用户手动验证后合并**。
+- **复验结果**（Claude Code，2026-10-16）：
+  - [x] touch 源码后强制重编，`swift build` 零警告零错误。
+  - [x] `scripts/test.sh` 退出码 0，9/9 通过（任务表要求的 6 个，加上 Codex 补充的 3 个：负横坐标副屏、各方向独立归零、小数点尺寸；补充用例的期望值已手算核对）。
+  - [x] 临时把"Dock 在右侧"的 right 改为 71，`scripts/test.sh` 退出码 1，并准确指出失败的用例；已用 `git checkout` 还原。
+  - [x] `git diff --name-only main...task/M1-02`：7 个文件，全部在允许范围内；任务单的需求部分只改了状态。
+  - [x] `grep` 没有找到 `XCTest`，也没有找到 `Timer/DispatchSource/asyncAfter/WKWebView`（确认没有轮询）。
+  - [x] `scripts/test.sh` 与任务单给出的内容一致，有执行权限。
+  - [x] 运行正常；本机当前 `visibleFrame = (0, 83, 1792, 1007)`，据此框内应显示 `top 30 · right 0 · bottom 83 · left 0`。
+- **意见**（不阻塞合并）：
+  - 实现干净：计算是纯函数；描边内缩半个线宽，不会画到 Dock 底下；调试视图在 `setFrameSize` 时重绘，可以应对分辨率变化。
+  - 任务单要求"至少覆盖"表中用例，Codex 补充的 3 个用例覆盖了真实存在的边界情况，属于合理的补充，不算越界。
+  - `SafeAreaDebugView` 是 M1 的临时调试界面，M2 换成 WKWebView 后应删除或改成调试开关，届时写进 M2 的任务单。
