@@ -1,0 +1,94 @@
+# M1-01: 工程骨架、菜单栏退出、每屏桌面层窗口
+
+- **状态**：todo
+- **里程碑**：M1
+- **依赖**：无
+- **分支**：task/M1-01
+
+<!-- ===== 以下需求部分由 Claude Code 编写，Codex 不修改 ===== -->
+
+## 目标
+
+运行 `.build/debug/DesktopShell` 后：菜单栏出现一个图标，可以从菜单退出；每块屏幕上出现一个深灰色的全屏桌面层窗口，位于普通窗口之下，中间显示该屏幕的名称和尺寸。
+
+## 背景与约束
+
+- 先读 `AGENTS.md` 的"核心架构""开发环境""窗口要求"。
+- 本任务**只做原生外壳**：不加 WKWebView、不加视频、不算安全区域（安全区域是 M1-02）。
+- `Package.swift`：
+  - `// swift-tools-version:6.0`
+  - 包名和可执行 target 名都是 `DesktopShell`，源码在 `Sources/DesktopShell/`
+  - `platforms: [.macOS(.v14)]`
+  - `swiftLanguageModes: [.v5]`
+  - 不引入任何第三方依赖
+  - 本任务不加 test target（M1-02 再加）
+- `main.swift`：创建 `NSApplication`，设置 delegate，调用 `setActivationPolicy(.accessory)`（不在 Dock 里显示图标，相当于以后 `.app` 里的 `LSUIElement`），然后 `run()`。
+- `AppDelegate.swift`（标注 `@MainActor`）：
+  - `NSStatusItem`，图标用 SF Symbol `square.grid.2x2`，`isTemplate = true`（跟随菜单栏深浅色）。
+  - 菜单只有一项："退出 DesktopShell"，快捷键 ⌘Q，调用 `NSApp.terminate(nil)`。其他菜单项（暂停、重新加载、打开配置文件夹）属于后续里程碑，现在不加。
+  - 启动时创建 `ScreenManager` 并开始工作。
+- `DesktopWindow.swift`：`NSWindow` 子类。
+  - `styleMask = .borderless`，`frame` 等于所在屏幕的 `screen.frame`。
+  - `level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)`
+  - `collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]`
+  - `ignoresMouseEvents = false`，`hasShadow = false`，`isReleasedWhenClosed = false`。
+  - **本任务不要重写 `canBecomeKey`**，键盘焦点在 M4 待办组件里处理。
+  - 内容：一个纯色占位视图，背景色 `NSColor(calibratedWhite: 0.12, alpha: 1)`；中间用白色文字显示 `"<屏幕 localizedName>  <宽>×<高>"`（单位为点）。这里是 Swift 原生调试界面，"CSS 不许写死颜色"的规则不适用。
+- `ScreenManager.swift`（标注 `@MainActor`）：
+  - 启动时为 `NSScreen.screens` 中的每块屏幕创建一个 `DesktopWindow` 并 `orderFront`。
+  - 用屏幕的显示器 ID（`deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]`，即 `CGDirectDisplayID`）作为 key 记录窗口。
+  - 监听 `NSApplication.didChangeScreenParametersNotification`，按显示器 ID 对比：新增的屏幕建窗口，消失的屏幕关窗口，仍在的屏幕把窗口 `setFrame` 到新的 `screen.frame`（处理分辨率变化），并刷新中间的文字。
+  - 退出时（`deinit` 或 `applicationWillTerminate`）移除通知监听。
+
+## 允许修改的文件
+
+- `Package.swift`（新建）
+- `Sources/DesktopShell/main.swift`（新建）
+- `Sources/DesktopShell/AppDelegate.swift`（新建）
+- `Sources/DesktopShell/DesktopWindow.swift`（新建）
+- `Sources/DesktopShell/ScreenManager.swift`（新建）
+- 本任务单的"交付记录"和"状态"
+
+## 不许做
+
+- 遵守 AGENTS.md "不要做的事"。
+- 不加 WKWebView、AVPlayer、配置文件读写、安全区域计算，这些属于后续任务。
+- 不重写 `canBecomeKey` / `canBecomeMain`。
+- 不使用 Storyboard、XIB、Asset Catalog、`.xcodeproj`。
+
+## 验收标准
+
+**可执行的检查**（Codex 自测，Claude Code 复验）：
+
+- [ ] `swift build 2>&1 | grep -iE "warning|error"` 没有输出（零警告零错误）
+- [ ] `git diff --name-only main...task/M1-01` 只包含上面"允许修改的文件"里列出的文件
+- [ ] `grep -rnE "canBecomeKey|WKWebView|AVPlayer" Sources/` 没有输出
+- [ ] 运行 `.build/debug/DesktopShell &`，等 2 秒后 `pgrep -x DesktopShell` 能找到进程；然后 `kill %1` 能正常结束
+
+**用户手动验证**（运行 `.build/debug/DesktopShell`）：
+
+- [ ] 菜单栏出现一个四宫格图标；**Dock 里没有**新图标
+- [ ] 桌面变成深灰色，中间显示屏幕名称和尺寸
+- [ ] Finder、Safari 等普通窗口都**在深灰色之上**，能正常使用
+- [ ] 点击深灰色空白处，什么都不发生，也不会盖到其他窗口上面
+- [ ] 按 Ctrl+→ 切换到其他桌面空间，深灰色背景仍然在
+- [ ] 打开调度中心（F3 或三指上滑），深灰色背景不会被当成一个窗口缩小
+- [ ] 菜单栏图标 → "退出 DesktopShell"，进程结束，桌面恢复原样；⌘Q 在菜单打开时同样有效
+- [ ] （有外接显示器时）每块屏幕各有一个深灰色窗口，各自显示自己的名称；拔掉外接显示器，对应窗口消失；再插上，窗口重新出现
+
+说明：如果还没有执行隐藏 Finder 桌面图标的命令，桌面图标会被深灰色盖住，这是预期行为。
+
+<!-- ===== 以下由 Codex 填写 ===== -->
+
+## 交付记录
+
+- **改动摘要**：
+- **自测结果**：
+- **疑问 / 偏离**：
+
+<!-- ===== 以下由 Claude Code 填写 ===== -->
+
+## 审查记录
+
+- **结论**：
+- **意见**：

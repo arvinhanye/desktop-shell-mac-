@@ -67,7 +67,8 @@
 
 - **不能用 `xcodebuild`、`.xcodeproj`、Storyboard/XIB、Asset Catalog**，一切通过 `swift build` + `scripts/bundle.sh` 完成。界面全部用代码创建。
 - 已用探针包验证，以下框架在 SwiftPM 下可以正常编译运行：AppKit、WebKit、AVFoundation、IOKit.ps、ServiceManagement（`SMAppService`），以及 `host_statistics64`。
-- `Package.swift` 的最低系统版本为 `.macOS(.v13)`（`SMAppService` 需要 macOS 13）。
+- `Package.swift` 的最低系统版本为 `.macOS(.v14)`（`SMAppService` 需要 13，命令行工具自带的 Testing 框架按 14 编译）。
+- **单元测试用 swift-testing（`import Testing`），不用 XCTest**（命令行工具不带 XCTest）。SwiftPM 默认找不到命令行工具里的 Testing 框架，**一律通过 `scripts/test.sh` 运行测试**，不要直接运行 `swift test`。可测试的逻辑写成不依赖 AppKit 状态的纯函数，测试里用 `@testable import DesktopShell`。
 - **Swift 5 语言模式**：`// swift-tools-version:6.0`，并在 `Package` 上设置 `swiftLanguageModes: [.v5]`（已验证可用）。操作 UI 的类型标注 `@MainActor`，不追求 Swift 6 严格并发。
 - 冷编译大约需要 2 分钟，增量编译要快得多。
 
@@ -167,6 +168,7 @@
 - 所有颜色、字体、圆角、阴影、间距、动效时长都定义在 `web/styles/tokens.css` 的 CSS 变量里。**组件 CSS 里不允许出现写死的颜色值或尺寸值。**
 - 配色从背景素材里提取（用户会提供从 Wallpaper Engine 解包的视频或图片）。在素材到位之前，先用一套中性的深色占位主题。
 - 每个组件是一个"卡片"，共用同一个基础卡片样式（`.card`），只在内容上区分。
+- 具体的视觉设计（token 数值、卡片样式、组件版式、桌面布局）在 **M3.5 设计定稿**中确定，记录在 `docs/design/`。M4 及之后实现组件时以定稿为准，**Codex 不自行做视觉决定**；定稿没有覆盖到的视觉问题，在交付记录里提问。
 - 素材只用图片和视频。**不执行任何从壁纸包里解出来的脚本代码。**
 
 ## 建议的目录结构
@@ -178,6 +180,8 @@ desktop-shell/
 ├── docs/tasks/                    # 任务单，智能体之间的交接载体
 │   ├── _TEMPLATE.md
 │   └── M1-01-<简述>.md
+├── docs/design/                   # M3.5 设计定稿：效果图、token 数值、截图
+├── assets/                        # 用户提供的壁纸素材（视频/图片），不进 git
 ├── Package.swift
 ├── Sources/DesktopShell/
 │   ├── main.swift
@@ -202,7 +206,9 @@ desktop-shell/
 │       ├── launcher.js
 │       ├── todos.js
 │       └── stats.js
+├── Tests/DesktopShellTests/        # swift-testing 单元测试
 └── scripts/
+    ├── test.sh                    # 带上 Testing 框架路径运行 swift test
     ├── bundle.sh                  # 组装 .app、写 Info.plist（LSUIElement=true）、签名
     └── setup-signing.md           # 创建自签名证书的步骤说明
 ```
@@ -210,7 +216,7 @@ desktop-shell/
 ## 开发方式
 
 - `bridge.js` 检测到不在 WKWebView 里时（没有 `window.webkit.messageHandlers`），自动使用 mock 数据。这样网页部分可以直接在浏览器里开发调试，改样式不需要每次重新编译 Swift。
-- Swift 部分用 `swift build` 编译，用 `scripts/bundle.sh` 打包后运行。
+- Swift 部分用 `swift build` 编译，`scripts/test.sh` 跑单元测试；M6 之前直接运行 `.build/debug/DesktopShell`，M6 起用 `scripts/bundle.sh` 打包后运行。
 
 ## 多智能体协作
 
@@ -219,7 +225,7 @@ desktop-shell/
 | 角色 | 负责 | 不负责 |
 |---|---|---|
 | **用户** | 提需求、最终决定、在两个工具之间转交任务、手动目测 GUI 效果 | — |
-| **Claude Code**（规划 + 审查） | 拆里程碑为任务单、写验收标准、审查 diff、跑验收命令、合并到 `main`、维护本文件（经用户同意） | 不写业务代码（审查时可修正明显的笔误，需在审查记录里注明） |
+| **Claude Code**（规划 + 审查 + 设计） | 拆里程碑为任务单、写验收标准、审查 diff、跑验收命令、合并到 `main`、维护本文件（经用户同意）；M3.5 在 `docs/design/` 出效果图和 token 数值 | 不写业务代码（审查时可修正明显的笔误，需在审查记录里注明） |
 | **Codex**（实现） | 按任务单写代码、自测、填写交付记录 | 不改本文件、`CLAUDE.md` 和任务单的需求部分；不自行扩大任务范围 |
 
 ### 流程
@@ -264,9 +270,10 @@ desktop-shell/
 
 - **M0 环境检查**：运行 `sw_vers`、`xcode-select -p`、`xcodebuild -version`、`swift --version`、`git --version`、`codex --version`，确认 macOS 版本、Swift 工具链、git 和 Codex CLI 是否可用；初始化 git 仓库。如果缺工具，告诉用户需要安装什么，然后停下等用户处理。
 - **M1 外壳**：每块屏幕一个桌面层窗口，显示纯色占位；菜单栏图标可以退出；安全区域正确（用一个半透明框把安全区域画出来验证，确认不会被 Dock 挡住）。
-- **M2 背景**：视频循环播放，WKWebView 透明叠在上面；省电暂停规则生效。
-- **M3 网页骨架**：`tokens.css`、`store.js`、`bridge.js`（含 mock）、组件注册机制；在浏览器里能打开。
-- **M4 组件**：五个组件全部完成，样式统一。
+- **M2 背景**：视频循环播放，WKWebView 透明叠在上面；省电暂停规则生效。**开始前用户提供壁纸素材**（放到 `assets/`），M3.5 的配色也从这份素材里提取。
+- **M3 网页骨架**：`tokens.css`、`store.js`、`bridge.js`（含 mock）、组件注册机制；在浏览器里能打开。`tokens.css` 只搭好变量结构，填中性深色占位值。
+- **M3.5 设计定稿**（由 Claude Code 负责，不交给 Codex）：从壁纸素材提取配色，确定字体、卡片样式（圆角、阴影、透明度、毛玻璃）、五个组件的版式、桌面布局，以及四个时段主题和选中、高亮、省电等状态样式。产出放在 `docs/design/`：一个能在浏览器里直接打开的效果图页面（叠在壁纸上、用 mock 数据），一份定稿的 `tokens.css` 数值，以及截图。用户确认后才进入 M4。
+- **M4 组件**：五个组件全部完成，**照 M3.5 定稿实现**，样式统一。
 - **M5 联动**：按"联动规则"表实现并逐条验证。
 - **M6 打包**：`bundle.sh` 产出可双击运行的 `.app`；固定签名；用 `SMAppService` 实现开机自启（在菜单栏里提供开关）。
 
