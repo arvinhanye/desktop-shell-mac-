@@ -49,12 +49,18 @@ final class ScreenManager: NSObject {
 
             let displayID = screenNumber.uint32Value
             activeDisplayIDs.insert(displayID)
+            let insets = SafeAreaInsets.compute(
+                screenFrame: screen.frame,
+                visibleFrame: screen.visibleFrame
+            )
 
             if let window = windows[displayID] {
                 window.update(screen: screen)
+                window.updateSafeArea(insets)
             } else {
                 let window = DesktopWindow(screen: screen)
                 windows[displayID] = window
+                window.updateSafeArea(insets)
                 window.orderFront(nil)
             }
         }

@@ -8,7 +8,8 @@ let package = Package(
         .executable(name: "DesktopShell", targets: ["DesktopShell"])
     ],
     targets: [
-        .executableTarget(name: "DesktopShell")
+        .executableTarget(name: "DesktopShell"),
+        .testTarget(name: "DesktopShellTests", dependencies: ["DesktopShell"])
     ],
     swiftLanguageModes: [.v5]
 )
