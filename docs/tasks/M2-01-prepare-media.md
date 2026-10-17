@@ -47,7 +47,7 @@
 
   ```bash
   ffmpeg -loglevel error -y -i "$SRC" -an \
-    -vf "scale=2560:1440:flags=lanczos" \
+    -vf "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709,scale=2560:1440:flags=lanczos" \
     -c:v libx265 -preset slow -crf 22 -pix_fmt yuv420p -tag:v hvc1 \
     -color_primaries bt709 -color_trc bt709 -colorspace bt709 \
     -x265-params log-level=error -movflags +faststart \
@@ -126,5 +126,22 @@
 
 ## 审查记录
 
-- **结论**：
+- **结论**：代码审查通过；Claude Code 修正了视频的色彩标记（见下），可执行检查全部通过；**等用户手动验证后合并**。
+- **Claude Code 的修改**（按"审查时可修正明显问题并注明"）：
+  - Codex 指出 `-color_trc bt709` 没有生效，输出仍然标记为 `bt470m`。原因是 ffmpeg 优先使用输入帧自带的色彩属性。这是任务单给的命令有缺陷，不是 Codex 的问题。
+  - 实测影响：标记为 `bt470m` 时，AVFoundation 无法识别，解出的帧没有色彩空间（按未标记处理，显示效果取决于渲染路径）；改标为 bt709 后识别为 `kCGColorSpaceCoreMedia709`，色彩管理行为明确，亮度差约 5%。原片 `bt470m` 配 `bt709` 原色和矩阵的组合，基本可以判断是标错了。
+  - 修改：在滤镜链最前面加 `setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709`。脚本只改这一行，任务单里的命令同步更新。
+- **复验结果**（Claude Code，2026-10-17；用全新目录 `/tmp/ds-media-review` 从零生成，没有复用 Codex 的产物）：
+  - [x] `bash -n` 通过；首次运行退出码 0，耗时 131 秒
+  - [x] 数量：语音 54、头像 30、背景 JPEG 56 / PNG 7、心形图 1；`CREDITS.txt` 63 行，带原画师 ID 的文件名完整保留
+  - [x] 文件名规则检查没有输出
+  - [x] 视频：hevc / hvc1、2560×1440、30fps、30.0 秒、没有音轨、14.5MB；色彩标记三项都是 bt709，AVFoundation 识别为 Rec.709
+  - [x] 心形图 2400×400；背景长边最大 1600；`folder-01.png` 有 alpha
+  - [x] 54 条语音和 30 张头像与源文件逐字节一致
+  - [x] 立即重跑：全部跳过，0.12 秒
+  - [x] `git diff --name-only`：只有脚本和本任务单
 - **意见**：
+  - 脚本质量超出要求：先写暂存目录再原子替换，转码失败不会破坏旧文件；防止输出目录被误指到 `assets/`（包括 `..` 和符号链接）；兼容 Bash 3.2。
+  - 关于工具约束：`dirname/mkdir/mktemp/cp/mv/rm` 属于系统自带的基础命令，符合"bash 自带命令"这条要求的本意，**认可**。
+  - 关于"新增或重命名素材后要用 `--force`"：认可，记在这里备查。
+  - 输出的 mp4 里有一条 ffmpeg 自动加的 `tmcd`（时间码）数据轨，对播放没有影响，不处理。

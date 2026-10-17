@@ -135,7 +135,7 @@ for ((i = 0; i < ${#sources[@]}; i++)); do
   case "${kinds[i]}" in
     video)
       ffmpeg -loglevel error -y -i "$source" -an \
-        -vf "scale=2560:1440:flags=lanczos" \
+        -vf "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709,scale=2560:1440:flags=lanczos" \
         -c:v libx265 -preset slow -crf 22 -pix_fmt yuv420p -tag:v hvc1 \
         -color_primaries bt709 -color_trc bt709 -colorspace bt709 \
         -x265-params log-level=error -movflags +faststart \
