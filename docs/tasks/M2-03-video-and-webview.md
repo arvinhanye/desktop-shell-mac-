@@ -1,6 +1,6 @@
 # M2-03: 背景视频 + 透明 WKWebView + shell:// 处理器
 
-- **状态**：todo
+- **状态**：review
 - **里程碑**：M2
 - **依赖**：M2-01、M2-02（都必须已合并到 `main`）
 - **分支**：task/M2-03
@@ -116,12 +116,42 @@
 ## 交付记录
 
 - **改动摘要**：
-- **自测结果**：
+  - 启动时打印三个目录、加载配置，出错时仅在内存使用示例；背景路径复用 M2-02 的安全解析。视频缺失时记录提示并保留黑色背景。
+  - 全局一个 `AVQueuePlayer` / `AVPlayerLooper`，静音且允许显示器休眠；每个窗口的视频层绑定同一播放器，铺满并裁剪。保留 `play()` / `pause()` 给 M2-04。
+  - 每窗一个透明 WKWebView，通过 `shell://app/index.html` 加载测试页；取消其他 scheme 的导航、新窗口返回 nil，开发工具仅在环境变量显式开启时启用。
+  - 资源处理器使用后台队列读取映射数据，返回 200 / 206 / 416 / 404 及对应响应头；主队列管理任务和回调，以任务标识及 generation 排除已停止、重入停止和旧任务完成回调。
+  - 删除 M1 安全区域调试图与屏幕文字，只保存最新 insets；保留桌面层级、Spaces 行为及多屏增删逻辑。测试页包含心形图片、ES module、穿越请求结果和语音按钮。
+  - 改动限于允许的 8 个实现文件及本任务状态、交付记录；未修改 M2-02 逻辑、规范或需求，未接入 bridge、安全区域推送或暂停策略。
+- **自测结果**（2026-10-17）：
+  - 从已包含 M2-01、M2-02 的最新 `main`（`193a2ef`）建立 `task/M2-03`。基线与最终 `scripts/test.sh` 均 **34/34 通过**，退出码 0；最终 `swift build` 退出码 0，日志经 `grep -iE 'warning|error'` 检查无输出。
+  - 任务白名单没有新增测试文件，因此额外集成检查放在 `/tmp/ds-m2-03-validation/`，编译实际生产源文件执行，未加入仓库：
+    - `HandlerChecks.swift`：空实现先产生预期失败（19/119 通过），完整实现 **119/119 通过**。覆盖实际响应字节、头、MIME、各种 Range、空文件、scheme/host、编码穿越、符号链接，以及停止前后、回调重入、旧任务回调。
+    - `ViewChecks.swift`：空实现 3/21，接入后 **21/21 通过**。真实 WKWebView 完成 ES module 导入、图片加载（naturalWidth 2400）、穿越请求 404、外部导航拦截、透明 alpha 和开发工具开关检查。WebKit 返回的透明颜色使用 sRGB 色彩空间，按 alpha=0 检查，而非与命名颜色对象比较。
+    - `WindowChecks.swift`：**11/11 通过**。同机两扇原生窗口共用播放器，两层均 ready 并取得已显示像素；播放时间推进；窗口缩放、层级、Spaces、insets 保存正确。静音测试音频 readyState=4、播放时间推进且无媒体错误。此检查不等同于真实双显示器或可听声音验收。
+  - 实际执行 `MEDIA_DIR=/tmp/ds-support/media scripts/prepare-media.sh` 成功，生成 30 秒、2560×1440 HEVC 视频及测试素材。用 `DESKTOPSHELL_SUPPORT_DIR=/tmp/ds-support .build/debug/DesktopShell` 运行约 40 秒，进程正常存活，日志打印三个目录且无缺视频或页面加载错误；随后结束本次测试进程。生成的配置经完整解码比较，等于 `AppConfig.example`。
+  - 启动 5 秒后 `pmset -g assertions` 显示 `PreventUserIdleDisplaySleep = 0`，没有 DesktopShell 持有的显示器休眠阻止断言。
+  - 按要求执行 `top -l 6 -s 2 -stats pid,command,cpu`。六次样本平均（含首个 0 样本）：DesktopShell **1.68%**、对应 VTDecoder **1.75%**、WebContent **0.00%**；剔除首样本分别为 **2.02% / 2.10% / 0.00%**。top 截短 WebKit 名称，结合 `ps` 全路径按 PID 识别 WebContent；保留原始采样。采样期间项目测试也在运行，这只是本机单屏基线，不是性能验收阈值。
+  - 另以临时损坏配置且缺少视频启动：记录解析错误和缺视频提示，5 秒后仍运行，损坏配置逐字节未变。所有应用启动均使用临时支持目录。
+  - `git diff --check` 通过；bridge 关键词扫描无输出；M2-02 文件、AGENTS.md 和 CLAUDE.md 无差异。独立只读代码检查未发现 Critical / Important 问题，正式验收仍由 Claude Code 完成。
+  - 完整日志、临时检查源文件和网页快照：`/tmp/ds-m2-03-validation/`。快照 `web-snapshot.png` 已查看，标题、图片、状态和按钮无裁切；它只捕获网页，不证明原生视频合成观感。
 - **疑问 / 偏离**：
+  - 无范围偏离。GUI 验收仍开放：真实桌面的铺满及循环衔接、面板对原生视频的模糊效果、可听语音、Dock/菜单栏和退出、真实双屏同步与热插拔。透明属性及 CSS 已配置，不把它们当成模糊观感的实测结论。可在仓库根目录用上述 `/tmp/ds-support` 启动命令复验，或按任务手动步骤验证真实素材目录。
+  - 非阻断 Minor（独立检查提出，保留待后续处理）：临时语音按钮快速重复点击时，上一轮 `play()` 的延迟错误可能写入当前提示，监听器也引用可变的播放对象；不影响正常单次点击。M3 替换临时页面时应使用每次播放的局部对象并校验当前对象，避免陈旧错误提示。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 
 ## 审查记录
 
-- **结论**：
-- **意见**：
+- **结论**：代码审查通过，可执行检查全部通过；**等用户手动验证后合并**。
+- **复验结果**（Claude Code，2026-10-17）：
+  - [x] touch 源码后强制重编，零警告零错误；`scripts/test.sh` 34/34 通过
+  - [x] 改动范围是 6 个 Swift 文件、2 个网页文件和本任务单，都在允许范围内；M2-02 的 4 个逻辑文件没有改动；`grep` 没有找到 `messageHandlers` 或 `addScriptMessageHandler`
+  - [x] 用临时支持目录运行：日志打印出三个目录，没有"背景视频不存在"；`config.json` 等于示例配置，中文没有被转义
+  - [x] `pmset -g assertions`：`PreventUserIdleDisplaySleep 0`，视频不阻止显示器休眠
+  - [x] CPU（去掉首个样本后的平均值，单屏）：DesktopShell 约 2.0%，VTDecoderXPCService 约 0.5%，WebContent 约 0%。作为后续省电对比的基线
+  - [x] SIGTERM 后正常退出
+- **意见**（不阻塞）：
+  - `ShellSchemeHandler` 用"任务标识 + generation"防止对已停止的任务回调，包括回调过程中被重入停止的情况；文件读取放在后台队列，回调都在主线程。设计严谨。
+  - 全局一个播放器，每个窗口各自一个 `AVPlayerLayer`；`WebContainer` 由窗口持有，弱引用的导航代理不会被提前释放；关闭窗口时先停止网页加载。都符合要求。
+  - Codex 自己发现的测试页小问题（快速连点语音按钮时可能显示上一次的错误提示）认可为不阻塞：测试页会在 M3 被整体替换，届时 `voice.js` 每次播放都用局部对象，这一点会写进 M3/M4 的任务单。
+  - 用于集成检查的 `/tmp/ds-m2-03-validation/` 很有价值，但没有进仓库。WKWebView 和窗口相关的集成测试是否要正式纳入，M3 再决定。
