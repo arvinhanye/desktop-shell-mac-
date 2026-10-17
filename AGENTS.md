@@ -113,7 +113,7 @@
 
 以下情况下暂停背景视频，并通知网页暂停动画（`store` 里设 `paused = true`）：
 
-- 窗口被完全遮挡（看 **VideoWindow** 的 `NSWindow.occlusionState`；所有屏幕的 VideoWindow 都看不见时才算。窗口刚显示、还没收到第一次遮挡通知之前，按"可见"处理，避免启动时误判暂停）
+- 窗口被完全遮挡（看 **VideoWindow** 的 `NSWindow.occlusionState`；所有屏幕的 VideoWindow 都看不见时才算。窗口刚显示、还没收到第一次遮挡通知之前，按"可见"处理，避免启动时误判暂停。**防抖**：遮挡状态持续 1 秒以上才计入暂停原因，变为可见时立即恢复；用一次性的延迟任务实现，不轮询。2026-10-17 实测：全屏切换桌面、窗口动画时遮挡状态会闪烁，最短 9 毫秒）
 - 屏幕睡眠（`NSWorkspace.screensDidSleepNotification`）
 - 用户切换走（`NSWorkspace.sessionDidResignActiveNotification`）
 - 使用电池且电量低于 20%
@@ -144,6 +144,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 
 **安全要求**：
 
+- Bridge 只处理来自 `shell://app` **主框架**的消息（校验 `message.frameInfo.isMainFrame`，以及 `securityOrigin` 的 scheme 为 `shell`、host 为 `app`），其他来源一律忽略并记录日志。
 - 网页**只传 id，不传路径或 bundle id**。真实路径和应用由 Swift 从 `config.json` 里查。这样即使网页被塞了坏代码，也只能打开配置里列出的东西。不提供任何执行 shell 命令的动作。
 - URL 约定（同一个源）：`shell://app/<path>` 对应 `web/<path>`，`shell://app/media/<path>` 对应 `media/<path>`。
 - `shell://` URL scheme 处理器**只能读取两个根目录**：应用内的 `web/` 和运行时素材目录 `media/`。路径先标准化，再确认仍在根目录之内；包含 `..`、绝对路径、符号链接指向根目录之外的请求一律返回 404。
