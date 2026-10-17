@@ -45,8 +45,8 @@ enum PageEvent {
 
 ### 3. 广播与重推（`ScreenManager.swift`）
 
-- `broadcast(_ event: [String: Any])`：发给所有 WidgetWindow。事件名是 `paused`、`uiState`、`systemStats`（M3-06 用）时，同时按事件名缓存最新的一份。还没有窗口时只缓存。
-- 某个窗口的页面加载完成（`onPageLoaded`）时，按顺序给**这个页面**推送：它自己的 `safeArea` → 缓存的 `paused` → `uiState` → `systemStats`（有缓存的才推）。这样新接入的屏幕、重新加载后的页面都能拿到当前状态。
+- `broadcast(_ event: [String: Any])`：发给所有 WidgetWindow。事件名是 `paused`、`uiState`、`systemStats`（M3-06 用）、`todos`（M3-07 用）时，同时按事件名缓存最新的一份。还没有窗口时只缓存。
+- 某个窗口的页面加载完成（`onPageLoaded`）时，按顺序给**这个页面**推送：它自己的 `safeArea` → 缓存的 `paused` → `uiState` → `systemStats` → `todos`（有缓存的才推）。这样新接入的屏幕、重新加载后的页面都能拿到当前状态。
 - 屏幕参数变化时，某个窗口的安全区域和上次推送的不一样，就给这个窗口推送新的 `safeArea`。
 - `reloadPages()`：让所有 WidgetWindow 重新加载页面。
 
@@ -121,7 +121,7 @@ enum PageEvent {
 - 遵守 AGENTS.md "不要做的事"。
 - 不修改 `PowerPolicy`（暂停原因的计算规则不变）、`HitTesting`、`HitTestController`。
 - 不修改 `web/` 下的任何文件。
-- 不推送 `audioSpectrum`（M5.5）和 `systemStats`（M3-06）。
+- 不推送 `audioSpectrum`（M5.5）、`systemStats`（M3-06）和 `todos`（M3-07）。
 
 ## 验收标准
 

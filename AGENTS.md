@@ -51,7 +51,8 @@
 | 素材处理 | ffmpeg（视频转码）+ `sips`（图片缩放） | 由 `scripts/prepare-media.sh` 统一完成 |
 | 沙盒 | 关闭 App Sandbox | 自用 |
 | 签名 | 固定的自签名代码签名证书 | 避免每次编译后系统权限失效或反复弹窗 |
-| 数据存储 | `~/Library/Application Support/DesktopShell/` 下的 JSON 文件 | Swift 负责读写 |
+| 提醒事项 | EventKit（`requestFullAccessToReminders`） | 待办直接读写系统"提醒事项"，经 iCloud 与 iPhone 同步；需要"提醒事项"权限，`Info.plist` 写 `NSRemindersFullAccessUsageDescription`。可行性见下文"技术探针" |
+| 数据存储 | `~/Library/Application Support/DesktopShell/` 下的 JSON 文件 | Swift 负责读写（待办不在这里，在系统提醒事项里） |
 
 ## 开发环境（M0 已确认，2026-10-16）
 
@@ -68,7 +69,7 @@
 由此得出的编码约束：
 
 - **不能用 `xcodebuild`、`.xcodeproj`、Storyboard/XIB、Asset Catalog**，一切通过 `swift build` + `scripts/bundle.sh` 完成。界面全部用代码创建。
-- 已用探针包验证，以下框架在 SwiftPM 下可以正常编译运行：AppKit、WebKit、AVFoundation、IOKit.ps、ServiceManagement（`SMAppService`），以及 `host_statistics64`。
+- 已用探针包验证，以下框架在 SwiftPM 下可以正常编译运行：AppKit、WebKit、AVFoundation、IOKit.ps、ServiceManagement（`SMAppService`）、EventKit，以及 `host_statistics64`。
 - `Package.swift` 的最低系统版本为 `.macOS(.v14)`（`SMAppService` 需要 13，命令行工具自带的 Testing 框架按 14 编译）。
 - **单元测试用 swift-testing（`import Testing`），不用 XCTest**（命令行工具不带 XCTest）。SwiftPM 默认找不到命令行工具里的 Testing 框架，**一律通过 `scripts/test.sh` 运行测试**，不要直接运行 `swift test`。可测试的逻辑写成不依赖 AppKit 状态的纯函数，测试里用 `@testable import DesktopShell`。
 - **Swift 5 语言模式**：`// swift-tools-version:6.0`，并在 `Package` 上设置 `swiftLanguageModes: [.v5]`（已验证可用）。操作 UI 的类型标注 `@MainActor`，不追求 Swift 6 严格并发。
@@ -82,6 +83,7 @@
 |---|---|
 | 系统音频捕获（process tap + vDSP），2026-10-17 | **可行**，详见下方 |
 | 保留访达图标时的点击穿透，2026-10-17 | WKWebView 窗口透明区域**不会**自动穿透（35 次空白点击全被网页接住）；改为"网页上报组件区域 + 全局鼠标监听动态切换 `ignoresMouseEvents`"后，空白点击全部交给访达（0 次被接住），组件点击全部收到，从其他应用直接点组件也能一次生效，拖动框选经过组件不会被打断。全局鼠标监听不需要系统权限，鼠标移动时每秒约 20–45 个事件 |
+| 系统提醒事项（EventKit），2026-10-17 | **可行**，详见下方 |
 | 键盘焦点（**待做**，M4 待办组件之前） | 要回答：点普通组件（按钮、勾选框）会不会抢走其他应用的键盘焦点；输入框获得焦点时，WidgetWindow 用普通 `NSWindow` 还是不激活应用的 `NSPanel`（`.nonactivatingPanel`）成为 key window；中文输入法是否正常；失去焦点后怎样把焦点还给原来的应用。结论出来后再定 `focusInput` / `blurInput` 的任务单 |
 
 **系统音频捕获探针**（全局 tap `CATapDescription(stereoGlobalTapButExcludeProcesses: [])`，`muteBehavior = .unmuted`，加上"默认输出设备 + tap"的私有聚合设备，再加 IOProc）：
@@ -92,6 +94,16 @@
 - 频谱准确：440Hz 和 3000Hz 的单音、60 到 10000Hz 的扫频，峰值频率和频段都对得上。参数用 FFT 4096、hop 2048、Hann 窗、12 个对数频段（20–16500Hz）。
 - CPU（i7-9750H）：频谱分析本身约 **0.3%**；捕获期间系统音频服务 `coreaudiod` 大约**多耗 3% 的单核，安静时也是这样**。所以：暂停时必须停止捕获；建议 M5.5 再验证一下，能否监听输出设备的 `kAudioDevicePropertyDeviceIsRunningSomewhere`，只在有应用在放声音时才开启捕获。
 - 释放顺序（`AudioDeviceStop` → `AudioDeviceDestroyIOProcID` → `AudioHardwareDestroyAggregateDevice` → `AudioHardwareDestroyProcessTap`）全部成功，没有残留。
+
+**系统提醒事项探针**（ad-hoc 签名的 `LSUIElement` 小程序，用 `open` 启动，`Info.plist` 写 `NSRemindersFullAccessUsageDescription`）：
+
+- 只用命令行工具就能编译链接 EventKit。第一次调用 `requestFullAccessToReminders` 弹出权限框，**不阻塞主线程**（等用户点按钮的 25 秒里主线程最长停顿 0.05 秒），回调在后台线程。同一签名再次启动直接是 `fullAccess`，不再弹框。
+- 用户的数据（2026-10-17）：两个 iCloud 列表，"提醒事项"（系统默认列表，6 条未完成，全部带到期时间）和"提醒"（空）。没有优先级、备注、网址、重复、闹钟。
+- 读取所有列表的未完成提醒约 0.01–0.05 秒；读取今天完成的约 0.01–0.24 秒。
+- 写入（新建列表、新增、勾选、取消勾选、改标题、设到期时间）都成功，每次 0.02–0.09 秒；Mac 上写入的内容会出现在 iPhone 上。
+- `calendarItemIdentifier` 和列表的 `calendarIdentifier` 都是 UUID，符合 Bridge 的 id 规则，重启后不变（5/5 都能重新查到）。
+- `EKEventStoreChanged`：自己写入后立刻收到；**其他进程写入后立刻收到**；iPhone 上的改动同步到 Mac 后也会收到，实测约 1 分钟（当时 Mac 的"提醒事项"应用开着）。同步过来时常常连着来 2 次通知，第一次时数据可能还没变，所以收到通知后要稍等一下（防抖）再重新读取。通知的 `userInfo` 没有有用的细节，只能整体重新读取。
+- 一次例外：Mac 的"提醒事项"应用关闭时，iPhone 上的一次取消勾选 8 分钟内没有出现在 Mac 上（期间收到过 2 次通知，数据没变），原因没能确定。正式实现时，启动、唤醒和每隔几分钟调用一次 `refreshSourcesIfNecessary()` 请求同步，并在验收时实测 iPhone 改动多久出现在桌面。
 
 ## 窗口要求
 
@@ -135,7 +147,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 - 网页 → Swift：Swift 用 `WKScriptMessageHandlerWithReply` 注册，`postMessage` 返回 Promise。每条消息 Swift 都回复且只回复一次：成功时 resolve 为回复值（多数动作是 `null`），失败时 reject，错误的 `message` 是以下错误码之一：`untrusted`（来源不对）、`invalid`（格式不对）、`unknown-action`（不在白名单或尚未实现）、`not-found`（id 在配置或素材里查不到）、`failed`（系统调用失败）。
 - 除 `action` 外**只允许下表列出的参数**，多出任何键都算 `invalid`；所有 id 参数必须是只含字母、数字、`_`、`-` 的非空字符串。
 - Swift → 网页：用 `callAsyncJavaScript("window.shell?.receive?.(event)", arguments: ["event": …])` 传参，**不拼接 JS 字符串**。事件是平铺的对象，`event` 字段是事件名，例如 `{event: "paused", paused: true}`。
-- 每次页面加载完成（含重新加载、新接入的屏幕），Swift 给该页面重推 `safeArea`、`paused`、`uiState`、`systemStats` 的最新值。
+- 每次页面加载完成（含重新加载、新接入的屏幕），Swift 给该页面重推 `safeArea`、`paused`、`uiState`、`systemStats`、`todos` 的最新值。
 - 日志只写 action、id、数量和错误码，不写用户内容。
 
 **网页 → Swift**
@@ -145,8 +157,9 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 | `openProject` | `projectId` | 在 Finder 中打开该项目文件夹 |
 | `openProjectWith` | `projectId`, `appId` | 用指定应用打开项目文件夹（例如 Cursor）。应用只要在 `config.apps` 里即可 |
 | `launchApp` | `appId` | 启动应用 |
-| `getConfig` | — | 回复 `{config, media, uiState, todos}`：`config` 含 `character`、`greetings`、`projects`（`id`、`name`、`tags`、`apps`）、`apps`（`id`、`name`），**不含**项目路径、应用 bundle id 和背景视频；`media.avatars`、`media.backgrounds` 由 Swift 扫描 `media/` 目录生成，每项 `{id, url}`；`uiState` 为 `{avatarId, backgroundId, voiceEnabled}`；`todos` 为 `todos.json` 的内容 |
-| `saveTodos` | `todos`：`[{id, text, done, projectId?}]` | 整体替换写入 `todos.json`。最多 500 条；`id` 不重复、不超过 64 字节；`text` 去掉首尾空白后不为空、不超过 500 字；任何一项不合规就整条拒绝 |
+| `getConfig` | — | 回复 `{config, media, uiState}`：`config` 含 `character`、`greetings`、`projects`（`id`、`name`、`tags`、`apps`、`hasReminders`）、`apps`（`id`、`name`），**不含**项目路径、应用 bundle id、提醒事项列表名和背景视频；`media.avatars`、`media.backgrounds` 由 Swift 扫描 `media/` 目录生成，每项 `{id, url}`；`uiState` 为 `{avatarId, backgroundId, voiceEnabled}`。待办不在这里，见推送事件 `todos` |
+| `addTodo` | `text`, `projectId?` | 在系统提醒事项里新增一条，只设标题。放进该项目对应的列表；没有 `projectId`、为 `null`，或者该项目没有配置列表时，放进系统默认列表。`text` 去掉首尾空白后不为空、不超过 500 字。回复新提醒（格式同 `todos` 事件里的一项） |
+| `setTodoDone` | `todoId`, `done` | 勾选或取消勾选一条提醒。`todoId` 查不到 → `not-found`。**不提供删除**（删除在 iPhone 或 Mac 的提醒事项里做） |
 | `saveUiState` | `avatarId?`, `backgroundId?`（`null` 表示恢复默认） | 写入 `ui.json`，回复新的 `uiState`，并向所有页面推送 `uiState`。Swift 先核对 id 确实存在于 `media/avatars`、`media/backgrounds`，不存在就回复 `not-found` |
 | `focusInput` / `blurInput` | — | 让窗口获得或交还键盘焦点（M3 之后先做探针，见"技术探针"） |
 | `setHitRegions` | `regions`：`[[x, y, w, h], …]`，CSS 像素，相对网页左上角 | 整体替换该窗口的可交互区域，用于点击穿透判断。只接受有限数值，最多 64 个，宽高必须为正，超出窗口的部分裁掉；格式不对就整条拒绝并记录日志 |
@@ -166,6 +179,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 | `systemStats` | `battery: {level（0–100 或 null）, charging, onBattery}`、`cpu`（0–100）、`memory: {usedBytes, totalBytes, percent}` | 每 5 秒 |
 | `paused` | `paused`：true / false | 状态变化时 |
 | `uiState` | `avatarId`, `backgroundId`（为空时是 `null`）, `voiceEnabled` | 启动时、菜单栏切换语音开关时、外观保存后 |
+| `todos` | `access`（`granted` / `denied` / `notDetermined` / `restricted` / `writeOnly`）、`items: [{id, text, done, projectId, due}]`：所有列表的未完成提醒加上今天完成的；`projectId` 由列表对应的项目得出，没有就是 `null`；`due` 为 `{date: "YYYY-MM-DD", time: "HH:mm" 或 null}` 或 `null` | 启动时、提醒事项有变化时（含 iPhone 同步过来的改动） |
 | `audioSpectrum` | `bands`：每侧 12 个 0–1 的数值（左右两侧共用一组，由网页镜像显示） | 有声音时约 30 次/秒；静音或暂停时不推送 |
 
 电量用 IOKit（`IOPSCopyPowerSourcesInfo`），CPU 和内存用 `host_statistics` / `host_statistics64`。
@@ -188,7 +202,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
     { "from": 23, "title": "深夜了", "wish": "时辰已晚，且捻熄灯盏，良宵安枕" }
   ],
   "projects": [
-    { "id": "desktop-shell", "name": "DesktopShell", "path": "~/projects/desktop-shell", "tags": ["dev"] }
+    { "id": "desktop-shell", "name": "DesktopShell", "path": "~/projects/desktop-shell", "tags": ["dev"], "remindersList": "DesktopShell" }
   ],
   "apps": [
     { "id": "cursor", "name": "Cursor", "bundleId": "com.todesktop.230313mzl4w4u92" },
@@ -202,8 +216,9 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 首次启动时如果配置文件不存在，就生成一份示例配置。
 
 - `background.video` 是相对 `media/` 的路径。
+- 项目的 `remindersList`（可选）是系统提醒事项里一个列表的名字，按名字精确匹配；找不到时记录日志，当作没有配置。同名列表有多个时取第一个并记录日志。
 - `greetings` 按整点 `from` 升序排列，取不大于当前小时的最后一项；问候显示为 `"<title>，<character.name>"`，角色名用强调色。默认文案取自美化包 `Skins/Ageo` 的配置。
-- 同目录下的其他数据文件：`todos.json`（待办）、`ui.json`（当前头像、背景图、语音开关、是否隐藏桌面文件）。`ui.json` 由应用自己管理，缺少的字段用默认值，损坏时记录日志并使用默认值。
+- 同目录下的其他数据文件：`ui.json`（当前头像、背景图、语音开关、是否隐藏桌面文件）。待办存在系统提醒事项里，不另存文件。`ui.json` 由应用自己管理，缺少的字段用默认值，损坏时记录日志并使用默认值。
 
 ### 运行时素材目录
 
@@ -227,7 +242,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 1. **时钟**：以大号衬线体的星期和日期为主（Mac 菜单栏已经显示时间）。同时负责计算当前时段，写入 `store.phase`：早晨 6–12 点、白天 12–18 点、傍晚 18–21 点、夜晚 21–6 点。
 2. **项目卡片**：列出 `config.projects`。点击卡片会选中它（写入 `store.selectedProject`）；卡片上有"Finder 打开"和"用 Cursor 打开"两个按钮。
 3. **应用启动栏**：列出 `config.apps`，点击启动。
-4. **待办**：可勾选、可新增、可删除。每条待办可以关联一个项目（`projectId`），也可以不关联。数据通过 `saveTodos` 持久化。
+4. **待办（系统提醒事项）**（2026-10-17 改定，原方案是自己存 `todos.json`）：直接读写系统"提醒事项"，和 iPhone 同步。显示所有列表的未完成提醒和今天完成的提醒，带到期时间的显示到期时间。可勾选完成、可新增（第一版只填文字，到期时间在 iPhone 上加），**不能删除**。项目通过配置里的 `remindersList` 对应一个列表。没有授权时显示提示，告诉用户去"系统设置 → 隐私与安全性 → 提醒事项"里允许。
 5. **系统状态**：电量、CPU、内存，外加一条 CPU 历史折线。
 6. **问候语**：按 `config.greetings` 显示当前整点对应的问候和祝福语，角色名用强调色。
 7. **角色卡**：圆形头像、签名、标签。**点击头像播放语音**；卡片上另设一个入口（具体形式在 M3.5 定，例如签名区域或一个小按钮），点击后在**同一个网页里**弹出"外观"面板，可以换头像和背景图，选择结果通过 `saveUiState` 保存。
@@ -247,7 +262,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 | 触发 | 效果 |
 |---|---|
 | 时钟更新 `phase` | 整个页面切换对应时段的主题变量（`tokens.css` 里用 `[data-phase="night"]` 等选择器覆盖） |
-| 选中某个项目卡片 | 待办只显示该项目的待办（再点一次取消选中，显示全部）；新增的待办自动关联该项目 |
+| 选中某个项目卡片 | 待办只显示该项目对应列表里的提醒（再点一次取消选中，显示全部列表）；新增的提醒放进该项目的列表。项目没有配置列表时，待办组件提示"这个项目没有对应的提醒事项列表"，新增的提醒放进默认列表 |
 | 选中某个项目卡片 | 启动栏里与该项目相关的应用高亮（项目可以配置 `apps` 字段，没有就不高亮） |
 | 时钟每分钟更新 | 问候语组件按当前整点切换问候和祝福语 |
 | `systemStats` 显示使用电池且电量低 | 写入 `paused`，背景和所有动画暂停；系统状态组件显示省电提示 |
@@ -308,7 +323,7 @@ desktop-shell/
 │   ├── BridgeProtocol.swift       # 来源校验、请求解析、回复和推送事件的内容（纯函数）
 │   ├── AppState.swift             # 配置、外观状态、待办存储的唯一持有者
 │   ├── MediaLibrary.swift         # 扫描 media/ 生成头像、背景列表
-│   ├── TodoStore.swift            # 读写 todos.json
+│   ├── RemindersStore.swift       # EventKit：读写系统提醒事项、监听变化
 │   ├── ProjectPath.swift          # 解析项目路径（~、绝对路径）
 │   ├── OcclusionDebouncer.swift   # 遮挡防抖
 │   ├── SystemStatsMonitor.swift   # 每 5 秒采样并推送 systemStats
@@ -343,7 +358,7 @@ desktop-shell/
 └── scripts/
     ├── test.sh                    # 带上 Testing 框架路径运行 swift test
     ├── prepare-media.sh           # assets/ → media/：视频转码、图片缩放、复制语音和字体
-    ├── bundle.sh                  # 组装 .app、写 Info.plist（LSUIElement、NSAudioCaptureUsageDescription）、签名
+    ├── bundle.sh                  # 组装 .app、写 Info.plist（LSUIElement、NSAudioCaptureUsageDescription、NSRemindersFullAccessUsageDescription）、签名
     ├── test-web.sh                # 用 node --test 运行 Tests/web/
     ├── serve-web.mjs              # 浏览器开发服务器
     └── setup-signing.md           # 创建自签名证书的步骤说明
@@ -419,7 +434,7 @@ desktop-shell/
 - **M1 外壳**：每块屏幕一个桌面层窗口，显示纯色占位；菜单栏图标可以退出；安全区域正确（用一个半透明框把安全区域画出来验证，确认不会被 Dock 挡住）。
 - **M2 背景**：`prepare-media.sh` 生成运行时素材；视频循环播放，WKWebView 透明叠在上面；`shell://` scheme 处理器（含路径安全检查）；省电暂停规则生效。
 - **M2.5 打包与签名**（从 M6 提前，因为系统音频权限只能授予签名的 `.app`）：`bundle.sh` 产出可双击运行的 `.app`；`setup-signing.md` 和固定的自签名证书；`Info.plist` 含 `LSUIElement`、`NSAudioCaptureUsageDescription`。此后都用 `.app` 运行。
-- **M3 网页骨架**：`tokens.css`、`store.js`、`bridge.js`（含 mock，mock 里包括模拟的 `audioSpectrum`）、组件注册机制、点击区域自动上报、骨架自检面板；在浏览器里能打开。`tokens.css` 只搭好变量结构，填中性深色占位值。Swift 端同时完成 Bridge 的回复通道和来源校验、白名单动作（键盘焦点除外，先做探针）、`safeArea` / `paused` / `uiState` / `systemStats` 推送、遮挡防抖，菜单栏补上"点击语音""重新加载""打开配置文件夹"。
+- **M3 网页骨架**：`tokens.css`、`store.js`、`bridge.js`（含 mock，mock 里包括模拟的 `audioSpectrum`）、组件注册机制、点击区域自动上报、骨架自检面板；在浏览器里能打开。`tokens.css` 只搭好变量结构，填中性深色占位值。Swift 端同时完成 Bridge 的回复通道和来源校验、白名单动作（键盘焦点除外，先做探针）、`safeArea` / `paused` / `uiState` / `systemStats` 推送、遮挡防抖，菜单栏补上"点击语音""重新加载""打开配置文件夹"；接入系统提醒事项（权限、读取、勾选、新增、变化推送 `todos`）。
 - **M3.5 设计定稿**（由 Claude Code 负责，不交给 Codex）：先从美化包皮肤配置整理参数表，再从壁纸素材提取配色，确定字体、卡片样式（圆角、阴影、透明度、毛玻璃）、八个组件的版式、外观面板、桌面布局，以及四个时段主题和选中、高亮、省电等状态样式。布局要给访达桌面图标留出区域（访达默认从右上角往下排列，用户桌面上约有 68 个项目），与用户商定图标区和组件区的划分。还要根据定下的显示尺寸，决定原图偏小的立绘（726×660）和头像（240×150）是否需要 AI 超分放大（Real-ESRGAN 动漫模型；需要下载时先征得用户同意）。产出放在 `docs/design/`：一个能在浏览器里直接打开的效果图页面（叠在壁纸上、用 mock 数据），一份定稿的 `tokens.css` 数值，以及截图。用户确认后才进入 M4。
 - **M4 组件**：八个组件和两项功能全部完成，**照 M3.5 定稿实现**，样式统一。音频律动此时用 mock 数据。
 - **M5 联动**：按"联动规则"表实现并逐条验证。
@@ -445,7 +460,7 @@ desktop-shell/
 
 ## 不要做的事
 
-- 不做终端、不做文件管理器、不做任何删除或移动文件的功能。
+- 不做终端、不做文件管理器、不做任何删除或移动文件的功能；不删除系统提醒事项。
 - 不开放执行 shell 命令的 bridge 动作。
 - 不引入前端框架和构建工具，除非组件数量明显增加且用户同意。
 - 不修改用户的系统设置。

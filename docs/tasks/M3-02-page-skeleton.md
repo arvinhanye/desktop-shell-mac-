@@ -218,19 +218,21 @@ export function installHitRegions({ send, root = document, win = window })
 3. **外观**：`ui` 的三个字段；当前头像的图片（`ui.avatarId` 在 `media.avatars` 里找到时显示，尺寸 `var(--devpanel-avatar-size)`，圆形，`draggable="false"`）。
 4. **系统状态**：电量、是否充电、是否用电池、CPU、内存百分比；`systemStats` 为 `null` 时显示"未收到"。
 5. **律动**：12 根竖条，按 `audioSpectrum.bands` 用 `transform: scaleY(...)` 显示。用 `requestAnimationFrame` 刷新，**只在 `paused` 为 `false` 且页面可见时运行**；超过 200 毫秒没有新数据时各条衰减到 0。条的颜色用 `--color-accent`，高度 `var(--devpanel-spectrum-height)`。
-6. **配置**：`ready` 之后显示。`config` 为 `null` 时显示"未获取到配置"。否则显示角色名、问候条数、头像和背景数量、待办条数；每个项目一行：项目名、"Finder"按钮（`openProject`），以及该项目 `apps` 里每个应用一个"用 <应用名> 打开"按钮（`openProjectWith`）；每个应用一个"启动 <应用名>"按钮（`launchApp`）。再加按钮："随机头像"、"随机背景"（`saveUiState` 只带一个键，id 从 `media` 里随机挑）、"恢复默认外观"（`saveUiState`，两个键都传 `null`）、"保存待办（原样）"（`saveTodos`，传当前 `store.todos`）。`saveUiState` 成功后用回复值写入 `store.ui`。
-7. **非法请求自检**：一个按钮"发送非法请求"，依次发送下面 5 条并把结果列出来（预期的错误码写在括号里，结果和预期一致时打 ✓）：
+6. **配置**：`ready` 之后显示。`config` 为 `null` 时显示"未获取到配置"。否则显示角色名、问候条数、头像和背景数量；每个项目一行：项目名、"Finder"按钮（`openProject`），以及该项目 `apps` 里每个应用一个"用 <应用名> 打开"按钮（`openProjectWith`）；每个应用一个"启动 <应用名>"按钮（`launchApp`）。再加按钮："随机头像"、"随机背景"（`saveUiState` 只带一个键，id 从 `media` 里随机挑）、"恢复默认外观"（`saveUiState`，两个键都传 `null`）。`saveUiState` 成功后用回复值写入 `store.ui`。
+   **提醒事项**：显示 `todosAccess`、`todos` 条数，以及按 `projectId` 统计的条数（例如"desktop-shell 1 · 未关联 6"）；列出前 5 条（勾选框 + 标题 + 到期时间 + 关联的项目 id），点勾选框发送 `setTodoDone`；一个按钮"新增测试提醒"，发送 `addTodo`，`text` 为 `DesktopShell 自检 <时:分:秒>`，不带 `projectId`。按钮旁边注明"native 模式下会写入系统提醒事项的默认列表，测完请在提醒事项里删掉"。勾选和新增之后不需要自己改 store，等 `todos` 事件推送过来。
+7. **非法请求自检**：一个按钮"发送非法请求"，依次发送下面 7 条并把结果列出来（预期的错误码写在括号里，结果和预期一致时打 ✓）：
    - `{action: 'deleteFile'}`（`unknown-action`）
    - `openProject`，`projectId: '../etc'`（`invalid`）
    - `openProject`，`projectId: 'desktop-shell'`，多带一个 `path: '/'`（`invalid`）
    - `launchApp`，`appId: 'no-such-app'`（`not-found`）
    - `saveUiState`，`avatarId: 'no-such-avatar'`（`not-found`）
+   - `setTodoDone`，`todoId: 'no-such-todo'`，`done: true`（`not-found`）
    - 仅 native 模式：建一个隐藏的 `<iframe srcdoc="">`，用父页面的脚本调用 `iframe.contentWindow.webkit.messageHandlers.shell.postMessage({action: 'getConfig'})`，用完移除 iframe（`untrusted`，验证 Swift 拒绝子框架的消息）。mock 模式下这一条显示"跳过"。
 
    M3-03 之前在 `.app` 里点这个按钮，结果不符合预期是正常的。
 8. **键盘输入**：一个文本输入框，占位文字"点这里测试键盘输入"（键盘焦点的 Swift 部分在 M3 之后单独处理，这里只放输入框）。
 9. **时段**：四个按钮"早晨 / 白天 / 傍晚 / 夜晚"，点击写入 `store.phase`。
-10. **调试开关**："显示安全区域"（切换 `#desktop` 的 `data-debug-safe-area`）、"显示点击区域"（按 `hitRegions.last` 画出每个区域的虚线框：固定定位、`pointer-events: none`、`z-index: var(--z-overlay)`、`outline` 用 `--color-debug`；区域变化时重画）。仅 mock 模式下再显示："模拟声音"（`bridge.mock.setSound`）、"模拟暂停"（`bridge.mock.setPaused`）。
+10. **调试开关**："显示安全区域"（切换 `#desktop` 的 `data-debug-safe-area`）、"显示点击区域"（按 `hitRegions.last` 画出每个区域的虚线框：固定定位、`pointer-events: none`、`z-index: var(--z-overlay)`、`outline` 用 `--color-debug`；区域变化时重画）。仅 mock 模式下再显示："模拟声音"（`bridge.mock.setSound`）、"模拟暂停"（`bridge.mock.setPaused`）、"模拟提醒事项未授权"（勾选时 `bridge.mock.setTodosAccess('denied')`，取消时 `'granted'`）。
 11. **最近结果**：最近 6 次 bridge 调用的结果，例如"✓ launchApp safari"、"✗ openProject：unknown-action"；最近收到的事件名和时间（`audioSpectrum` 不逐条列出，只显示累计条数）。
 
 ### 8. `scripts/serve-web.mjs`（本地开发服务器）
@@ -286,7 +288,8 @@ export function installHitRegions({ send, root = document, win = window })
   - `curl -s -o /dev/null -w '%{http_code}\n' -X POST http://127.0.0.1:8765/` → `405`
 - [ ] 浏览器打开 `http://127.0.0.1:8765/`：控制台没有错误；自检面板显示 `mock`、`ready = true`、角色名"爱弥斯"、头像 30、背景 63、`safeArea` 为 25 / 0 / 80 / 0；`systemStats` 每 5 秒变化；律动条在动
 - [ ] 浏览器里点"模拟暂停"：`<html>` 带上 `data-paused`，律动条停住并回到 0；再点一次恢复
-- [ ] 浏览器里点"发送非法请求"：前 5 条全部 ✓，第 6 条显示"跳过"
+- [ ] 浏览器里的提醒事项：显示 `granted`、5 条；点第一条的勾选框，它的勾选状态马上变化；点"新增测试提醒"，条数变成 6；勾"模拟提醒事项未授权"，显示 `denied`、0 条，这时点"新增测试提醒"结果栏显示 `failed`；取消勾选后恢复
+- [ ] 浏览器里点"发送非法请求"：前 6 条全部 ✓，第 7 条显示"跳过"
 - [ ] 浏览器控制台执行下面的代码，控制台出现一条"组件 no-such-widget 加载失败"，自检面板仍在：
   ```js
   const { mountWidgets } = await import('/js/widgets.js');

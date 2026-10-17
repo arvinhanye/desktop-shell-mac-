@@ -9,14 +9,15 @@
 
 ## 目标
 
-网页的 `postMessage` 能拿到 Swift 的回复；Swift 只接受 `shell://app` 主框架发来的消息；`getConfig` 返回配置、头像和背景列表、外观状态和待办。在 `.app` 里，自检面板显示真实的配置和素材数量。
+网页的 `postMessage` 能拿到 Swift 的回复；Swift 只接受 `shell://app` 主框架发来的消息；`getConfig` 返回配置、头像和背景列表、外观状态。在 `.app` 里，自检面板显示真实的配置和素材数量。
 
 ## 背景与约束
 
 - 先读 `AGENTS.md`："Bridge 接口（白名单）"（含"通信方式"和"安全要求"）、配置文件示例、运行时素材目录。
 - M2-05 审查时定下的要求：给 Bridge 加有实际作用的动作之前，先校验消息来源。本任务先把校验和回复通道做好，有副作用的动作在 M3-04 加。
 - WKWebView 窗口相关的集成测试**不**正式纳入仓库（M2-03 遗留的问题，结论：继续用纯函数单元测试 + 交付记录里的临时检查 + 手动验证）。可以测试的逻辑都写成不依赖 AppKit 状态的纯函数。
-- 日志一律用 `Log.notice` / `Log.error`，只写 action 名、id、数量和错误码，**不写待办文字等用户内容**。
+- 日志一律用 `Log.notice` / `Log.error`，只写 action 名、id、数量和错误码，**不写提醒事项文字等用户内容**。
+- 待办改为系统提醒事项（`AGENTS.md` 2026-10-17 改定），在 M3-07 实现；本任务只给项目配置加上 `remindersList` 字段，不碰 EventKit。
 
 ### 1. 回复通道（`WebContainer.swift`、`Bridge.swift`）
 
@@ -49,7 +50,7 @@ enum BridgeRequest: Equatable {
 ```
 
 - `body` 不是字典、没有 `action`、`action` 不是字符串 → `invalid`。
-- `action` 不认识 → `unknown-action`。**白名单里 M3-04 才实现的动作**（`openProject`、`openProjectWith`、`launchApp`、`saveTodos`、`saveUiState`）和键盘焦点的两个动作（`focusInput`、`blurInput`，M3 之后再做）本任务也回复 `unknown-action`。
+- `action` 不认识 → `unknown-action`。**白名单里 M3-04 才实现的动作**（`openProject`、`openProjectWith`、`launchApp`、`saveUiState`）、M3-07 才实现的动作（`addTodo`、`setTodoDone`），以及键盘焦点的两个动作（`focusInput`、`blurInput`，M3 之后再做）本任务也回复 `unknown-action`。
 - **除 `action` 外只允许该动作列出的参数**，多出任何键 → `invalid`。`getConfig` 没有参数；`setHitRegions` 只有 `regions`。
 - `setHitRegions`：行为与现在一致（`HitTesting.parseRegions` 失败 → `invalid`），成功回复 `nil`。
 
@@ -64,7 +65,6 @@ final class AppState {
     private(set) var config: AppConfig
     var uiState: UiState
     let uiStateStore: UiStateStore
-    let todoStore: TodoStore
     init(paths: AppPaths)         // 读取 config.json（失败时用 AppConfig.example 并记录日志，沿用现在 AppDelegate 的逻辑）和 ui.json
     func saveUiState() throws     // 保存当前 uiState
 }
@@ -89,22 +89,11 @@ enum MediaLibrary {
 - `url` 为 `/media/<subdirectory>/<文件名>`（文件名原样，含扩展名）。
 - 目录不存在 → 空数组。
 
-### 6. 待办存储（新建 `TodoStore.swift`）
+### 6. 项目的提醒事项列表（`Config.swift`）
 
-```swift
-struct Todo: Codable, Equatable { var id: String; var text: String; var done: Bool; var projectId: String? }
-extension Todo { static func isValidList(_ todos: [Todo]) -> Bool }
-struct TodoStore {
-    let supportDir: URL
-    func load() -> [Todo]          // 不抛错
-    func save(_ todos: [Todo]) throws
-}
-```
-
-- 校验规则（`isValidList`，M3-04 的 `saveTodos` 也用它）：最多 500 条；`id` 满足 `isValidID`、UTF-8 不超过 64 字节、列表内不重复；`text` 去掉首尾空白后不为空、不超过 500 个字符（按 `Character` 计）；`projectId` 为 `nil` 或满足 `isValidID`（**不要求**在配置里存在）。
-- 文件是 `supportDir/todos.json`，顶层是 JSON 数组。
-- `load()`：文件不存在 → `[]`；JSON 损坏、结构不对或者不满足 `isValidList` → `Log.error`（只写路径和错误，不写内容），**把原文件复制一份**为同目录下的 `todos.corrupt.json`（这个备份已经存在时不覆盖），返回 `[]`。原文件保持不动（项目规定不做删除或移动文件的功能）。复制失败只记录日志。
-- `save`：创建 `supportDir`（含中间目录），`prettyPrinted` + `sortedKeys` + `withoutEscapingSlashes`，`.atomic` 写入。`save` 本身不校验，由调用方负责。
+- `AppConfig.Project` 增加可选字段 `remindersList: String?`（系统提醒事项里一个列表的名字，见 `AGENTS.md` 配置文件示例）。旧的配置文件没有这个字段，必须照常读取。
+- `AppConfig.example` 里 `desktop-shell` 项目**不加**这个字段（用户还没有建对应的列表）。
+- 本任务只读取这个字段、在 `getConfig` 里输出 `hasReminders`；按名字找列表在 M3-07 做。
 
 ### 7. `getConfig`
 
@@ -115,28 +104,26 @@ struct TodoStore {
   "config": {
     "character": { "name": "爱弥斯" },
     "greetings": [ { "from": 0, "title": "深夜了", "wish": "…" } ],
-    "projects": [ { "id": "desktop-shell", "name": "DesktopShell", "tags": ["dev"], "apps": ["cursor"] } ],
+    "projects": [ { "id": "desktop-shell", "name": "DesktopShell", "tags": ["dev"], "apps": ["cursor"], "hasReminders": false } ],
     "apps": [ { "id": "cursor", "name": "Cursor" } ]
   },
   "media": {
     "avatars": [ { "id": "1", "url": "/media/avatars/1.png" } ],
     "backgrounds": [ { "id": "folder-01", "url": "/media/backgrounds/folder-01.png" } ]
   },
-  "uiState": { "avatarId": null, "backgroundId": null, "voiceEnabled": true },
-  "todos": [ { "id": "t1", "text": "…", "done": false, "projectId": "desktop-shell" } ]
+  "uiState": { "avatarId": null, "backgroundId": null, "voiceEnabled": true }
 }
 ```
 
-- **不包含**：项目的 `path`、应用的 `bundleId`、`background`、`desktopIconsHidden`。网页只需要 id 和显示用的名字。
-- 项目的 `tags`、`apps` 在配置里缺失时输出空数组。值为空的可选字段（`avatarId`、`backgroundId`、`projectId`）可以输出 `null`，也可以省略（网页两种都接受）。
-- 每次调用都重新扫描 `media/avatars`、`media/backgrounds` 并读取 `todos.json`（新放进去的素材重新加载页面就能看到）。
-- 每次调用记录一行：`DesktopShell bridge: getConfig avatars=<数量> backgrounds=<数量> todos=<数量>`。
+- **不包含**：项目的 `path` 和 `remindersList`、应用的 `bundleId`、`background`、`desktopIconsHidden`。网页只需要 id 和显示用的名字。
+- 项目的 `tags`、`apps` 在配置里缺失时输出空数组；`hasReminders` 为 `remindersList` 去掉首尾空白后是否非空。值为空的可选字段（`avatarId`、`backgroundId`）可以输出 `null`，也可以省略（网页两种都接受）。
+- 每次调用都重新扫描 `media/avatars`、`media/backgrounds`（新放进去的素材重新加载页面就能看到）。
+- 每次调用记录一行：`DesktopShell bridge: getConfig avatars=<数量> backgrounds=<数量>`。
 
 ### 8. 测试
 
-- `BridgeTests.swift`：`isTrusted`（只有主框架 + `shell` + `app` 通过；子框架、`http`、`file`、`about`、`SHELL`、host 为 `evil` 或空都拒绝）；`parse`（非字典、缺 `action`、`action` 非字符串 → `invalid`；未知动作和 M3-04 的动作 → `unknown-action`；`getConfig` 多带参数 → `invalid`；`setHitRegions` 多带参数 → `invalid`；合法的两种请求）；`getConfig` 回复（结构正确；整个回复里没有 `path`、`bundleId`、`background`、`video`、`desktopIconsHidden` 这些键；缺失的 `tags`、`apps` 输出空数组）。
+- `BridgeTests.swift`：`isTrusted`（只有主框架 + `shell` + `app` 通过；子框架、`http`、`file`、`about`、`SHELL`、host 为 `evil` 或空都拒绝）；`parse`（非字典、缺 `action`、`action` 非字符串 → `invalid`；未知动作和 M3-04、M3-07 的动作 → `unknown-action`；`getConfig` 多带参数 → `invalid`；`setHitRegions` 多带参数 → `invalid`；合法的两种请求）；`getConfig` 回复（结构正确；整个回复里没有 `path`、`remindersList`、`bundleId`、`background`、`video`、`desktopIconsHidden`、`todos` 这些键；缺失的 `tags`、`apps` 输出空数组；`hasReminders` 对 `nil`、空字符串、纯空白、正常名字分别是 `false`、`false`、`false`、`true`）；带 `remindersList` 和不带它的配置都能被 `ConfigStore` 读取。
 - `MediaLibraryTests.swift`：用临时目录放 `1.png`、`2.PNG`、`10.png`、`.hidden.png`、`CREDITS.txt`、名为 `dir.png` 的子目录、指向某个图片的符号链接、`bad name.png`、`a.png` + `a.jpg`，验证结果的顺序、`url` 和被跳过的项；目录不存在返回空数组。
-- `TodoStoreTests.swift`：文件不存在；读写往返；输出格式（排序键、缩进）；`save` 能创建不存在的目录；JSON 损坏 → 返回空数组、原文件内容不变、生成内容相同的 `todos.corrupt.json`；备份已存在时不覆盖；`isValidList` 的各条规则（501 条、重复 id、非法 id、65 字节 id、空白文本、501 个字符、非法 `projectId`）各至少一例，以及刚好在上限（500 条、64 字节、500 个字符）时通过。
 - 所有测试只用临时目录，不碰真实的用户目录。
 
 ## 允许修改的文件
@@ -146,19 +133,19 @@ struct TodoStore {
 - `Sources/DesktopShell/WebContainer.swift`（修改）
 - `Sources/DesktopShell/AppState.swift`（新建）
 - `Sources/DesktopShell/MediaLibrary.swift`（新建）
-- `Sources/DesktopShell/TodoStore.swift`（新建）
+- `Sources/DesktopShell/Config.swift`（修改：`Project.remindersList`）
 - `Sources/DesktopShell/AppDelegate.swift`（修改：改用 `AppState`）
 - `Sources/DesktopShell/ScreenManager.swift`、`Sources/DesktopShell/DesktopWindow.swift`（修改：传递 `AppState`）
-- `Tests/DesktopShellTests/BridgeTests.swift`、`MediaLibraryTests.swift`、`TodoStoreTests.swift`（新建）
+- `Tests/DesktopShellTests/BridgeTests.swift`、`MediaLibraryTests.swift`（新建）、`ConfigStoreTests.swift`（修改：`remindersList` 读取）
 - 本任务单的"交付记录"和"状态"
 
 ## 不许做
 
 - 遵守 AGENTS.md "不要做的事"。
-- 不实现 `openProject`、`openProjectWith`、`launchApp`、`saveTodos`、`saveUiState`、`focusInput`、`blurInput`（回复 `unknown-action`）。
+- 不实现 `openProject`、`openProjectWith`、`launchApp`、`saveUiState`、`addTodo`、`setTodoDone`、`focusInput`、`blurInput`（回复 `unknown-action`）。不引入 EventKit。
 - 不修改 `HitTesting`、`HitTestController`、`PowerMonitor`、`SchemeResolver`、`ShellSchemeHandler` 的逻辑。
 - 不修改 `web/` 下的任何文件。
-- 不删除、不移动任何文件（`todos.json` 损坏时只复制备份）。
+- 不删除、不移动任何文件。
 
 ## 验收标准
 
@@ -170,7 +157,8 @@ struct TodoStore {
 - [ ] `grep -n "addScriptMessageHandler" Sources/DesktopShell/WebContainer.swift` 有输出；`grep -rn "\.add(WeakScriptMessageHandler" Sources/` 没有输出
 - [ ] `grep -nE "isMainFrame|securityOrigin" Sources/DesktopShell/Bridge.swift` 有输出
 - [ ] `grep -rnE "removeItem|moveItem|trashItem" Sources/` 没有输出
-- [ ] `scripts/bundle.sh --open` 启动后，下面的命令能看到 `getConfig avatars=30 backgrounds=63 todos=<数量>`（数量以本机 `media/` 为准）：
+- [ ] `grep -rn "EventKit" Sources/` 没有输出
+- [ ] `scripts/bundle.sh --open` 启动后，下面的命令能看到 `getConfig avatars=30 backgrounds=63`（数量以本机 `media/` 为准）：
   ```bash
   /usr/bin/log show --last 2m --style compact --predicate 'subsystem == "local.desktopshell.DesktopShell"' | grep getConfig
   ```
@@ -179,7 +167,8 @@ struct TodoStore {
 
 - [ ] 自检面板显示 `native`、`ready = true`、角色名"爱弥斯"、7 条问候、头像 30、背景 63；`ui` 的三个字段和 `ui.json` 一致
 - [ ] 点项目和应用的按钮：结果栏显示"✗ …：unknown-action"（预期，M3-04 实现）
-- [ ] 点"发送非法请求"：第 1 条 ✓；第 2–5 条显示 `unknown-action`（预期，这几个动作 M3-04 才实现，之后应全部 ✓）；**第 6 条（子框架）✓ `untrusted`**
+- [ ] 点"发送非法请求"：第 1 条 ✓；第 2–6 条显示 `unknown-action`（预期，这几个动作在 M3-04、M3-07 才实现）；**第 7 条（子框架）✓ `untrusted`**
+- [ ] 提醒事项部分显示 `todosAccess = unknown`、0 条（预期，M3-07 实现）
 - [ ] 点击穿透照常：面板可以点，空白处能选中访达图标
 - [ ] 回归："隐藏桌面文件"切换后重启应用，状态保持；`ui.json` 里其他字段没有丢
 
