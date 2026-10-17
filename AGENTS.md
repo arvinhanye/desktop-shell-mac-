@@ -30,7 +30,7 @@
   ├─ 中间：访达的桌面图标（系统的，不归我们管）
   └─ 下层 VideoWindow（图标之下）：AVPlayerLayer 循环播放背景视频（硬件解码，省电），不接收鼠标
 系统音频捕获（全局唯一）：Core Audio process tap → 频谱分析 → 推送 audioSpectrum 给每个网页
-菜单栏 NSStatusItem：暂停动画 / 语音开关 / 重新加载 / 打开配置文件夹 / 退出
+菜单栏 NSStatusItem：暂停动画 / 隐藏桌面文件 / 语音开关 / 重新加载 / 打开配置文件夹 / 退出
 运行时素材：~/Library/Application Support/DesktopShell/media/（视频、语音、头像、背景图）
 ```
 
@@ -103,6 +103,7 @@
   - Swift 用 `NSEvent` 的全局和本地监听（鼠标移动、拖动、松开）跟踪光标：光标在某个区域内时 `WidgetWindow.ignoresMouseEvents = false`，否则为 `true`，点击落到访达图标上。不需要任何系统权限。
   - **按住鼠标期间不切换**（`NSEvent.pressedMouseButtons != 0`），松开后再重新判断，避免打断拖动和框选。
 - 点在组件之外的空白处：交给访达（选择图标、框选、右键菜单），我们不做任何事。**点击语音改为点击角色卡头像触发**。
+- **隐藏桌面文件**（菜单栏勾选项，用来单纯欣赏壁纸）：把 VideoWindow 升到图标层 **+1**（与 WidgetWindow 同层，但排在它下面），并设 `ignoresMouseEvents = false`，空白处的点击被视频窗口接住，不会点到看不见的图标；取消时恢复图标层 −1 和 `ignoresMouseEvents = true`。**不修改访达设置、不重启访达**。选择保存在 `ui.json` 的 `desktopIconsHidden`，重启后保持。
 - 需要输入文字的组件（待办输入框等）：WidgetWindow 子类重写 `canBecomeKey` 返回 `true`。点击输入框时让窗口临时成为 key window，失去焦点后归还。
 - 访达默认从屏幕**右上角**开始往下排列图标（用户桌面上约有 68 个项目），M3.5 设计布局时要给图标留出区域。
 - **安全区域**：读取 `NSScreen.visibleFrame`（排除 Dock 和菜单栏后的区域），换算成相对窗口的边距，通过 bridge 推送给网页，在网页里设成 CSS 变量 `--safe-top/right/bottom/left`。所有组件都布局在安全区域内。屏幕参数变化时（`NSApplication.didChangeScreenParametersNotification`）重新计算。（M1-02 已实测：Dock 位置、自动隐藏的变化都会触发这个通知，不需要轮询。计算函数为 `SafeAreaInsets.compute`。）
@@ -192,7 +193,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 
 - `background.video` 是相对 `media/` 的路径。
 - `greetings` 按整点 `from` 升序排列，取不大于当前小时的最后一项；问候显示为 `"<title>，<character.name>"`，角色名用强调色。默认文案取自美化包 `Skins/Ageo` 的配置。
-- 同目录下的其他数据文件：`todos.json`（待办）、`ui.json`（当前头像、背景图、语音开关）。
+- 同目录下的其他数据文件：`todos.json`（待办）、`ui.json`（当前头像、背景图、语音开关、是否隐藏桌面文件）。`ui.json` 由应用自己管理，缺少的字段用默认值，损坏时记录日志并使用默认值。
 
 ### 运行时素材目录
 
@@ -294,6 +295,7 @@ desktop-shell/
 │   ├── Bridge.swift               # 白名单消息处理
 │   ├── SystemStats.swift          # 电量/CPU/内存
 │   ├── PowerPolicy.swift          # 暂停规则
+│   ├── UiStateStore.swift         # 读写 ui.json
 │   ├── AudioSpectrum.swift        # 系统音频捕获 + FFT（M5.5）
 │   └── ConfigStore.swift          # 读写 JSON
 ├── web/
