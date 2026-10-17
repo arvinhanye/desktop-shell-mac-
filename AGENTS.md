@@ -11,11 +11,7 @@
 需求在前期讨论中已经定下来，**以下决定不需要重新讨论**：
 
 - **覆盖整个桌面**，Dock 和菜单栏保留系统原生。
-- **隐藏 Finder 桌面图标**，由用户手动执行一次，应用本身不修改系统设置：
-  ```bash
-  defaults write com.apple.finder CreateDesktop -bool false && killall Finder
-  # 恢复：把 false 改成 true
-  ```
+- **保留访达桌面图标**（2026-10-17 改定，原方案是隐藏）：图标显示在视频壁纸之上、组件之下，可以正常选中、框选、拖动、双击打开。做法见"窗口要求"。
 - **不做终端**。
 - **不做文件管理器**，文件操作一律交给 Finder 或指定应用。
 - **所有组件风格高度统一、可以互相联动**，这是核心需求。
@@ -25,12 +21,14 @@
 ## 核心架构
 
 ```
-每块屏幕一个 DesktopWindow（无边框，覆盖整屏）
-  ├─ 底层：AVPlayerLayer 循环播放背景视频（硬件解码，省电）
-  └─ 上层：透明背景的 WKWebView，所有组件都在这一个网页里
-        ├─ tokens.css：唯一的设计规范（配色/字体/圆角/阴影/动效）
-        ├─ store.js：唯一的共享状态，组件之间通过它联动
-        └─ bridge.js：与 Swift 通信的唯一入口
+每块屏幕两个无边框、覆盖整屏的窗口，把访达的桌面图标夹在中间：
+  ├─ 上层 WidgetWindow（图标之上）：透明背景的 WKWebView，所有组件都在这一个网页里
+  │     ├─ tokens.css：唯一的设计规范（配色/字体/圆角/阴影/动效）
+  │     ├─ store.js：唯一的共享状态，组件之间通过它联动
+  │     └─ bridge.js：与 Swift 通信的唯一入口
+  │     鼠标在组件区域内才接收点击，其余区域点击穿透给访达（动态切换 ignoresMouseEvents）
+  ├─ 中间：访达的桌面图标（系统的，不归我们管）
+  └─ 下层 VideoWindow（图标之下）：AVPlayerLayer 循环播放背景视频（硬件解码，省电），不接收鼠标
 系统音频捕获（全局唯一）：Core Audio process tap → 频谱分析 → 推送 audioSpectrum 给每个网页
 菜单栏 NSStatusItem：暂停动画 / 语音开关 / 重新加载 / 打开配置文件夹 / 退出
 运行时素材：~/Library/Application Support/DesktopShell/media/（视频、语音、头像、背景图）
@@ -83,6 +81,7 @@
 | 探针 | 结论 |
 |---|---|
 | 系统音频捕获（process tap + vDSP），2026-10-17 | **可行**，详见下方 |
+| 保留访达图标时的点击穿透，2026-10-17 | WKWebView 窗口透明区域**不会**自动穿透（35 次空白点击全被网页接住）；改为"网页上报组件区域 + 全局鼠标监听动态切换 `ignoresMouseEvents`"后，空白点击全部交给访达（0 次被接住），组件点击全部收到，从其他应用直接点组件也能一次生效，拖动框选经过组件不会被打断。全局鼠标监听不需要系统权限，鼠标移动时每秒约 20–45 个事件 |
 
 **系统音频捕获探针**（全局 tap `CATapDescription(stereoGlobalTapButExcludeProcesses: [])`，`muteBehavior = .unmuted`，加上"默认输出设备 + tap"的私有聚合设备，再加 IOProc）：
 
@@ -95,18 +94,25 @@
 
 ## 窗口要求
 
-- 层级：`CGWindowLevelForKey(.desktopIconWindow) + 1`，即在桌面图标层之上、普通窗口之下。
-- `collectionBehavior`：`[.canJoinAllSpaces, .stationary, .ignoresCycle]`。
-- 窗口接收鼠标点击。点在组件之外的空白处：语音开启时随机播放一句语音（播放期间不重复触发），关闭时什么都不发生。除此之外不做任何事。
-- 需要输入文字的组件（待办输入框等）：窗口子类重写 `canBecomeKey` 返回 `true`。点击输入框时让窗口临时成为 key window，失去焦点后归还。
+- 实测层级（本机）：系统壁纸和程序坞 ≤ -2147483624，**访达图标 = `CGWindowLevelForKey(.desktopIconWindow)`（-2147483603）**，系统桌面小组件 = 图标 +2。
+- **VideoWindow**：层级 = 图标层 **−1**；不透明；`ignoresMouseEvents = true`。
+- **WidgetWindow**：层级 = 图标层 **+1**；`isOpaque = false`、`backgroundColor = .clear`、无阴影。
+- 两个窗口的 `collectionBehavior` 都是 `[.canJoinAllSpaces, .stationary, .ignoresCycle]`。
+- **点击穿透**（2026-10-17 探针实测，见"技术探针"）：WKWebView 窗口的透明区域**不会**自动让点击穿透，所以要动态切换：
+  - 网页通过 bridge 动作 `setHitRegions` 上报所有可交互组件的矩形（CSS 像素，相对网页左上角，组件布局变化时重新上报）。
+  - Swift 用 `NSEvent` 的全局和本地监听（鼠标移动、拖动、松开）跟踪光标：光标在某个区域内时 `WidgetWindow.ignoresMouseEvents = false`，否则为 `true`，点击落到访达图标上。不需要任何系统权限。
+  - **按住鼠标期间不切换**（`NSEvent.pressedMouseButtons != 0`），松开后再重新判断，避免打断拖动和框选。
+- 点在组件之外的空白处：交给访达（选择图标、框选、右键菜单），我们不做任何事。**点击语音改为点击角色卡头像触发**。
+- 需要输入文字的组件（待办输入框等）：WidgetWindow 子类重写 `canBecomeKey` 返回 `true`。点击输入框时让窗口临时成为 key window，失去焦点后归还。
+- 访达默认从屏幕**右上角**开始往下排列图标（用户桌面上约有 68 个项目），M3.5 设计布局时要给图标留出区域。
 - **安全区域**：读取 `NSScreen.visibleFrame`（排除 Dock 和菜单栏后的区域），换算成相对窗口的边距，通过 bridge 推送给网页，在网页里设成 CSS 变量 `--safe-top/right/bottom/left`。所有组件都布局在安全区域内。屏幕参数变化时（`NSApplication.didChangeScreenParametersNotification`）重新计算。（M1-02 已实测：Dock 位置、自动隐藏的变化都会触发这个通知，不需要轮询。计算函数为 `SafeAreaInsets.compute`。）
-- 多显示器：每块屏幕一个窗口，屏幕接入或拔出时增删窗口。
+- 多显示器：每块屏幕一对窗口（VideoWindow + WidgetWindow），屏幕接入或拔出时成对增删。
 
 ## 省电要求（Intel Mac）
 
 以下情况下暂停背景视频，并通知网页暂停动画（`store` 里设 `paused = true`）：
 
-- 窗口被完全遮挡（`NSWindow.occlusionState`）
+- 窗口被完全遮挡（看 **VideoWindow** 的 `NSWindow.occlusionState`；所有屏幕的 VideoWindow 都看不见时才算。窗口刚显示、还没收到第一次遮挡通知之前，按"可见"处理，避免启动时误判暂停）
 - 屏幕睡眠（`NSWorkspace.screensDidSleepNotification`）
 - 用户切换走（`NSWorkspace.sessionDidResignActiveNotification`）
 - 使用电池且电量低于 20%
@@ -133,6 +139,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 | `saveTodos` | `todos` | 写入 `todos.json` |
 | `saveUiState` | `avatarId?`, `backgroundId?` | 写入 `ui.json`。Swift 先核对 id 确实存在于 `media/avatars`、`media/backgrounds`，不存在就忽略并记录日志 |
 | `focusInput` / `blurInput` | — | 让窗口获得或交还键盘焦点 |
+| `setHitRegions` | `regions`：`[[x, y, w, h], …]`，CSS 像素，相对网页左上角 | 整体替换该窗口的可交互区域，用于点击穿透判断。只接受有限数值，最多 64 个，宽高必须为正，超出窗口的部分裁掉；格式不对就整条忽略并记录日志 |
 
 **安全要求**：
 
@@ -212,12 +219,12 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 4. **待办**：可勾选、可新增、可删除。每条待办可以关联一个项目（`projectId`），也可以不关联。数据通过 `saveTodos` 持久化。
 5. **系统状态**：电量、CPU、内存，外加一条 CPU 历史折线。
 6. **问候语**：按 `config.greetings` 显示当前整点对应的问候和祝福语，角色名用强调色。
-7. **角色卡**：圆形头像、签名、标签。点击后在**同一个网页里**弹出"外观"面板，可以换头像和背景图，选择结果通过 `saveUiState` 保存。
+7. **角色卡**：圆形头像、签名、标签。**点击头像播放语音**；卡片上另设一个入口（具体形式在 M3.5 定，例如签名区域或一个小按钮），点击后在**同一个网页里**弹出"外观"面板，可以换头像和背景图，选择结果通过 `saveUiState` 保存。
 8. **音频律动**：冰晶心形装饰条，两侧各 12 根柱子跟随 `audioSpectrum` 跳动。
 
 两项功能：
 
-- **点击语音**：点击壁纸空白处随机播放 `media/voice/` 里的一句语音；菜单栏可以开关。
+- **点击语音**：点击角色卡的**头像**随机播放 `media/voice/` 里的一句语音（播放期间不重复触发）；菜单栏可以开关。（原方案是点空白处，因保留访达图标而改为点头像）
 - **背景图库**：`media/backgrounds/` 里的图片可以作为应用启动栏和卡片的背景，在"外观"面板里切换。
 
 **不做**：Windows 开始菜单、资源管理器、设置页的换皮（Mac 上对应的是系统程序，换皮需要关闭 SIP 注入代码），以及任务栏和 Dock 的换皮。
@@ -235,7 +242,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 | `systemStats` 显示使用电池且电量低 | 写入 `paused`，背景和所有动画暂停；系统状态组件显示省电提示 |
 | `paused` 变化 | 所有组件停止或恢复动画；律动条归零静止；Swift 端停止或恢复系统音频捕获 |
 | 外观面板里换头像或背景图 | 写入 `store.ui`，角色卡、启动栏、卡片立即生效，并通过 `saveUiState` 保存 |
-| 菜单栏切换语音开关 | Swift 推送 `uiState`，写入 `store.ui.voiceEnabled`；关闭时点击空白处不再播放 |
+| 菜单栏切换语音开关 | Swift 推送 `uiState`，写入 `store.ui.voiceEnabled`；关闭时点击头像不再播放语音 |
 
 ## 设计规范
 
@@ -278,7 +285,9 @@ desktop-shell/
 ├── Sources/DesktopShell/
 │   ├── main.swift
 │   ├── AppDelegate.swift          # 菜单栏、生命周期
-│   ├── DesktopWindow.swift        # 窗口层级、key window 处理
+│   ├── DesktopWindow.swift        # VideoWindow / WidgetWindow：窗口层级、key window 处理
+│   ├── HitTesting.swift           # 组件区域解析 + 点击穿透判断（纯函数）
+│   ├── HitTestController.swift    # 全局鼠标监听，动态切换 ignoresMouseEvents
 │   ├── ScreenManager.swift        # 多屏、安全区域
 │   ├── BackgroundPlayer.swift     # 视频背景
 │   ├── WebContainer.swift         # WKWebView + URL scheme handler
@@ -302,7 +311,7 @@ desktop-shell/
 │       ├── greeting.js
 │       ├── character.js           # 角色卡 + 外观面板
 │       ├── visualizer.js          # 音频律动 + 心形装饰条
-│       └── voice.js               # 点击空白处播放语音（无界面）
+│       └── voice.js               # 点击头像播放语音（无界面）
 ├── Tests/DesktopShellTests/        # swift-testing 单元测试
 └── scripts/
     ├── test.sh                    # 带上 Testing 框架路径运行 swift test
@@ -380,7 +389,7 @@ desktop-shell/
 - **M2 背景**：`prepare-media.sh` 生成运行时素材；视频循环播放，WKWebView 透明叠在上面；`shell://` scheme 处理器（含路径安全检查）；省电暂停规则生效。
 - **M2.5 打包与签名**（从 M6 提前，因为系统音频权限只能授予签名的 `.app`）：`bundle.sh` 产出可双击运行的 `.app`；`setup-signing.md` 和固定的自签名证书；`Info.plist` 含 `LSUIElement`、`NSAudioCaptureUsageDescription`。此后都用 `.app` 运行。
 - **M3 网页骨架**：`tokens.css`、`store.js`、`bridge.js`（含 mock，mock 里包括模拟的 `audioSpectrum`）、组件注册机制；在浏览器里能打开。`tokens.css` 只搭好变量结构，填中性深色占位值。
-- **M3.5 设计定稿**（由 Claude Code 负责，不交给 Codex）：先从美化包皮肤配置整理参数表，再从壁纸素材提取配色，确定字体、卡片样式（圆角、阴影、透明度、毛玻璃）、八个组件的版式、外观面板、桌面布局，以及四个时段主题和选中、高亮、省电等状态样式。还要根据定下的显示尺寸，决定原图偏小的立绘（726×660）和头像（240×150）是否需要 AI 超分放大（Real-ESRGAN 动漫模型；需要下载时先征得用户同意）。产出放在 `docs/design/`：一个能在浏览器里直接打开的效果图页面（叠在壁纸上、用 mock 数据），一份定稿的 `tokens.css` 数值，以及截图。用户确认后才进入 M4。
+- **M3.5 设计定稿**（由 Claude Code 负责，不交给 Codex）：先从美化包皮肤配置整理参数表，再从壁纸素材提取配色，确定字体、卡片样式（圆角、阴影、透明度、毛玻璃）、八个组件的版式、外观面板、桌面布局，以及四个时段主题和选中、高亮、省电等状态样式。布局要给访达桌面图标留出区域（访达默认从右上角往下排列，用户桌面上约有 68 个项目），与用户商定图标区和组件区的划分。还要根据定下的显示尺寸，决定原图偏小的立绘（726×660）和头像（240×150）是否需要 AI 超分放大（Real-ESRGAN 动漫模型；需要下载时先征得用户同意）。产出放在 `docs/design/`：一个能在浏览器里直接打开的效果图页面（叠在壁纸上、用 mock 数据），一份定稿的 `tokens.css` 数值，以及截图。用户确认后才进入 M4。
 - **M4 组件**：八个组件和两项功能全部完成，**照 M3.5 定稿实现**，样式统一。音频律动此时用 mock 数据。
 - **M5 联动**：按"联动规则"表实现并逐条验证。
 - **M5.5 系统音频律动**：`AudioSpectrum.swift` 捕获系统声音、做频谱分析，推送 `audioSpectrum`，接上 M4 的律动组件；暂停和静音时停止；初始参数采用 Lano-Visualizer 的取值。
@@ -391,5 +400,5 @@ desktop-shell/
 - 不做终端、不做文件管理器、不做任何删除或移动文件的功能。
 - 不开放执行 shell 命令的 bridge 动作。
 - 不引入前端框架和构建工具，除非组件数量明显增加且用户同意。
-- 不修改用户的系统设置（包括隐藏桌面图标，那一步由用户手动执行）。
+- 不修改用户的系统设置。
 - 不加载任何外部网站到这个 WKWebView 里。
