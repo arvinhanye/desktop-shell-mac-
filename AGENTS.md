@@ -114,6 +114,8 @@
 
 网页里所有持续动画都要检查 `paused` 状态。
 
+AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则视频壁纸会阻止显示器休眠。所有屏幕共用**一个** AVPlayer（每个窗口各自一个 `AVPlayerLayer`），只解码一路视频。
+
 暂停时还要**停止系统音频捕获**（停掉 IOProc，而不是只停止推送），因为它是最耗电的部分。没有声音时（持续静音超过 2 秒）不做频谱分析、不推送 `audioSpectrum`。点击语音由用户主动触发，暂停时照样可以播放。
 
 ## Bridge 接口（白名单）
@@ -135,6 +137,7 @@
 **安全要求**：
 
 - 网页**只传 id，不传路径或 bundle id**。真实路径和应用由 Swift 从 `config.json` 里查。这样即使网页被塞了坏代码，也只能打开配置里列出的东西。不提供任何执行 shell 命令的动作。
+- URL 约定（同一个源）：`shell://app/<path>` 对应 `web/<path>`，`shell://app/media/<path>` 对应 `media/<path>`。
 - `shell://` URL scheme 处理器**只能读取两个根目录**：应用内的 `web/` 和运行时素材目录 `media/`。路径先标准化，再确认仍在根目录之内；包含 `..`、绝对路径、符号链接指向根目录之外的请求一律返回 404。
 
 **Swift → 网页**（调用 `window.shell.receive(event)`）
@@ -193,7 +196,7 @@
 | `video/` | 背景视频 | ffmpeg 把 webm 转成 H.264 或 HEVC 的 mp4 |
 | `voice/` | 点击语音（mp3） | 原样复制 |
 | `avatars/` | 头像（PNG） | 缩到 256px 以内 |
-| `backgrounds/` | 背景图库 | 缩到 1600px 以内并转成 JPEG（原图是 5K 的 PNG，直接加载太占内存） |
+| `backgrounds/` | 背景图库 | 缩到 1600px 以内（原图很大，直接加载太占内存）；不透明的图转 JPEG，带透明的角色立绘保持 PNG |
 | `ornaments/` | 心形装饰条等装饰图 | 缩到实际显示尺寸的 2 倍 |
 | `fonts/` | 用到的字体文件 | 原样复制，只复制设计定稿里用到的 |
 
