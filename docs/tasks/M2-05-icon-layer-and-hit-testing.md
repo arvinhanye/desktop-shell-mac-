@@ -147,5 +147,16 @@ enum HitTesting {
 
 ## 审查记录
 
-- **结论**：
+- **结论**：代码审查通过，可执行检查全部通过；**等用户手动验证后合并**。
+- **复验结果**（Claude Code，2026-10-17）：
+  - [x] touch 源码后强制重编，零警告零错误；`scripts/test.sh` 63/63 通过（新增 14 个）
+  - [x] 改动范围是 10 个允许的文件和本任务单；M2-02 的逻辑文件、`BackgroundPlayer`、`ShellSchemeHandler`、`AGENTS.md`、`CLAUDE.md` 都没有改动
+  - [x] `HitTest*.swift`、`Bridge.swift` 里没有 `Timer`、`asyncAfter`、`CGEventTap`、`AXIsProcessTrusted`
+  - [x] 运行时窗口层级：DesktopShell 组件窗口 −2147483602 → **访达图标 −2147483603** → DesktopShell 视频窗口 −2147483604，系统小组件 −2147483601 仍在最上面
+  - [x] 启动日志只有 `paused=false reasons=[]`，**启动瞬态已修复**
+  - [x] CPU（去掉首样本）1.9%，和拆分前持平
 - **意见**：
+  - `HitTesting` 校验严格（布尔值、非有限数、非正尺寸、数量上限都会让整条消息作废），坐标换算和边界语义正确；`HitTestController` 按住鼠标时冻结状态、只在值变化时才赋值，不轮询。
+  - Bridge 用弱引用中转注册，网页在窗口绑定之后才加载，关闭窗口时移除处理器，生命周期处理完整。
+  - **写进 M3 任务单的要求**：M3 给 Bridge 加上 `launchApp`、`saveTodos` 这类有实际作用的动作时，要校验消息来自 `shell://app` 的主框架（`message.frameInfo.isMainFrame` 加上 `securityOrigin` 的 scheme 和 host）。现在只有无害的 `setHitRegions`，不阻塞。
+  - 边缘情况（不阻塞）：如果启动时已经有全屏应用遮住桌面，系统可能不会发第一次遮挡通知，视频会继续播放，直到下一次遮挡变化（例如退出全屏）才暂停。影响很小，先记下。
