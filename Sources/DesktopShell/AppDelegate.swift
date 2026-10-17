@@ -5,6 +5,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var screenManager: ScreenManager?
     private var backgroundPlayer: BackgroundPlayer?
+    private var powerMonitor: PowerMonitor?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let paths = AppPaths.current
@@ -35,6 +36,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.button?.image = image
 
         let menu = NSMenu()
+        let pauseItem = NSMenuItem(title: "暂停动画", action: #selector(togglePause(_:)), keyEquivalent: "")
+        pauseItem.target = self
+        pauseItem.state = .off
+        menu.addItem(pauseItem)
+        menu.addItem(.separator())
         let quitItem = NSMenuItem(
             title: "退出 DesktopShell",
             action: #selector(quit),
@@ -48,10 +54,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let manager = ScreenManager(backgroundPlayer: player, paths: paths)
         screenManager = manager
+        let monitor = PowerMonitor(backgroundPlayer: player)
+        powerMonitor = monitor
+        manager.onWindowsChanged = { [weak monitor] windows in
+            monitor?.updateWindows(windows)
+        }
         manager.start()
+        monitor.start()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        screenManager?.onWindowsChanged = nil
+        powerMonitor?.stop()
+        powerMonitor = nil
         screenManager?.stop()
         screenManager = nil
         backgroundPlayer?.pause()
@@ -61,6 +76,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSStatusBar.system.removeStatusItem(statusItem)
         }
         statusItem = nil
+    }
+
+    @objc private func togglePause(_ sender: NSMenuItem) {
+        guard let powerMonitor else { return }
+        powerMonitor.setManualPause(!powerMonitor.manualPause)
+        sender.state = powerMonitor.manualPause ? .on : .off
     }
 
     @objc private func quit() {

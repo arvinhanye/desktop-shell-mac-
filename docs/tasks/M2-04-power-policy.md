@@ -1,6 +1,6 @@
 # M2-04: 省电暂停规则
 
-- **状态**：todo
+- **状态**：review
 - **里程碑**：M2
 - **依赖**：M2-03（必须已合并到 `main`）
 - **分支**：task/M2-04
@@ -108,12 +108,38 @@ enum SystemStats {
 ## 交付记录
 
 - **改动摘要**：
-- **自测结果**：
+  - 新增可复用的 `PowerState`、`PauseReason` 和纯函数 `pauseReasons`，五种暂停原因独立累积；仅在使用电池且已知电量严格小于 20 时加入 `lowBattery`。
+  - 新增 `BatteryStatus` 和电量读取：仅解析内置电池，容量换算后四舍五入；未知、非法容量保留为 nil，避免除零或溢出。支持 0–100 的模拟电量，非法覆盖值记录日志后读取实际电量。
+  - `PowerMonitor` 监听 workspace 睡眠/会话通知、逐窗遮挡通知和主 run loop 的 IOKit 电源 source；没有定时轮询。ScreenManager 在同步及清空窗口后回传当前列表，任一窗口可见即继续，无窗口时暂停。
+  - 原因集合变化时输出按字母排序的日志；首次应用及暂停布尔值变化时才调用播放器，解除单个原因不会覆盖其他暂停条件。
+  - 菜单新增“暂停动画”和分隔线，勾选仅代表手动暂停。退出先断开窗口变化回调、移除通知并 invalidate 电源 source，再关闭窗口、暂停播放器；deinit 同样清理 source，保护未持有引用的 C context。
+  - 仅改动允许的 7 个 Swift 文件及本任务状态、交付记录；未修改既有播放器/网页或加入 bridge、CPU/内存采集、系统设置修改。
+- **自测结果**（2026-10-17）：
+  - 从已合并 M2-03 的最新 `main`（`df9a3f3`）创建 `task/M2-04`。基线 34/34 通过；新增 **15 个测试声明**：PowerPolicyTests 5 个、BatteryParseTests 10 个。空实现首先触发 35 条预期断言失败；实现后及最终 `scripts/test.sh` 均 **49/49 通过**，退出码 0。
+  - 新测试覆盖五原因、19/20 边界、接电源/未知电量、多原因及分别解除；内置电池/UPS 筛选、充电标记、4000/5000 比例、四舍五入、容量缺失、布尔/负数/非有限数/零分母和 NSNumber 桥接。
+  - 最终 `swift build` 退出码 0；构建日志经 `grep -iE 'warning|error'` 检查无输出。`grep -rnE 'Timer|asyncAfter' Sources/DesktopShell/PowerMonitor.swift Sources/DesktopShell/SystemStats.swift` 无输出；bridge 关键词扫描无输出，`git diff --check` 通过。
+  - `/tmp/ds-m2-04-validation/MonitorChecks.swift` 编译实际生产源文件，使用真实 AppKit 事件循环、两个原生窗口及共享播放器：**19/19 通过**。验证手动暂停、原因叠加及恢复、单窗可见/全部隐藏、增删窗口后重算、空列表、初始低电量、重复 start 和停止释放。睡眠/会话通知只在测试进程内模拟，没有让系统休眠或切换账户；遮挡检查等待实际通知，避免固定等待时间导致误报。
+  - 临时 `MenuChecks.swift`：**7/7 通过**，核对实际菜单顺序、调用其 action 后的勾选/原因、手动解除时保留自动暂停，以及退出清理。临时 `BatteryReadChecks.swift`：**10/10 通过**，验证模拟值 0/15/20/80/100 和 5 种非法覆盖值；实际 IOKit 读取为电量 100%、接电源、未充电。
+  - 复用 M2-03 已准备好的 `/tmp/ds-support`，未重新转码。分别用模拟电量 80 和 15 启动同一二进制，等待 5 秒后各执行 `top -l 6 -s 2 -pid <测试进程> -stats pid,command,cpu`，采样完成后结束各自测试进程。15% 日志实际出现 `paused=true reasons=[lowBattery]`；80% 出现 `paused=false reasons=[]`。
+  - CPU 六样本：播放 `[0.0, 1.4, 2.2, 2.1, 2.2, 2.3]`，平均 **1.70%**；低电量暂停 `[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]`，平均 **0.00%**。剔除首个初始化样本分别为 **2.04% / 0.00%**。暂停明显更低；0.00% 是此次 top 采样精度下的结果，不表示绝对零开销。两次采样依次进行，没有同时运行构建或测试。
+  - 独立只读检查未发现 Critical / Important / Minor 代码缺陷；正式审查仍由 Claude Code 完成。完整日志、CPU 原始采样及临时集成检查源文件保存在 `/tmp/ds-m2-04-validation/`。
 - **疑问 / 偏离**：
+  - 无范围偏离。真实菜单点击后的视觉效果、其他应用全屏遮挡、实际显示器睡眠/唤醒、快速用户切换，以及物理电源变化通知仍按手动步骤复验；本进程模拟通知不等于系统实际投递已验收。
+  - 当前调用链仅在应用启动时启动 monitor、退出时停止；没有中途停用后重启入口。若后续增加该入口，需要重新核对停用期间错过的睡眠/会话状态，避免恢复时使用旧状态。网页动画、音频捕获暂停及已有播放器的媒体错误处理保持本任务范围之外。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 
 ## 审查记录
 
-- **结论**：
+- **结论**：代码审查通过，可执行检查全部通过；**等用户手动验证后合并**。
+- **复验结果**（Claude Code，2026-10-17）：
+  - [x] touch 源码后强制重编，零警告零错误；`scripts/test.sh` 49/49 通过（新增 15 个）
+  - [x] 改动范围是 7 个 Swift 文件和本任务单，都在允许范围内
+  - [x] `PowerMonitor.swift`、`SystemStats.swift` 里没有 `Timer`、`asyncAfter`；源码里没有 `pmset`、`Process(`、`NSTask`、`posix_spawn`
+  - [x] `DESKTOPSHELL_FAKE_BATTERY=15`：日志最终为 `paused=true reasons=[lowBattery]`，CPU（去掉首样本）**0.0%**
+  - [x] `DESKTOPSHELL_FAKE_BATTERY=80`：日志最终为 `paused=false reasons=[]`，CPU **1.9%**
+  - [x] SIGTERM 后正常退出
 - **意见**：
+  - 实现质量高：全部用通知驱动；屏幕唤醒、会话恢复时会重新计算遮挡状态，不用过期的旧值；只有"暂停与否"变化时才调用播放器；IOKit 回调的 C 上下文在退出和 deinit 时都会先失效，不会出现悬空访问；电量解析对缺失值、布尔值、零分母都做了防御。
+  - **后续事项（不阻塞，写进 M3 任务单）**：启动时窗口刚显示，系统还没算出可见状态，`occlusionState` 暂时不含 `.visible`，日志会先出现一次 `paused=true reasons=[occluded]`，**23 毫秒后**恢复为 `paused=false`。现在只影响视频，肉眼看不出来；但 M3 把 `paused` 推给网页、M5.5 接上音频捕获后，启动时会多出一次"停止再恢复"。M3 修改 `PowerMonitor` 时一并处理：在收到第一次遮挡通知之前，把窗口当作可见。
+  - Codex 提到"目前没有中途停用后重新启动的入口"，认可，现在不需要。
