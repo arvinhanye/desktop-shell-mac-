@@ -4,6 +4,7 @@ import AppKit
 final class ScreenManager: NSObject {
     private var windows: [CGDirectDisplayID: DesktopWindow] = [:]
     private var isObserving = false
+    var onWindowsChanged: (([DesktopWindow]) -> Void)?
     private let backgroundPlayer: BackgroundPlayer
     private let paths: AppPaths
 
@@ -38,6 +39,7 @@ final class ScreenManager: NSObject {
             window.close()
         }
         windows.removeAll()
+        onWindowsChanged?([])
     }
 
     @objc private func screenParametersDidChange(_ notification: Notification) {
@@ -77,5 +79,6 @@ final class ScreenManager: NSObject {
         for displayID in removedDisplayIDs {
             windows.removeValue(forKey: displayID)?.close()
         }
+        onWindowsChanged?(Array(windows.values))
     }
 }
