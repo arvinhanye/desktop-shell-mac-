@@ -3,6 +3,7 @@ import WebKit
 @MainActor
 final class WebContainer: NSObject, WKNavigationDelegate, WKUIDelegate {
     let webView: WKWebView
+    private let bridge = Bridge()
 
     init(paths: AppPaths) {
         let configuration = WKWebViewConfiguration()
@@ -10,6 +11,7 @@ final class WebContainer: NSObject, WKNavigationDelegate, WKUIDelegate {
             ShellSchemeHandler(resolver: SchemeResolver(webRoot: paths.webDir, mediaRoot: paths.mediaDir)),
             forURLScheme: "shell"
         )
+        configuration.userContentController.add(WeakScriptMessageHandler(bridge), name: "shell")
         webView = WKWebView(frame: .zero, configuration: configuration)
         super.init()
 
@@ -21,7 +23,17 @@ final class WebContainer: NSObject, WKNavigationDelegate, WKUIDelegate {
         webView.navigationDelegate = self
         webView.uiDelegate = self
         webView.autoresizingMask = [.width, .height]
+    }
+
+    func bind(to window: WidgetWindow) {
+        bridge.window = window
         webView.load(URLRequest(url: URL(string: "shell://app/index.html")!))
+    }
+
+    func stop() {
+        webView.stopLoading()
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "shell")
+        bridge.window = nil
     }
 
     func webView(

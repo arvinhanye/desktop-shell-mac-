@@ -5,7 +5,8 @@ import IOKit.ps
 final class PowerMonitor: NSObject {
     private let backgroundPlayer: BackgroundPlayer
     private let workspaceCenter = NSWorkspace.shared.notificationCenter
-    private var windows: [DesktopWindow] = []
+    private var windows: [VideoWindow] = []
+    private var observedOcclusion = Set<ObjectIdentifier>()
     private var batterySource: CFRunLoopSource?
     private var state = PowerState()
     private var isRunning = false
@@ -56,6 +57,7 @@ final class PowerMonitor: NSObject {
         }
         batterySource = nil
         windows.removeAll()
+        observedOcclusion.removeAll()
         hasAppliedState = false
     }
 
@@ -66,8 +68,9 @@ final class PowerMonitor: NSObject {
         NotificationCenter.default.removeObserver(self)
     }
 
-    func updateWindows(_ windows: [DesktopWindow]) {
+    func updateWindows(_ windows: [VideoWindow]) {
         self.windows = windows
+        observedOcclusion.formIntersection(Set(windows.map(ObjectIdentifier.init)))
         guard isRunning else { return }
         NotificationCenter.default.removeObserver(self, name: NSWindow.didChangeOcclusionStateNotification, object: nil)
         for window in windows {
@@ -84,11 +87,19 @@ final class PowerMonitor: NSObject {
         applyPolicy()
     }
 
-    @objc private func occlusionDidChange() { updateOcclusion() }
+    @objc private func occlusionDidChange(_ notification: Notification) {
+        guard let window = notification.object as? VideoWindow else { return }
+        observedOcclusion.insert(ObjectIdentifier(window))
+        updateOcclusion()
+    }
 
     private func updateOcclusion() {
         // With no desktop windows there is no visible video to decode either.
-        state.allWindowsOccluded = windows.allSatisfy { !$0.occlusionState.contains(.visible) }
+        // AppKit's pre-notification state is not a visibility result. Each newly
+        // added video window stays provisionally visible until its own first event.
+        state.allWindowsOccluded = windows.allSatisfy {
+            observedOcclusion.contains(ObjectIdentifier($0)) && !$0.occlusionState.contains(.visible)
+        }
         applyPolicy()
     }
 

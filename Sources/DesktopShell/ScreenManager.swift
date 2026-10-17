@@ -2,9 +2,19 @@ import AppKit
 
 @MainActor
 final class ScreenManager: NSObject {
-    private var windows: [CGDirectDisplayID: DesktopWindow] = [:]
+    @MainActor private struct WindowPair {
+        let video: VideoWindow
+        let widget: WidgetWindow
+
+        func close() {
+            widget.close()
+            video.close()
+        }
+    }
+    private var windows: [CGDirectDisplayID: WindowPair] = [:]
     private var isObserving = false
-    var onWindowsChanged: (([DesktopWindow]) -> Void)?
+    var onWindowsChanged: (([VideoWindow]) -> Void)?
+    var onWidgetWindowsChanged: (([WidgetWindow]) -> Void)?
     private let backgroundPlayer: BackgroundPlayer
     private let paths: AppPaths
 
@@ -40,6 +50,7 @@ final class ScreenManager: NSObject {
         }
         windows.removeAll()
         onWindowsChanged?([])
+        onWidgetWindowsChanged?([])
     }
 
     @objc private func screenParametersDidChange(_ notification: Notification) {
@@ -64,14 +75,17 @@ final class ScreenManager: NSObject {
                 visibleFrame: screen.visibleFrame
             )
 
-            if let window = windows[displayID] {
-                window.update(screen: screen)
-                window.updateSafeArea(insets)
+            if let pair = windows[displayID] {
+                pair.video.setFrame(screen.frame, display: true)
+                pair.widget.update(screen: screen)
+                pair.widget.updateSafeArea(insets)
             } else {
-                let window = DesktopWindow(screen: screen, backgroundPlayer: backgroundPlayer, paths: paths)
-                windows[displayID] = window
-                window.updateSafeArea(insets)
-                window.orderFront(nil)
+                let video = VideoWindow(screen: screen, backgroundPlayer: backgroundPlayer)
+                let widget = WidgetWindow(screen: screen, paths: paths)
+                windows[displayID] = WindowPair(video: video, widget: widget)
+                widget.updateSafeArea(insets)
+                video.orderFront(nil)
+                widget.orderFront(nil)
             }
         }
 
@@ -79,6 +93,7 @@ final class ScreenManager: NSObject {
         for displayID in removedDisplayIDs {
             windows.removeValue(forKey: displayID)?.close()
         }
-        onWindowsChanged?(Array(windows.values))
+        onWindowsChanged?(windows.values.map(\.video))
+        onWidgetWindowsChanged?(windows.values.map(\.widget))
     }
 }

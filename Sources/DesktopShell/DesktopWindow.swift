@@ -1,11 +1,29 @@
 import AppKit
 
 @MainActor
-final class DesktopWindow: NSWindow {
+final class VideoWindow: NSWindow {
+    init(screen: NSScreen, backgroundPlayer: BackgroundPlayer) {
+        super.init(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
+        level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) - 1)
+        collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        ignoresMouseEvents = true
+        hasShadow = false
+        isReleasedWhenClosed = false
+        backgroundColor = .black
+        isOpaque = true
+        contentView = backgroundPlayer.makeVideoView()
+        setFrame(screen.frame, display: true)
+    }
+}
+
+@MainActor
+final class WidgetWindow: NSWindow {
     private let webContainer: WebContainer
     private(set) var safeAreaInsets = SafeAreaInsets(top: 0, right: 0, bottom: 0, left: 0)
+    private(set) var hitRegions: [CGRect] = []
+    var onHitRegionsChanged: (() -> Void)?
 
-    init(screen: NSScreen, backgroundPlayer: BackgroundPlayer, paths: AppPaths) {
+    init(screen: NSScreen, paths: AppPaths) {
         webContainer = WebContainer(paths: paths)
         super.init(
             contentRect: screen.frame,
@@ -16,21 +34,16 @@ final class DesktopWindow: NSWindow {
 
         level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-        ignoresMouseEvents = false
+        ignoresMouseEvents = true
         hasShadow = false
         isReleasedWhenClosed = false
-        backgroundColor = .black
-        isOpaque = true
+        backgroundColor = .clear
+        isOpaque = false
 
-        let content = NSView(frame: NSRect(origin: .zero, size: screen.frame.size))
-        contentView = content
-        let videoView = backgroundPlayer.makeVideoView()
-        videoView.frame = content.bounds
-        content.addSubview(videoView)
-        webContainer.webView.frame = content.bounds
-        content.addSubview(webContainer.webView)
+        contentView = webContainer.webView
 
         update(screen: screen)
+        webContainer.bind(to: self)
     }
 
     func update(screen: NSScreen) {
@@ -42,8 +55,14 @@ final class DesktopWindow: NSWindow {
         safeAreaInsets = insets
     }
 
+    func setHitRegions(_ regions: [CGRect]) {
+        hitRegions = regions
+        onHitRegionsChanged?()
+    }
+
     override func close() {
-        webContainer.webView.stopLoading()
+        onHitRegionsChanged = nil
+        webContainer.stop()
         super.close()
     }
 }
