@@ -142,8 +142,31 @@ for ((i = 0; i < ${#sources[@]}; i++)); do
         "$temporary"
       ;;
     copy) cp "$source" "$temporary" ;;
-    jpeg) sips -Z 1600 -s format jpeg -s formatOptions 82 "$source" --out "$temporary" >/dev/null ;;
-    png) sips -Z 1600 "$source" --out "$temporary" >/dev/null ;;
+    jpeg|png)
+      dimensions=$(sips -g pixelWidth -g pixelHeight "$source")
+      width=''
+      height=''
+      while read -r property value; do
+        case "$property" in
+          pixelWidth:) width=$value ;;
+          pixelHeight:) height=$value ;;
+        esac
+      done <<< "$dimensions"
+      [[ "$width" =~ ^[1-9][0-9]*$ && "$height" =~ ^[1-9][0-9]*$ ]] || fail "读取素材尺寸失败：$source"
+
+      # sips -Z also enlarges small images; only supply it above the limit.
+      image_args=("$source" --out "$temporary")
+      if ((width > 2400 || height > 2400)); then
+        image_args=(-Z 2400 "${image_args[@]}")
+      fi
+      if [[ "${kinds[i]}" == jpeg ]]; then
+        sips -s format jpeg -s formatOptions 90 "${image_args[@]}" >/dev/null
+      elif ((width > 2400 || height > 2400)); then
+        sips "${image_args[@]}" >/dev/null
+      else
+        cp "$source" "$temporary"
+      fi
+      ;;
     heart)
       sips -c 800 4800 "$source" --out "$temporary" >/dev/null
       sips -Z 2400 "$temporary" >/dev/null
