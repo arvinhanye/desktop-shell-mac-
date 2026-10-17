@@ -196,7 +196,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 | `video/` | 背景视频 | ffmpeg 把 webm 转成 H.264 或 HEVC 的 mp4 |
 | `voice/` | 点击语音（mp3） | 原样复制 |
 | `avatars/` | 头像（PNG） | 缩到 256px 以内 |
-| `backgrounds/` | 背景图库 | 缩到 1600px 以内（原图很大，直接加载太占内存）；不透明的图转 JPEG，带透明的角色立绘保持 PNG |
+| `backgrounds/` | 背景图库 | 长边超过 2400 才缩到 2400，**只缩不放**（`sips -Z` 会放大小图，必须先判断尺寸）；不透明的图转 JPEG（质量 90），带透明的角色立绘保持 PNG |
 | `ornaments/` | 心形装饰条等装饰图 | 缩到实际显示尺寸的 2 倍 |
 | `fonts/` | 用到的字体文件 | 原样复制，只复制设计定稿里用到的 |
 
@@ -378,7 +378,7 @@ desktop-shell/
 - **M2 背景**：`prepare-media.sh` 生成运行时素材；视频循环播放，WKWebView 透明叠在上面；`shell://` scheme 处理器（含路径安全检查）；省电暂停规则生效。
 - **M2.5 打包与签名**（从 M6 提前，因为系统音频权限只能授予签名的 `.app`）：`bundle.sh` 产出可双击运行的 `.app`；`setup-signing.md` 和固定的自签名证书；`Info.plist` 含 `LSUIElement`、`NSAudioCaptureUsageDescription`。此后都用 `.app` 运行。
 - **M3 网页骨架**：`tokens.css`、`store.js`、`bridge.js`（含 mock，mock 里包括模拟的 `audioSpectrum`）、组件注册机制；在浏览器里能打开。`tokens.css` 只搭好变量结构，填中性深色占位值。
-- **M3.5 设计定稿**（由 Claude Code 负责，不交给 Codex）：先从美化包皮肤配置整理参数表，再从壁纸素材提取配色，确定字体、卡片样式（圆角、阴影、透明度、毛玻璃）、八个组件的版式、外观面板、桌面布局，以及四个时段主题和选中、高亮、省电等状态样式。产出放在 `docs/design/`：一个能在浏览器里直接打开的效果图页面（叠在壁纸上、用 mock 数据），一份定稿的 `tokens.css` 数值，以及截图。用户确认后才进入 M4。
+- **M3.5 设计定稿**（由 Claude Code 负责，不交给 Codex）：先从美化包皮肤配置整理参数表，再从壁纸素材提取配色，确定字体、卡片样式（圆角、阴影、透明度、毛玻璃）、八个组件的版式、外观面板、桌面布局，以及四个时段主题和选中、高亮、省电等状态样式。还要根据定下的显示尺寸，决定原图偏小的立绘（726×660）和头像（240×150）是否需要 AI 超分放大（Real-ESRGAN 动漫模型；需要下载时先征得用户同意）。产出放在 `docs/design/`：一个能在浏览器里直接打开的效果图页面（叠在壁纸上、用 mock 数据），一份定稿的 `tokens.css` 数值，以及截图。用户确认后才进入 M4。
 - **M4 组件**：八个组件和两项功能全部完成，**照 M3.5 定稿实现**，样式统一。音频律动此时用 mock 数据。
 - **M5 联动**：按"联动规则"表实现并逐条验证。
 - **M5.5 系统音频律动**：`AudioSpectrum.swift` 捕获系统声音、做频谱分析，推送 `audioSpectrum`，接上 M4 的律动组件；暂停和静音时停止；初始参数采用 Lano-Visualizer 的取值。
