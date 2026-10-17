@@ -131,5 +131,15 @@ enum SystemStats {
 
 ## 审查记录
 
-- **结论**：
+- **结论**：代码审查通过，可执行检查全部通过；**等用户手动验证后合并**。
+- **复验结果**（Claude Code，2026-10-17）：
+  - [x] touch 源码后强制重编，零警告零错误；`scripts/test.sh` 49/49 通过（新增 15 个）
+  - [x] 改动范围是 7 个 Swift 文件和本任务单，都在允许范围内
+  - [x] `PowerMonitor.swift`、`SystemStats.swift` 里没有 `Timer`、`asyncAfter`；源码里没有 `pmset`、`Process(`、`NSTask`、`posix_spawn`
+  - [x] `DESKTOPSHELL_FAKE_BATTERY=15`：日志最终为 `paused=true reasons=[lowBattery]`，CPU（去掉首样本）**0.0%**
+  - [x] `DESKTOPSHELL_FAKE_BATTERY=80`：日志最终为 `paused=false reasons=[]`，CPU **1.9%**
+  - [x] SIGTERM 后正常退出
 - **意见**：
+  - 实现质量高：全部用通知驱动；屏幕唤醒、会话恢复时会重新计算遮挡状态，不用过期的旧值；只有"暂停与否"变化时才调用播放器；IOKit 回调的 C 上下文在退出和 deinit 时都会先失效，不会出现悬空访问；电量解析对缺失值、布尔值、零分母都做了防御。
+  - **后续事项（不阻塞，写进 M3 任务单）**：启动时窗口刚显示，系统还没算出可见状态，`occlusionState` 暂时不含 `.visible`，日志会先出现一次 `paused=true reasons=[occluded]`，**23 毫秒后**恢复为 `paused=false`。现在只影响视频，肉眼看不出来；但 M3 把 `paused` 推给网页、M5.5 接上音频捕获后，启动时会多出一次"停止再恢复"。M3 修改 `PowerMonitor` 时一并处理：在收到第一次遮挡通知之前，把窗口当作可见。
+  - Codex 提到"目前没有中途停用后重新启动的入口"，认可，现在不需要。
