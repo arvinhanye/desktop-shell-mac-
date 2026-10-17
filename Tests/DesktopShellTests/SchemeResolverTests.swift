@@ -152,7 +152,7 @@ struct SchemeResolverTests {
         ("bytes=999999999999999999999999-", 100, .unsatisfiable),
         ("bytes=0-999999999999999999999999", 100, .unsatisfiable),
         ("bytes=0-1,4-5", 100, .full), ("bytes=0-1,", 100, .full),
-        (nil, 0, .unsatisfiable), ("", 0, .unsatisfiable), ("bytes=0-", 0, .unsatisfiable),
+        (nil, 0, .full), ("", 0, .full), ("bytes=0-", 0, .unsatisfiable),
         ("bytes=-10", 0, .unsatisfiable), ("bytes=0-1,2-3", 0, .unsatisfiable),
         ("bytes=0-0", 1, .partial(0...0)), (nil, -1, .unsatisfiable),
         ("bytes=-\(Int.max)", 10, .partial(0...9)),

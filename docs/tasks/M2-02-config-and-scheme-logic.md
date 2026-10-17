@@ -1,6 +1,6 @@
 # M2-02: 路径、配置读写、shell:// 路径安全（纯逻辑 + 单元测试）
 
-- **状态**：review
+- **状态**：done
 - **里程碑**：M2
 - **依赖**：无（可以和 M2-01 任意顺序，但 Codex 一次只做一个）
 - **分支**：task/M2-02
@@ -94,7 +94,8 @@ enum RangeResult: Equatable { case full, partial(ClosedRange<Int>), unsatisfiabl
 - `bytes=a-b` → `.partial(a...min(b, size-1))`；`bytes=a-` → `.partial(a...size-1)`；`bytes=-n` → 最后 n 个字节
 - `a >= size`、`a > b`、格式不对 → `.unsatisfiable`
 - 多段（含逗号）→ `.full`（不支持多段，直接返回整个文件）
-- `fileSize == 0` 时任何 Range 都是 `.unsatisfiable`
+- `fileSize == 0` 时：没有 Range 头 → `.full`（返回空内容）；带任何 Range 头 → `.unsatisfiable`。（审查时澄清：原措辞有歧义）
+- `fileSize < 0` 是非法输入 → `.unsatisfiable`
 
 ### 4. 测试（swift-testing，用 `scripts/test.sh` 运行）
 
@@ -163,5 +164,20 @@ enum RangeResult: Equatable { case full, partial(ClosedRange<Int>), unsatisfiabl
 
 ## 审查记录
 
-- **结论**：
-- **意见**：
+- **结论**：**通过**，已合并到 `main`。本任务没有界面变化，按任务单无需用户手动验证。
+- **Claude Code 的修改**（按"审查时可修正明显问题并注明"）：
+  - 任务单原文"`fileSize == 0` 时任何 Range 都是 `.unsatisfiable`"有歧义。Codex 按字面理解，让**没带 Range 头**的空文件请求也返回 `.unsatisfiable`，并写了对应的测试。M2-03 的处理器会因此对空文件回 416，导致空的 CSS、JS 文件加载失败。根源是我的措辞，不是 Codex 的问题。
+  - 修改：`parseRange` 先判断 `fileSize < 0` 为非法，再判断"没有 Range 头 → `.full`"，最后判断"空文件带 Range → `.unsatisfiable`"。测试里 `(nil, 0)`、`("", 0)` 的期望改为 `.full`，`(nil, -1)` 仍为 `.unsatisfiable`。任务单的需求原文同步澄清。
+- **复验结果**（Claude Code，2026-10-17）：
+  - [x] touch 源码后强制重编，`swift build` 零警告零错误
+  - [x] `scripts/test.sh`：34/34 通过（新增 25 个，参数化用例覆盖 15 种 id、14 种非法路径、21 项 MIME、37 项 Range）；修正后再次 34/34 通过
+  - [x] **变异测试一**：把根目录边界检查改为恒真，测试失败 5 条断言（符号链接逃逸 4 条、`web2` 前缀误判 1 条）
+  - [x] **变异测试二**：把路径段检查（空段、`.`、`..`、隐藏文件）改为恒真，测试失败 7 条断言
+  - [x] 两次变异都已用 `git checkout` 还原
+  - [x] 测试前后真实目录 `~/Library/Application Support/DesktopShell` 的内容一致（只有 `media`）；没有残留的测试临时目录
+  - [x] 改动范围只有允许的 7 个 Swift 文件和本任务单
+- **意见**（不阻塞）：
+  - `SchemeResolver` 的两道防线（路径段检查 + 解析符号链接后带尾部 `/` 的前缀比较）设计正确，测试覆盖了文件链接和目录链接逃逸、悬空链接、循环链接，以及百分号解码后的穿越，质量很高。
+  - `ConfigStore` 遇到损坏的配置只抛错、不覆盖文件，符合要求。
+  - 嵌套类型名 `AppConfig.Character` 会在 `AppConfig` 内部遮蔽 Swift 的 `Character`，以后如果在 `AppConfig` 的扩展里处理字符，可能出现令人困惑的编译错误。目前不影响，先记下，以后碰到再改名为 `CharacterInfo`。
+  - `DESKTOPSHELL_WEB_DIR` 指向的目录不存在时会悄悄回退到下一个来源；M2-03 启动时会打印三个目录，到时能看出来，可以接受。

@@ -66,8 +66,10 @@ struct SchemeResolver {
     }
 
     static func parseRange(_ header: String?, fileSize: Int) -> RangeResult {
-        guard fileSize > 0 else { return .unsatisfiable }
+        guard fileSize >= 0 else { return .unsatisfiable }
+        // No Range header means the whole resource, even when it is empty.
         guard let header, !header.isEmpty else { return .full }
+        guard fileSize > 0 else { return .unsatisfiable }
         // Multipart ranges deliberately fall back to the whole resource.
         if header.contains(",") { return .full }
         guard header.hasPrefix("bytes=") else { return .unsatisfiable }
