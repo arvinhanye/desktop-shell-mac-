@@ -142,5 +142,16 @@
 
 ## 审查记录
 
-- **结论**：
-- **意见**：
+- **结论**：代码审查通过，可执行检查全部通过；**等用户手动验证后合并**。
+- **复验结果**（Claude Code，2026-10-17）：
+  - [x] touch 源码后强制重编，零警告零错误；`scripts/test.sh` 34/34 通过
+  - [x] 改动范围是 6 个 Swift 文件、2 个网页文件和本任务单，都在允许范围内；M2-02 的 4 个逻辑文件没有改动；`grep` 没有找到 `messageHandlers` 或 `addScriptMessageHandler`
+  - [x] 用临时支持目录运行：日志打印出三个目录，没有"背景视频不存在"；`config.json` 等于示例配置，中文没有被转义
+  - [x] `pmset -g assertions`：`PreventUserIdleDisplaySleep 0`，视频不阻止显示器休眠
+  - [x] CPU（去掉首个样本后的平均值，单屏）：DesktopShell 约 2.0%，VTDecoderXPCService 约 0.5%，WebContent 约 0%。作为后续省电对比的基线
+  - [x] SIGTERM 后正常退出
+- **意见**（不阻塞）：
+  - `ShellSchemeHandler` 用"任务标识 + generation"防止对已停止的任务回调，包括回调过程中被重入停止的情况；文件读取放在后台队列，回调都在主线程。设计严谨。
+  - 全局一个播放器，每个窗口各自一个 `AVPlayerLayer`；`WebContainer` 由窗口持有，弱引用的导航代理不会被提前释放；关闭窗口时先停止网页加载。都符合要求。
+  - Codex 自己发现的测试页小问题（快速连点语音按钮时可能显示上一次的错误提示）认可为不阻塞：测试页会在 M3 被整体替换，届时 `voice.js` 每次播放都用局部对象，这一点会写进 M3/M4 的任务单。
+  - 用于集成检查的 `/tmp/ds-m2-03-validation/` 很有价值，但没有进仓库。WKWebView 和窗口相关的集成测试是否要正式纳入，M3 再决定。
