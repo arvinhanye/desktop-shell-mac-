@@ -6,16 +6,16 @@ final class Bridge: NSObject, WKScriptMessageHandler {
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let body = message.body as? [String: Any], let action = body["action"] as? String else {
-            NSLog("DesktopShell bridge: 忽略格式错误的消息")
+            Log.error("DesktopShell bridge: 忽略格式错误的消息")
             return
         }
         guard action == "setHitRegions" else {
-            NSLog("DesktopShell bridge: 忽略未知 action %@", action)
+            Log.notice("DesktopShell bridge: 忽略未知 action \(action)")
             return
         }
         guard let window, let webView = message.webView else { return }
         guard let regions = HitTesting.parseRegions(body["regions"], viewport: webView.bounds.size) else {
-            NSLog("DesktopShell bridge: 忽略格式错误的 setHitRegions")
+            Log.error("DesktopShell bridge: 忽略格式错误的 setHitRegions")
             return
         }
         window.setHitRegions(regions)

@@ -77,7 +77,7 @@ final class ScreenManager: NSObject {
             guard let screenNumber = screen.deviceDescription[
                 NSDeviceDescriptionKey("NSScreenNumber")
             ] as? NSNumber else {
-                NSLog("DesktopShell: missing display ID for %@", screen.localizedName)
+                Log.error("DesktopShell: missing display ID for \(screen.localizedName)")
                 continue
             }
 

@@ -18,14 +18,14 @@ struct ConfigStore {
         var config = try JSONDecoder().decode(AppConfig.self, from: Data(contentsOf: configURL))
         config.projects = config.projects.filter { project in
             guard isValidID(project.id) else {
-                NSLog("忽略配置中 id 非法的项目：%@", project.id)
+                Log.error("忽略配置中 id 非法的项目：\(project.id)")
                 return false
             }
             return true
         }
         config.apps = config.apps.filter { app in
             guard isValidID(app.id) else {
-                NSLog("忽略配置中 id 非法的应用：%@", app.id)
+                Log.error("忽略配置中 id 非法的应用：\(app.id)")
                 return false
             }
             return true

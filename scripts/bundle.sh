@@ -106,6 +106,17 @@ if [[ "$OPEN_APP" == true ]]; then
     status=$?
     [[ "$status" -eq 1 ]] || fail "结束 DesktopShell 失败（退出码 ${status}）。"
   fi
+  # LaunchServices may reactivate the old instance until it has actually exited.
+  for ((attempt = 0; ; attempt++)); do
+    if pgrep -x DesktopShell >/dev/null; then
+      [[ "$attempt" -lt 50 ]] || fail '等待 DesktopShell 退出超时（5 秒）。'
+      sleep 0.1
+    else
+      status=$?
+      [[ "$status" -eq 1 ]] || fail "检查 DesktopShell 进程失败（退出码 ${status}）。"
+      break
+    fi
+  done
   open "$APP"
-  printf '%s\n' '查看日志：' 'log stream --style compact --predicate '\''process == "DesktopShell"'\'''
+  printf '%s\n' '查看日志：' '/usr/bin/log stream --style compact --predicate '\''subsystem == "local.desktopshell.DesktopShell"'\'''
 fi

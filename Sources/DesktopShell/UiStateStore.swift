@@ -31,7 +31,7 @@ struct UiStateStore {
         } catch let error as CocoaError where error.code == .fileReadNoSuchFile {
             return UiState()
         } catch {
-            NSLog("DesktopShell: UI state load failed, using defaults: %@", String(describing: error))
+            Log.error("DesktopShell: UI state load failed, using defaults: \(String(describing: error))")
             return UiState()
         }
     }

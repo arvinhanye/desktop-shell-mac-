@@ -39,7 +39,7 @@ final class PowerMonitor: NSObject {
         if let batterySource {
             CFRunLoopAddSource(CFRunLoopGetMain(), batterySource, .commonModes)
         } else {
-            NSLog("DesktopShell power: failed to register battery notifications")
+            Log.error("DesktopShell power: failed to register battery notifications")
         }
 
         state.battery = SystemStats.readBattery()
@@ -140,6 +140,6 @@ final class PowerMonitor: NSObject {
         reasons = next
         hasAppliedState = true
         let description = "[" + next.map(\.rawValue).sorted().joined(separator: ", ") + "]"
-        NSLog("DesktopShell power: paused=%@ reasons=%@", paused ? "true" : "false", description)
+        Log.notice("DesktopShell power: paused=\(paused ? "true" : "false") reasons=\(description)")
     }
 }
