@@ -1,6 +1,6 @@
 # M2-01: 素材处理脚本 prepare-media.sh
 
-- **状态**：review
+- **状态**：changes-requested
 - **里程碑**：M2
 - **依赖**：无（`assets/` 已由 Claude Code 从美化包解压好）
 - **分支**：task/M2-01
@@ -38,9 +38,11 @@
   | `voice/<N>.mp3` | `voice/(N).mp3` | 原样复制，文件名去掉括号：`(12).mp3` → `12.mp3` |
   | `avatars/<N>.png` | `avatars/<N>.png` | 原样复制 |
   | `ornaments/heart.png` | `ornaments/heart.png` | `sips -c 800 4800`（居中裁剪，已确认能完整包住内容），再 `sips -Z 2400`，得到 2400×400 |
-  | `backgrounds/start-<NN>.jpg` | `backgrounds/start-menu/<N>.png` | `sips -Z 1600 -s format jpeg -s formatOptions 82`；NN 为两位数（01–56），按数字顺序编号（不是字符串顺序） |
-  | `backgrounds/folder-<NN>.png` | `backgrounds/folder/*.png` | `sips -Z 1600`，**保持 PNG**（这些是 70% 透明的角色立绘，转 JPEG 后透明区域会变白）；按原文件名排序后编号 01–06 |
+  | `backgrounds/start-<NN>.jpg` | `backgrounds/start-menu/<N>.png` | 转 JPEG，`-s formatOptions 90`；**只缩不放**：长边超过 2400 才 `-Z 2400`（见下方说明）；NN 为两位数（01–56），按数字顺序编号（不是字符串顺序） |
+  | `backgrounds/folder-<NN>.png` | `backgrounds/folder/*.png` | **保持 PNG**（这些是 70% 透明的角色立绘，转 JPEG 后透明区域会变白）；只缩不放，规则同上；按原文件名排序后编号 01–06 |
   | `backgrounds/settings-01.png` | `backgrounds/settings/*.png` | 同上，保持 PNG |
+
+  **只缩不放**（审查后修订）：`sips -Z N` 遇到小于 N 的图会**放大**，所以必须先用 `sips -g pixelWidth -g pixelHeight` 读出原图尺寸，长边大于 2400 时才加 `-Z 2400`，否则保持原尺寸（PNG 原样复制或只做格式转换）。按现有素材，预期结果是：`start-*.jpg` 保持 1917×2217（个别 1917×2231），`folder-*.png` 保持 726×660，`settings-01.png` 缩到 2400×1784 左右。
   | `backgrounds/CREDITS.txt` | — | 每行一条 `<输出文件名>\t<原文件相对路径>`，保留原画师署名 |
 
   视频转码命令（照抄，Claude Code 已验证 AVFoundation 能播放，HEVC 在本机可以硬件解码）：
@@ -87,7 +89,8 @@
   - [ ] `sips -g hasAlpha` 读 `backgrounds/folder-01.png`，结果为 `yes`
   - [ ] `ls -R /tmp/ds-media-test | grep -vE '^[A-Za-z0-9_-]+\.(mp4|mp3|png|jpg|txt)$|^$|:$|^[a-z]+$'` 没有输出（所有文件名符合规则）
   - [ ] `ffprobe` 读 `video/aemeath.mp4`：`codec_name=hevc`、`codec_tag_string=hvc1`、2560×1440、30fps、时长约 30 秒、**没有音轨**
-  - [ ] `sips -g pixelWidth -g pixelHeight` 读 `ornaments/heart.png` 为 2400×400；任意一张背景图的长边不超过 1600
+  - [ ] `sips -g pixelWidth -g pixelHeight` 读 `ornaments/heart.png` 为 2400×400；任意一张背景图的长边不超过 2400
+  - [ ] **没有任何图被放大**：每张输出背景图的宽高都不大于对应原图（按 `CREDITS.txt` 逐张对照）；`start-01.jpg` 为 1917×2217，`folder-01.png` 为 726×660
   - [ ] `backgrounds/CREDITS.txt` 有 63 行
 - [ ] 立即再运行一次（不带 `--force`）：退出码 0，汇总显示全部跳过，用时少于 5 秒
 - [ ] `git status --short` 只显示 `scripts/prepare-media.sh` 和本任务单
@@ -126,7 +129,14 @@
 
 ## 审查记录
 
-- **结论**：代码审查通过；Claude Code 修正了视频的色彩标记（见下），可执行检查全部通过；**等用户手动验证后合并**。
+- **结论**：**需修改**（第二轮）。用户目测发现部分背景图像素偏低；查明是任务单的缩放规则有误，需求部分已修订，请 Codex 按下方"修改要求"更新脚本。
+- **修改要求**（第二轮，2026-10-17）：
+  1. **只缩不放**：`sips -Z N` 会把小图放大。6 张 `folder-*.png` 被从 726×660 放大到 1600×1454，所以发糊。改成先读原图尺寸，长边大于上限才缩小，否则保持原尺寸。
+  2. **上限从 1600 改为 2400，JPEG 质量从 82 改为 90**：`start-*.jpg` 的原图只有 1917×2217，不该再缩小。
+  3. 按修订后的"验收标准"重新自测，特别是新增的"没有任何图被放大"一项。用 `--force`，或者换一个新的 `MEDIA_DIR` 重新生成。
+  4. 修改后推送分支，状态改回 `review`，在交付记录末尾追加"第二轮"小节，说明改了什么和自测结果。不要改动 Claude Code 第一轮加的 `setparams` 色彩修正。
+  - 原图本身就小的立绘（726px）和头像（240px）**不在本任务处理**，M3.5 定了显示尺寸后再决定要不要用 AI 放大。
+- **第一轮结论**：代码审查通过；Claude Code 修正了视频的色彩标记（见下），可执行检查全部通过。
 - **Claude Code 的修改**（按"审查时可修正明显问题并注明"）：
   - Codex 指出 `-color_trc bt709` 没有生效，输出仍然标记为 `bt470m`。原因是 ffmpeg 优先使用输入帧自带的色彩属性。这是任务单给的命令有缺陷，不是 Codex 的问题。
   - 实测影响：标记为 `bt470m` 时，AVFoundation 无法识别，解出的帧没有色彩空间（按未标记处理，显示效果取决于渲染路径）；改标为 bt709 后识别为 `kCGColorSpaceCoreMedia709`，色彩管理行为明确，亮度差约 5%。原片 `bt470m` 配 `bt709` 原色和矩阵的组合，基本可以判断是标错了。
