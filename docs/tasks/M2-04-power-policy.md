@@ -1,6 +1,6 @@
 # M2-04: 省电暂停规则
 
-- **状态**：review
+- **状态**：done
 - **里程碑**：M2
 - **依赖**：M2-03（必须已合并到 `main`）
 - **分支**：task/M2-04
@@ -131,7 +131,7 @@ enum SystemStats {
 
 ## 审查记录
 
-- **结论**：代码审查通过，可执行检查全部通过；**等用户手动验证后合并**。
+- **结论**：**通过**，已合并到 `main`。用户手动验证（Claude Code 读终端日志核对）：手动暂停 `reasons=[manual]` 后恢复；全屏 `reasons=[occluded]` 退出后恢复；`pmset displaysleepnow` 时 `reasons=[screensAsleep]`，唤醒后恢复（唤醒后锁屏界面遮挡约 2 秒，记为 `occluded`，属于正确行为）。
 - **复验结果**（Claude Code，2026-10-17）：
   - [x] touch 源码后强制重编，零警告零错误；`scripts/test.sh` 49/49 通过（新增 15 个）
   - [x] 改动范围是 7 个 Swift 文件和本任务单，都在允许范围内
