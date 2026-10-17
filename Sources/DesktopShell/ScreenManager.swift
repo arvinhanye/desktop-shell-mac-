@@ -4,6 +4,14 @@ import AppKit
 final class ScreenManager: NSObject {
     private var windows: [CGDirectDisplayID: DesktopWindow] = [:]
     private var isObserving = false
+    private let backgroundPlayer: BackgroundPlayer
+    private let paths: AppPaths
+
+    init(backgroundPlayer: BackgroundPlayer, paths: AppPaths) {
+        self.backgroundPlayer = backgroundPlayer
+        self.paths = paths
+        super.init()
+    }
 
     func start() {
         guard !isObserving else { return }
@@ -58,7 +66,7 @@ final class ScreenManager: NSObject {
                 window.update(screen: screen)
                 window.updateSafeArea(insets)
             } else {
-                let window = DesktopWindow(screen: screen)
+                let window = DesktopWindow(screen: screen, backgroundPlayer: backgroundPlayer, paths: paths)
                 windows[displayID] = window
                 window.updateSafeArea(insets)
                 window.orderFront(nil)
