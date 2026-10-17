@@ -1,6 +1,6 @@
 # M2-06: 菜单栏"隐藏桌面文件"
 
-- **状态**：review
+- **状态**：changes-requested
 - **里程碑**：M2（用户追加的小功能）
 - **依赖**：M2-05（必须已合并到 `main`，本任务基于它的 VideoWindow / WidgetWindow）
 - **分支**：task/M2-06
@@ -14,20 +14,21 @@
 ## 背景与约束
 
 - 先读 `AGENTS.md` 的"窗口要求"（"隐藏桌面文件"一条）和"配置文件示例"里关于 `ui.json` 的说明。
-- 做法：只改 VideoWindow 的层级和是否接收鼠标。
+- 做法（**第三轮修订**，见下方说明）：
 
-  | 状态 | VideoWindow 层级 | VideoWindow `ignoresMouseEvents` | 效果 |
-  |---|---|---|---|
-  | 显示桌面文件（默认） | 图标层 −1 | `true` | 图标在视频上面，可以点 |
-  | 隐藏桌面文件 | 图标层 +1（和 WidgetWindow 同层） | `false` | 视频盖住图标；空白处的点击被视频窗口接住，**不会点到看不见的图标** |
+  | 状态 | VideoWindow 层级 | VideoWindow `ignoresMouseEvents` | WidgetWindow 接收点击 | 效果 |
+  |---|---|---|---|---|
+  | 显示桌面文件（默认） | 图标层 −1 | `true` | 按组件区域动态切换（M2-05 的点击穿透） | 图标在视频上面，可以点 |
+  | 隐藏桌面文件 | 图标层 +1（和 WidgetWindow 同层，排在它下面） | **`true`** | **始终接收**（不再穿透） | 视频盖住图标；空白处的点击落在网页的透明背景上，什么都不发生；VideoWindow 永远不会被点到，所以永远不会被提到组件窗口前面 |
 
-  - 隐藏时 VideoWindow 和 WidgetWindow 在同一层，必须保证 **WidgetWindow 在上面**：改完 VideoWindow 的层级后，先 `orderFront` VideoWindow，再 `orderFront` 同一屏幕的 WidgetWindow。新接入的屏幕也要按当前状态创建。
-  - **（审查后补充）点击会打乱顺序**：用户实测，隐藏状态下点一下空白处（点在 VideoWindow 上），macOS 会把 VideoWindow 提到同层最前面，组件被视频盖住（Claude Code 读窗口列表确认，视频窗口排到了组件窗口前面）。要求：
-    1. `VideoWindow` 重写 `sendEvent(_:)`：先调用 `super`，如果事件是 `leftMouseDown`、`rightMouseDown` 或 `otherMouseDown`，再通知 `ScreenManager`（回调即可）。
-    2. `ScreenManager` 收到通知后，把**同一块屏幕**的 WidgetWindow 排到这个 VideoWindow 正上方：`widget.order(.above, relativeTo: video.windowNumber)`。
-    3. `ScreenManager` 同时监听 `NSApplication.didBecomeActiveNotification`，在隐藏状态下对所有屏幕做同样的重排（防止应用被激活时窗口顺序被打乱）。
-    4. 只在隐藏状态下重排；显示状态下两个窗口不同层，不需要处理。不要用定时器。
-  - WidgetWindow 和 `HitTestController` 的行为完全不变：鼠标在组件上时组件照常可以点。
+  - 切换时先 `orderFront` VideoWindow，再 `orderFront` 同一屏幕的 WidgetWindow。新接入的屏幕按当前状态创建。
+  - **第三轮修订的原因**：第一轮让 VideoWindow 在隐藏时接住点击，用户实测点一下空白处，macOS 就把它提到同层最前面，盖住组件。第二轮改成"点击后再把组件窗口排回去"，用户实测**点击时测试面板会闪烁**：点击的瞬间视频窗口先被提上来，然后才被排回去。所以第三轮从根上避免：**不让 VideoWindow 接收任何点击**，隐藏时由最上面的 WidgetWindow 接住全部点击。这个配置在点击穿透探针的第一版中实测过（35 次空白点击都由网页接住，面板没有闪烁）。
+  - 具体要求：
+    1. **删除第二轮加的代码**：`VideoWindow.sendEvent(_:)` 重写和 `onMouseDown` 回调、`ScreenManager` 的 `restoreWidgetOrder` 和 `didBecomeActiveNotification` 监听。
+    2. `VideoWindow` 在两种状态下都是 `ignoresMouseEvents = true`，`setDesktopIconsHidden(_:)` 只改层级。
+    3. `HitTestController` 增加开关 `passThroughEnabled: Bool`（默认 `true`）：为 `false` 时，所有 WidgetWindow 一律 `ignoresMouseEvents = false`，鼠标事件和区域更新都不再切换它；改回 `true` 时立刻按 M2-05 的规则重新判断一次。隐藏桌面文件时设为 `false`，显示时设为 `true`；启动时按 `ui.json` 的状态设置。
+    4. **禁用网页右键菜单**：WidgetWindow 接住空白处的右键后，WKWebView 会弹出自带的菜单（例如"重新载入"）。在测试页加 `document.addEventListener('contextmenu', e => e.preventDefault())`。（M3 的正式页面也要这样做，Claude Code 会写进 M3 任务单。）
+  - 显示桌面文件时，WidgetWindow 和 `HitTestController` 的行为与 M2-05 完全一致。
   - 遮挡判断（`PowerMonitor`）仍然只看 VideoWindow，不需要改。
 - **`UiStateStore.swift`**（新建，配单元测试）：
 
@@ -57,13 +58,15 @@
 - `Sources/DesktopShell/DesktopWindow.swift`（修改：VideoWindow 提供切换方法）
 - `Sources/DesktopShell/ScreenManager.swift`（修改：保存当前状态，应用到现有和新建的窗口，保证窗口顺序）
 - `Sources/DesktopShell/AppDelegate.swift`（修改：菜单项、启动时读取、点击时保存）
+- `Sources/DesktopShell/HitTestController.swift`（修改：第三轮新增 `passThroughEnabled` 开关）
+- `web/index.html`（修改：第三轮禁用右键菜单）
 - `Tests/DesktopShellTests/UiStateStoreTests.swift`（新建）
 - 本任务单的"交付记录"和"状态"
 
 ## 不许做
 
 - 遵守 AGENTS.md "不要做的事"。**不运行 `defaults write com.apple.finder`、不 `killall Finder`、不发 AppleScript 给访达**，不以任何方式修改访达或系统设置。
-- 不修改 `HitTesting`、`HitTestController`、`Bridge`、`PowerMonitor` 的逻辑。
+- 不修改 `HitTesting`、`Bridge`、`PowerMonitor` 的逻辑；`HitTestController` 只增加 `passThroughEnabled` 开关，其余逻辑不变。
 - 测试不碰真实的用户目录。
 
 ## 验收标准
@@ -74,6 +77,7 @@
 - [ ] `scripts/test.sh` 全部通过；`UiStateStoreTests` 覆盖：文件不存在、正常读写往返、缺少字段用默认值、多余字段被忽略、JSON 损坏返回默认值、`save` 能创建不存在的目录
 - [ ] `git diff --name-only main...task/M2-06` 只包含"允许修改的文件"
 - [ ] `grep -rnE "com.apple.finder|killall|NSAppleScript|osascript" Sources/` 没有输出
+- [ ] **（第三轮补充）** `grep -nE "sendEvent|onMouseDown" Sources/DesktopShell/DesktopWindow.swift` 和 `grep -n "didBecomeActiveNotification" Sources/DesktopShell/ScreenManager.swift` 都没有输出（第二轮的重排代码已删除）
 - [ ] 用临时支持目录运行，`ui.json` 里写入 `"desktopIconsHidden": true` 后启动：`CGWindowListCopyWindowInfo` 显示 VideoWindow 和 WidgetWindow 都在 −2147483602，并且按屏幕上的前后顺序 WidgetWindow 排在 VideoWindow 前面；访达图标窗口（−2147483603）在它们下面
 - [ ] 同样的检查，`desktopIconsHidden` 为 `false` 时 VideoWindow 回到 −2147483604
 - [ ] 运行前后 `defaults read com.apple.finder CreateDesktop` 的输出一致
@@ -82,7 +86,8 @@
 
 - [ ] 菜单栏 →"隐藏桌面文件"：桌面图标立刻消失，只剩视频和测试面板；菜单项打勾；访达窗口（如果开着）没有被关闭
 - [ ] 隐藏状态下：点空白处、双击空白处、右键空白处都没有反应（不会选中或打开看不见的文件）；测试面板的"播放测试语音"仍然能用
-- [ ] **（审查后补充）** 隐藏状态下重启应用，在空白处单击、双击、右键各几次，**测试面板一直可见**；Claude Code 读窗口列表确认组件窗口始终排在视频窗口前面
+- [ ] **（审查后补充）** 隐藏状态下重启应用，在空白处单击、双击、右键各几次，**测试面板一直可见，没有任何闪烁**；右键不弹出菜单；Claude Code 读窗口列表确认组件窗口始终排在视频窗口前面
+- [ ] **（第三轮补充）** 切回显示桌面文件后，图标仍然可以单击选中、框选、双击打开（点击穿透恢复正常）
 - [ ] 再点一次"隐藏桌面文件"：图标立刻回来，可以正常选中、双击打开
 - [ ] 隐藏后退出应用再启动：仍然是隐藏状态；恢复显示后再重启：仍然是显示状态
 
@@ -132,7 +137,9 @@
 
 ## 审查记录
 
-- **结论**：**需修改**（第二轮）。下面的风险经用户实测确认存在。
+- **第三轮结论**：**需修改**。第二轮的"点击后重排"实现正确，但用户实测**点击时测试面板会闪烁**：点击的瞬间视频窗口先被提上来，然后才被排回去。这是 Claude Code 第二轮给的修法本身有缺陷，不是 Codex 的实现问题。
+- **修改要求**（第三轮，2026-10-17）：按需求部分重写后的"做法"实现：删除第二轮的重排代码；VideoWindow 始终不接收鼠标；`HitTestController` 增加 `passThroughEnabled` 开关，隐藏时让 WidgetWindow 接住全部点击；测试页禁用右键菜单。允许修改的文件新增 `HitTestController.swift` 和 `web/index.html`。修改后推送分支、状态改回 `review`，在交付记录末尾追加"第三轮"小节。
+- **第二轮结论**：**需修改**。下面的风险经用户实测确认存在。
 - **问题**：用户在隐藏状态下重启应用，点一下空白处后测试面板消失。Claude Code 读窗口列表确认：视频窗口（3159）排到了组件窗口（3162）前面（屏幕顺序 #21 对 #22），两者同在 −2147483602。原因是隐藏状态下点击落在 VideoWindow 上，macOS 把它提到了同层最前面。
 - **修改要求**（第二轮，2026-10-17）：按需求部分"背景与约束"里新补充的"点击会打乱顺序"四点实现：VideoWindow 在鼠标按下后通知 ScreenManager，ScreenManager 把同一屏幕的 WidgetWindow 用 `order(.above, relativeTo:)` 排回视频窗口上方；应用被激活时也重排。允许修改的文件不变（`DesktopWindow.swift`、`ScreenManager.swift` 足够）。修改后推送分支、状态改回 `review`，在交付记录末尾追加"第二轮"小节。
 - **第一轮结论**：代码审查通过，可执行检查全部通过；等用户手动验证后合并（重点是下面这个风险）。
