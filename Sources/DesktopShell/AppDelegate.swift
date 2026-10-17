@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var screenManager: ScreenManager?
     private var backgroundPlayer: BackgroundPlayer?
     private var powerMonitor: PowerMonitor?
+    private var hitTestController: HitTestController?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let paths = AppPaths.current
@@ -59,12 +60,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager.onWindowsChanged = { [weak monitor] windows in
             monitor?.updateWindows(windows)
         }
+        let hitTesting = HitTestController()
+        hitTestController = hitTesting
+        manager.onWidgetWindowsChanged = { [weak hitTesting] windows in
+            hitTesting?.updateWindows(windows)
+        }
         manager.start()
         monitor.start()
+        hitTesting.start()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         screenManager?.onWindowsChanged = nil
+        screenManager?.onWidgetWindowsChanged = nil
+        hitTestController?.stop()
+        hitTestController = nil
         powerMonitor?.stop()
         powerMonitor = nil
         screenManager?.stop()

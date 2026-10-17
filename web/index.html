@@ -29,6 +29,18 @@
   <script type="module">
     import { moduleStatus } from './m2-check.js';
     document.getElementById('module-status').textContent = moduleStatus;
+    const panel = document.querySelector('main');
+    function reportHitRegions() {
+      const { x, y, width, height } = panel.getBoundingClientRect();
+      window.webkit?.messageHandlers?.shell?.postMessage({
+        action: 'setHitRegions', regions: [[x, y, width, height]]
+      });
+    }
+    window.addEventListener('load', reportHitRegions);
+    window.addEventListener('resize', reportHitRegions);
+    // Image loading and status text can resize the panel without resizing the window.
+    new ResizeObserver(reportHitRegions).observe(panel);
+    reportHitRegions();
     const pathStatus = document.getElementById('path-status');
     try {
       const response = await fetch('/media/..%2fconfig.json');
