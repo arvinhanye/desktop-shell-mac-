@@ -2,6 +2,8 @@ import AppKit
 
 @MainActor
 final class VideoWindow: NSWindow {
+    var onMouseDown: (() -> Void)?
+
     init(screen: NSScreen, backgroundPlayer: BackgroundPlayer) {
         super.init(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
@@ -17,6 +19,18 @@ final class VideoWindow: NSWindow {
     func setDesktopIconsHidden(_ hidden: Bool) {
         level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + (hidden ? 1 : -1))
         ignoresMouseEvents = !hidden
+    }
+
+    override func sendEvent(_ event: NSEvent) {
+        super.sendEvent(event)
+        // AppKit can promote this window while handling the click. Restore the
+        // paired widget only after the normal event handling has completed.
+        switch event.type {
+        case .leftMouseDown, .rightMouseDown, .otherMouseDown:
+            onMouseDown?()
+        default:
+            break
+        }
     }
 }
 

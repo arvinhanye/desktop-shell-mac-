@@ -14,8 +14,13 @@ final class ScreenManager: NSObject {
         }
 
         func close() {
+            video.onMouseDown = nil
             widget.close()
             video.close()
+        }
+
+        func restoreWidgetOrder() {
+            widget.order(.above, relativeTo: video.windowNumber)
         }
     }
     private var windows: [CGDirectDisplayID: WindowPair] = [:]
@@ -41,6 +46,12 @@ final class ScreenManager: NSObject {
             name: NSApplication.didChangeScreenParametersNotification,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(applicationDidBecomeActive(_:)),
+            name: NSApplication.didBecomeActiveNotification,
+            object: nil
+        )
         isObserving = true
         synchronizeScreens()
     }
@@ -49,6 +60,11 @@ final class ScreenManager: NSObject {
         NotificationCenter.default.removeObserver(
             self,
             name: NSApplication.didChangeScreenParametersNotification,
+            object: nil
+        )
+        NotificationCenter.default.removeObserver(
+            self,
+            name: NSApplication.didBecomeActiveNotification,
             object: nil
         )
         isObserving = false
@@ -68,6 +84,16 @@ final class ScreenManager: NSObject {
 
     @objc private func screenParametersDidChange(_ notification: Notification) {
         synchronizeScreens()
+    }
+
+    @objc private func applicationDidBecomeActive(_ notification: Notification) {
+        guard desktopIconsHidden else { return }
+        for pair in windows.values { pair.restoreWidgetOrder() }
+    }
+
+    private func restoreWidgetOrder(for displayID: CGDirectDisplayID) {
+        guard desktopIconsHidden else { return }
+        windows[displayID]?.restoreWidgetOrder()
     }
 
     private func synchronizeScreens() {
@@ -97,6 +123,9 @@ final class ScreenManager: NSObject {
                 let widget = WidgetWindow(screen: screen, paths: paths)
                 let pair = WindowPair(video: video, widget: widget)
                 windows[displayID] = pair
+                video.onMouseDown = { [weak self] in
+                    self?.restoreWidgetOrder(for: displayID)
+                }
                 widget.updateSafeArea(insets)
                 pair.applyDesktopIconsHidden(desktopIconsHidden)
             }

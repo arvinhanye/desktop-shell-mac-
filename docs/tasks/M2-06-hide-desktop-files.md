@@ -1,6 +1,6 @@
 # M2-06: 菜单栏"隐藏桌面文件"
 
-- **状态**：changes-requested
+- **状态**：review
 - **里程碑**：M2（用户追加的小功能）
 - **依赖**：M2-05（必须已合并到 `main`，本任务基于它的 VideoWindow / WidgetWindow）
 - **分支**：task/M2-06
@@ -109,6 +109,24 @@
   - 无范围偏离，改动仅含允许的 5 个实现/测试文件及本任务状态、交付记录；AGENTS.md、CLAUDE.md、任务需求和审查记录均保持原样。
   - 真实空白处单击/双击/右键不触发隐藏图标、组件按钮与语音仍可用，以及多显示器热插拔和 Spaces 切换后的顺序，仍按手动清单验收。新窗口继承状态已通过重新创建窗口验证，尚未实际插拔第二块屏幕。
   - 按本任务明确限制，Bridge、HitTesting、HitTestController 和 PowerMonitor 逻辑未修改。最新规范中的 Bridge 来源校验与遮挡防抖是现有实现的后续事项，不纳入本次菜单功能；ui.json 仍按应用独占管理，不增加并发写入合并或未知字段保留机制。
+
+### 第二轮（2026-10-17）
+
+- **修订内容**：
+  - VideoWindow 重写 `sendEvent(_:)`，先完成 `super` 处理，再针对左键、右键和其他鼠标按下通知 ScreenManager；鼠标抬起和移动等事件不触发回调。
+  - ScreenManager 仅在隐藏模式下，通过 `order(.above, relativeTo: video.windowNumber)` 将同一显示器的 WidgetWindow 排回 VideoWindow 上方；应用收到 `didBecomeActiveNotification` 时，对所有当前窗口对执行相同重排。没有引入定时器。
+  - 新建窗口对自动绑定按下回调，回调弱引用 ScreenManager 并按 display ID 查找当前窗口对；关闭窗口时清空回调，停止管理时移除应用激活监听。
+- **验证结果**：
+  - 修改前 `scripts/test.sh` 基线 **73/73 通过**；修改后最终 `swift build` 退出码 0，构建日志经 `grep -iE 'warning|error'` 检查无输出，`scripts/test.sh` **73/73 通过**（8 个 suite）。本轮没有新增纯逻辑单元测试声明。
+  - 使用实际 AppKit 窗口和生产 ScreenManager 编写临时原生回归脚本。脚本先主动将视频窗口排到组件前面，复现已确认的错误顺序，再向 VideoWindow 传入鼠标事件或发送进程内激活通知，使用 `CGWindowListCopyWindowInfo` 验证处理后的真实窗口顺序。取样前让事件循环完成窗口列表刷新，避免把异步刷新误判为结果。
+  - 同一回归脚本在修复前 **13/19 通过、6 项预期失败**，修复后 **19/19 通过**；六项对应左键、双击左键、右键、其他鼠标按下、应用激活和重新创建窗口后的按下恢复。绿色结果示例：Widget #3207 在 index 21、Video #3206 在 index 22；刻意反转后，按下处理将组件恢复到前面。
+  - 脚本同时验证正常鼠标事件仍传到 contentView、非按下事件不重排、显示模式保持原有层级与穿透属性，以及停止后不重新显示已关闭窗口、ScreenManager 可以释放。测试仅使用一块实际显示器；激活是进程内通知，鼠标事件直接传入 `sendEvent(_:)`，不等同于实际用户切换应用或物理点击验收。
+  - 原有原生菜单与持久化回归重新执行，**15/15 通过**，包括启动恢复、切换、保留其他 UI 字段、保存失败仍应用模式、暂停菜单独立及退出关闭。测试数据仍使用临时支持目录。
+  - `git diff --check` 通过；源码禁用命令检查无输出；本轮两个实现文件的 `Timer` / `asyncAfter` 检查无输出。独立只读复核未发现已确认的 Critical / Important / Minor 代码缺陷。
+  - 本轮日志和临时原生检查源码位于 `/tmp/ds-m2-06-review2/`：`baseline-tests.log`、`order-red.log`、`order-green.log`、`build.log`、`final-tests.log`、`menu.log`、`WindowOrderChecks.swift`、`run-order-checks.sh`。
+- **范围与剩余验收**：
+  - 本轮仅修改 DesktopWindow.swift、ScreenManager.swift 及本任务状态与交付记录；WidgetWindow、HitTesting、HitTestController、Bridge、PowerMonitor 的逻辑保持原样；任务需求和审查记录保持原样。
+  - 仍需按手动清单验证：隐藏模式重启后，从其他应用切回，反复单击、双击、右键和其他鼠标按键点击壁纸空白处，测试面板始终可见且可操作，隐藏的文件不被触发；多显示器与 Spaces 切换也需实机复验。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 
