@@ -315,6 +315,8 @@ desktop-shell/
 
 - `bridge.js` 检测到不在 WKWebView 里时（没有 `window.webkit.messageHandlers`），自动使用 mock 数据。这样网页部分可以直接在浏览器里开发调试，改样式不需要每次重新编译 Swift。
 - Swift 部分用 `swift build` 编译，`scripts/test.sh` 跑单元测试；M2.5 之前直接运行 `.build/debug/DesktopShell`，M2.5 起用 `scripts/bundle.sh` 打包后运行。
+- 打包：`scripts/bundle.sh [--debug] [--adhoc] [--open]`，产物为 `build/DesktopShell.app`（不进 git），bundle id 为 `local.desktopshell.DesktopShell`，签名身份为 `DesktopShell Self-Signed`（由用户按 `scripts/setup-signing.md` 创建）。`.app` 的日志用 `log stream --style compact --predicate 'process == "DesktopShell"'` 查看。
+- 直接运行 `.build/debug/DesktopShell` 仍然可以用来快速调试，但需要系统权限的功能（M5.5 系统音频）只能用签名后的 `.app` 测试。
 
 ## 多智能体协作
 
