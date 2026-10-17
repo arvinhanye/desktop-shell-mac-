@@ -1,6 +1,6 @@
 # M3-02: 页面骨架（tokens、交互基线、组件注册、点击区域上报、自检面板）
 
-- **状态**：todo
+- **状态**：review
 - **里程碑**：M3
 - **依赖**：M3-01（必须已合并到 `main`）
 - **分支**：task/M3-02
@@ -321,8 +321,25 @@ export function installHitRegions({ send, root = document, win = window })
 ## 交付记录
 
 - **改动摘要**：
+  - 从已合并 M3-01 的 `main`（`27f5619`）创建 `task/M3-02`。替换 M2 测试页，逐字采用本任务的 HTML/CSP 和 token 数值，删除 `m2-check.js`。
+  - 新增交互基线、组件独立加载/失败隔离、每帧合并和去重的点击区域上报、安全区域/时段/暂停状态同步；补齐可见性仅由 CSS 改变时的重新计算。
+  - 自检面板接入配置、外观、系统状态、12 频段律动、提醒事项、非法请求、输入框和调试开关。暂停或页面隐藏时停止律动 RAF；无新频谱超过 200ms 后衰减至零。结果与事件日志各保留最近 6 条，音频事件仅累计计数。
+  - 新增仅监听 `127.0.0.1` 的零依赖开发服务器：web/media/design 路由、解码路径检查、realpath 根目录约束、普通文件限制、MIME、GET/HEAD、单段 Range 和 no-store。
+  - 完成指定日志改进；经用户追加授权，另增加 `bridge.subscribeEvents(listener)`：只回调事件名，覆盖 native 和 mock 的实际 receive，不把 getConfig/saveUiState 回复或本地状态写入当作推送；监听器独立取消，异常隔离，不暴露事件内容。
 - **自测结果**：
+  - **PASS** `scripts/test-web.sh`：134/134，0 FAIL、0 SKIP。RED→GREEN 已分别验证日志断言、点击区域模块、CSS visibility 变化和事件观察接口；最终回归全部通过。
+  - **PASS** `scripts/test.sh`：76/76（9 suites），0 FAIL。
+  - **PASS** 任务要求的三项 grep 检查均无输出；HTML 与 tokens.css 和任务代码块逐字一致；`git diff --check` 无输出。无 Swift、mock、AGENTS.md、CLAUDE.md 或其他任务文件修改。
+  - **PASS** 任务列出的 7 个 curl 检查：首页 200，JS 为 `text/javascript; charset=utf-8`，头像 200，两项目录穿越 404，视频 Range 为 206 / `bytes 0-99/14515867`，POST 为 405。
+  - **PASS** 临时 Node 集成测试 3/3：服务器真实 HTTP 路由、编码穿越、符号链接逃逸、HEAD、Range/416/空文件；组件顺序、CSS 等待、清理函数保存、模块/导出/mount 失败隔离。测试和日志位于 `/tmp/ds-m3-02-validation/`，未新增 npm 依赖或扩大仓库文件范围。
+  - **PASS** Chrome 实页：控制台 error 为空；mock、ready、角色/素材数量、安全区域符合预期；系统状态持续更新；暂停后 data-paused 生效且 12 条归零，恢复后重新律动，关闭声音后归零；提醒勾选、新增至 6 条、denied 清空与 failed 提示、恢复授权均验证；非法请求前 6 条全部 ✓，子框架项跳过；头像加载、时段变量、调试框、输入框验证通过。
+  - **PASS** `scripts/bundle.sh`：release 构建、固定证书签名及 designated requirement 验证通过；产物 `build/DesktopShell.app` 的 web 资源齐全，无 `m2-check.js`、无 `Tests/`。
+  - **PASS** 临时原生 WKWebView 集成程序使用实际 `ShellSchemeHandler` / `SchemeResolver` 和最终打包资源：`shell://app/index.html` 加载成功，三份样式加载，native / ready / 未获取到配置正确，面板宽 360、点击区域 1，CSP violation 为 0。旧式无回复处理器产生预期的 getConfig 错误日志。真实模块导入失败只记录一条“组件 no-such-widget 加载失败”，失败外壳移除、自检面板保留；合成事件验证右键和非输入区域拖拽被阻止，输入区域拖拽保留。
+  - **待手动验证**：任务单列出的 Safari 目测、文字/图片真实拖拽，以及正式 `.app` 中 Finder 桌面点击穿透、框选、右键、隐藏桌面文件菜单交互。原生集成程序与合成事件不替代这些实际 GUI 验收。
 - **疑问 / 偏离**：
+  - 用户于本轮明确回复“允许补事件观察接口和测试”，因此 `bridge.js` / `bridge.test.mjs` 除指定日志外增加上述只传事件名的观察接口及 3 项测试；任务需求区保持原文。事件记录含重复收到的事件，即使对应 store 值未变化；非字符串事件名记为 `?`，不代表该事件通过数据校验。
+  - 临时 HTTP 测试首次监听端口受沙箱限制，按权限流程重跑通过；临时原生程序首次编译的 MainActor 入口错误已修正后重跑通过。两者均非产品失败，未降低检查条件。
+  - 独立只读复核发现的两项问题（CSS 可见性缓存、事件与状态混淆）均已建立失败测试并修正；没有遗留实现问题。Safari/Finder 手动门禁保留，未计作通过。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 

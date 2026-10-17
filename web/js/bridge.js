@@ -56,7 +56,9 @@ function normalizeTodo(item) {
 }
 
 export function applyEvent(store, event, now = () => Date.now()) {
+  let eventName = '?';
   try {
+    if (typeof event?.event === 'string') eventName = event.event;
     requireValue(isObject(event));
     let patch;
     switch (event.event) {
@@ -111,7 +113,7 @@ export function applyEvent(store, event, now = () => Date.now()) {
     // No partial writes: every field/item is checked before publishing the patch.
     store.set(patch);
   } catch {
-    console.warn('bridge: ignored invalid or unknown event');
+    console.warn(`bridge: ignored invalid event ${eventName}`);
   }
 }
 
@@ -123,9 +125,24 @@ export function createBridge(store, {
 } = {}) {
   const mode = native && typeof native.postMessage === 'function' ? 'native' : 'mock';
   const transport = mode === 'mock' ? (mock ?? createMock()) : null;
+  const eventListeners = new Set();
+  function subscribeEvents(listener) {
+    if (typeof listener !== 'function') throw new TypeError('bridge: event listener must be a function');
+    const subscription = { listener };
+    eventListeners.add(subscription);
+    return () => eventListeners.delete(subscription);
+  }
   const receive = event => {
+    let name = '?';
+    try { const value = event?.event; if (typeof value === 'string') name = value; }
+    catch { /* Malformed envelopes are diagnosed by applyEvent below. */ }
     try { applyEvent(store, event, now); }
     catch { console.warn('bridge: receive failed'); }
+    // Observe transport receipts, not state changes or request replies. Never expose payloads.
+    for (const { listener } of [...eventListeners]) {
+      try { listener(name); }
+      catch { console.warn('bridge: event listener failed'); }
+    }
   };
   target.shell = { receive };
 
@@ -161,5 +178,5 @@ export function createBridge(store, {
     return started;
   }
 
-  return { mode, send, start, mock: transport };
+  return { mode, send, start, subscribeEvents, mock: transport };
 }

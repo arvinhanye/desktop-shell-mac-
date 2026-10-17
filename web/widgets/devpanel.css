@@ -1,0 +1,34 @@
+.devpanel {
+  top: var(--widget-gap); left: var(--widget-gap); width: var(--devpanel-width);
+  max-width: calc(100% - var(--widget-gap) * 2); max-height: calc(100% - var(--widget-gap) * 2);
+  overflow: auto; overflow-wrap: anywhere; font-size: var(--text-sm);
+}
+.devpanel h1 { margin: 0; font-size: var(--text-xl); font-weight: var(--weight-bold); }
+.devpanel h2 { margin: 0 0 var(--space-2); font-size: var(--text-md); font-weight: var(--weight-medium); }
+.devpanel p { margin: var(--space-1) 0; }
+.devpanel section { margin-top: var(--space-4); }
+.devpanel header, .devpanel-actions, .devpanel-check { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.devpanel-mode { color: var(--color-accent); font-family: var(--font-mono); }
+.devpanel-muted { color: var(--color-text-muted); }
+.devpanel-warning { color: var(--color-warning); }
+.devpanel button {
+  padding: var(--space-1) var(--space-2); background: var(--color-selected-bg);
+  border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-sm);
+}
+.devpanel button:hover { background: var(--color-card-bg-hover); }
+.devpanel button:disabled { opacity: 0.5; cursor: default; }
+.devpanel input { font: inherit; color: inherit; accent-color: var(--color-accent); }
+.devpanel input[type="text"] {
+  width: 100%; padding: var(--space-2); border: var(--border-width) solid var(--color-card-border);
+  border-radius: var(--radius-sm); background: var(--color-panel-bg);
+}
+.devpanel-avatar { width: var(--devpanel-avatar-size); height: var(--devpanel-avatar-size); object-fit: cover; border-radius: var(--radius-full); }
+.devpanel-spectrum { display: flex; gap: var(--space-1); height: var(--devpanel-spectrum-height); align-items: stretch; }
+.devpanel-spectrum span { flex: 1; background: var(--color-accent); transform: scaleY(0); transform-origin: bottom; }
+.devpanel-list { list-style: none; margin: var(--space-2) 0 0; padding: 0; }
+.devpanel-list li { margin-top: var(--space-2); }
+.devpanel-todo { display: flex; gap: var(--space-2); align-items: flex-start; }
+.devpanel-todo input { flex: none; }
+.devpanel-success { color: var(--color-success); }
+.devpanel-error { color: var(--color-danger); }
+.hit-overlay { position: fixed; pointer-events: none; z-index: var(--z-overlay); outline: var(--border-width) dashed var(--color-debug); }

@@ -50,11 +50,13 @@ test('store: throwing listeners are logged, remaining listeners and set continue
   const error = t.mock.method(console, 'error', () => {});
   const s = createStore({ a: 0 });
   let seen;
-  s.subscribe('a', () => { throw new Error('listener'); });
+  const failure = new Error('listener');
+  s.subscribe('a', () => { throw failure; });
   s.subscribe('a', value => { seen = value; });
   assert.doesNotThrow(() => s.set({ a: 1 }));
   assert.equal(seen, 1);
   assert.equal(error.mock.callCount(), 1);
+  assert.deepEqual(error.mock.calls[0].arguments, ['store: listener failed', failure]);
 });
 
 test('store: nested set applies and notifies synchronously, preserving outer notification values', () => {

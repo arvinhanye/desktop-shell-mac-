@@ -1,0 +1,23 @@
+import { store } from './store.js';
+import { createBridge } from './bridge.js';
+import { mountWidgets } from './widgets.js';
+import { installHitRegions } from './hit-regions.js';
+
+const bridge = createBridge(store, { target: window, now: () => performance.now() });
+document.addEventListener('contextmenu', event => event.preventDefault());
+document.addEventListener('dragstart', event => {
+  if (!event.target.closest?.('input, textarea, [contenteditable="true"]')) event.preventDefault();
+});
+const hitRegions = installHitRegions({ send: regions => bridge.send('setHitRegions', { regions }) });
+store.subscribe('safeArea', insets => {
+  for (const edge of ['top', 'right', 'bottom', 'left']) document.documentElement.style.setProperty(`--safe-${edge}`, `${insets[edge]}px`);
+  hitRegions.schedule();
+}, { immediate: true });
+store.subscribe('phase', phase => {
+  if (['morning', 'day', 'evening', 'night'].includes(phase)) document.documentElement.dataset.phase = phase;
+  else console.warn('忽略不合法的时段');
+}, { immediate: true });
+store.subscribe('paused', paused => document.documentElement.toggleAttribute('data-paused', paused), { immediate: true });
+const WIDGETS = ['devpanel'];
+await mountWidgets(document.getElementById('desktop'), WIDGETS, { store, bridge, hitRegions });
+await bridge.start();
