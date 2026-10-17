@@ -1,6 +1,6 @@
 # M3-01: 共享状态 store.js 与通信层 bridge.js（含 mock）
 
-- **状态**：todo
+- **状态**：review
 - **里程碑**：M3
 - **依赖**：无
 - **分支**：task/M3-01
@@ -181,8 +181,23 @@ export function createMock({ timers = globalThis, now = () => Date.now(), random
 ## 交付记录
 
 - **改动摘要**：
+  - 新增唯一共享状态实例及 `createStore`：固定键、顶层浅合并、Object.is 去重、对象/数组浅冻结、整轮监听器快照、多键先写后通知、同步嵌套更新、订阅取消及 immediate 通知；监听器异常隔离并记录。
+  - 新增 `createBridge` / `applyEvent`：注入 target/native/mock/时钟，统一 Promise 错误及 code，同步安装接收入口，校验六类平铺事件并原子写入状态；getConfig 回复规整，兼容旧 Swift 返回 undefined，重复/重入启动共用一个 Promise。
+  - 新增纯内存 mock：3 个项目、3 个应用、7 条问候、30 个头像、63 个背景、5 条提醒；按协议校验动作、额外参数和 id，模拟外观广播、提醒事项新增/勾选及权限切换。文本长度使用 Intl.Segmenter 按字素簇计数，与 M3-07 的 Character 口径对应。
+  - mock 的时间、随机数、定时器可注入；5 秒系统状态与 33 毫秒频谱推送支持声音/暂停开关和停止清理。回复及事件使用独立快照，避免消费者修改或 store 冻结污染 mock 内存。
+  - 新增可执行 `scripts/test-web.sh` 和三份 Node 原生测试。没有修改页面、样式或 Swift，没有加入包管理清单、依赖或构建步骤。
 - **自测结果**：
+  - Node v26.4.0；`scripts/test-web.sh`：124 项测试全部通过，覆盖任务单要求的 store、bridge、mock 行为，以及稀疏数组、异常 getter、启动重入、500 项提醒边界、500/501 个复合 emoji、权限恢复、回复快照隔离等情况。
+  - 每个模块先添加测试并运行，确认因对应模块尚未实现而失败，再实现并验证通过。另在临时副本对去重、监听器快照、暂停清空频谱、额外参数拒绝、提醒权限门禁、字素长度计数分别做 6 次变异检查，测试均检出错误。
+  - 独立只读复核发现一项生命周期问题：初始事件回调内 stop 后，原启动流程仍继续创建定时器。已先补 6 项回归测试并确认全部失败，再用启动代次检查中断过期流程；修复后 124 项全绿，覆盖每种初始事件内停止及回调内停止后重启，无残留定时器。无未处理的复核问题；该复核不代替 Claude Code 正式审查。
+  - `scripts/test.sh`：修改前基线及修改后回归均为 76 项测试、9 个套件全部通过。
+  - 从 `/tmp` 调用测试脚本也能正确定位仓库并通过；隔离 PATH 隐藏 node 时，脚本输出“需要 Node.js（brew install node）”并非零退出；`bash -n scripts/test-web.sh` 通过。
+  - `grep -nE "document\\.|localStorage" web/js/store.js web/js/bridge.js web/js/mock.js` 无输出；额外在 Node 中把 document/window/localStorage 读取及定时器创建设为抛错后导入三个模块，导入成功，无浏览器全局访问和启动副作用。
+  - `ls package.json node_modules` 确认均不存在；`git diff --check` 通过。最终变更限定在允许的 8 个文件，未修改任务需求及审查记录。
+  - 自测日志、变异验证与脚本入口验证保留于 `/tmp/ds-m3-01-validation/`。
 - **疑问 / 偏离**：
+  - 无范围偏离或待决问题。按任务单边界，日期/时间验证规定的字符串格式，store 只浅冻结，mock 的 setHitRegions 只验证数组；未扩展配置数组的完整 schema 校验、焦点动作、提醒事项跨日排序或实际 EventKit 接线。
+  - 本任务只有纯逻辑模块，未接入当前 M2 页面，也未宣称界面已验证；页面与浏览器验收按任务安排在 M3-02 进行。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 
