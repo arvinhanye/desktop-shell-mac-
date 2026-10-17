@@ -1,6 +1,6 @@
 # M2-06: 菜单栏"隐藏桌面文件"
 
-- **状态**：review
+- **状态**：changes-requested
 - **里程碑**：M2（用户追加的小功能）
 - **依赖**：M2-05（必须已合并到 `main`，本任务基于它的 VideoWindow / WidgetWindow）
 - **分支**：task/M2-06
@@ -22,6 +22,11 @@
   | 隐藏桌面文件 | 图标层 +1（和 WidgetWindow 同层） | `false` | 视频盖住图标；空白处的点击被视频窗口接住，**不会点到看不见的图标** |
 
   - 隐藏时 VideoWindow 和 WidgetWindow 在同一层，必须保证 **WidgetWindow 在上面**：改完 VideoWindow 的层级后，先 `orderFront` VideoWindow，再 `orderFront` 同一屏幕的 WidgetWindow。新接入的屏幕也要按当前状态创建。
+  - **（审查后补充）点击会打乱顺序**：用户实测，隐藏状态下点一下空白处（点在 VideoWindow 上），macOS 会把 VideoWindow 提到同层最前面，组件被视频盖住（Claude Code 读窗口列表确认，视频窗口排到了组件窗口前面）。要求：
+    1. `VideoWindow` 重写 `sendEvent(_:)`：先调用 `super`，如果事件是 `leftMouseDown`、`rightMouseDown` 或 `otherMouseDown`，再通知 `ScreenManager`（回调即可）。
+    2. `ScreenManager` 收到通知后，把**同一块屏幕**的 WidgetWindow 排到这个 VideoWindow 正上方：`widget.order(.above, relativeTo: video.windowNumber)`。
+    3. `ScreenManager` 同时监听 `NSApplication.didBecomeActiveNotification`，在隐藏状态下对所有屏幕做同样的重排（防止应用被激活时窗口顺序被打乱）。
+    4. 只在隐藏状态下重排；显示状态下两个窗口不同层，不需要处理。不要用定时器。
   - WidgetWindow 和 `HitTestController` 的行为完全不变：鼠标在组件上时组件照常可以点。
   - 遮挡判断（`PowerMonitor`）仍然只看 VideoWindow，不需要改。
 - **`UiStateStore.swift`**（新建，配单元测试）：
@@ -77,6 +82,7 @@
 
 - [ ] 菜单栏 →"隐藏桌面文件"：桌面图标立刻消失，只剩视频和测试面板；菜单项打勾；访达窗口（如果开着）没有被关闭
 - [ ] 隐藏状态下：点空白处、双击空白处、右键空白处都没有反应（不会选中或打开看不见的文件）；测试面板的"播放测试语音"仍然能用
+- [ ] **（审查后补充）** 隐藏状态下重启应用，在空白处单击、双击、右键各几次，**测试面板一直可见**；Claude Code 读窗口列表确认组件窗口始终排在视频窗口前面
 - [ ] 再点一次"隐藏桌面文件"：图标立刻回来，可以正常选中、双击打开
 - [ ] 隐藏后退出应用再启动：仍然是隐藏状态；恢复显示后再重启：仍然是显示状态
 
@@ -108,7 +114,10 @@
 
 ## 审查记录
 
-- **结论**：代码审查通过，可执行检查全部通过；**等用户手动验证后合并**（重点是下面这个风险）。
+- **结论**：**需修改**（第二轮）。下面的风险经用户实测确认存在。
+- **问题**：用户在隐藏状态下重启应用，点一下空白处后测试面板消失。Claude Code 读窗口列表确认：视频窗口（3159）排到了组件窗口（3162）前面（屏幕顺序 #21 对 #22），两者同在 −2147483602。原因是隐藏状态下点击落在 VideoWindow 上，macOS 把它提到了同层最前面。
+- **修改要求**（第二轮，2026-10-17）：按需求部分"背景与约束"里新补充的"点击会打乱顺序"四点实现：VideoWindow 在鼠标按下后通知 ScreenManager，ScreenManager 把同一屏幕的 WidgetWindow 用 `order(.above, relativeTo:)` 排回视频窗口上方；应用被激活时也重排。允许修改的文件不变（`DesktopWindow.swift`、`ScreenManager.swift` 足够）。修改后推送分支、状态改回 `review`，在交付记录末尾追加"第二轮"小节。
+- **第一轮结论**：代码审查通过，可执行检查全部通过；等用户手动验证后合并（重点是下面这个风险）。
 - **复验结果**（Claude Code，2026-10-17）：
   - [x] touch 源码后强制重编，零警告零错误；`scripts/test.sh` 73/73 通过（新增 10 个）
   - [x] 改动范围是 5 个允许的文件和本任务单；`HitTesting`、`HitTestController`、`Bridge`、`PowerMonitor` 没有改动；源码里没有 `com.apple.finder`、`killall`、`NSAppleScript`、`osascript`
