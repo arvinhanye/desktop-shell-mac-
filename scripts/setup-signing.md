@@ -53,7 +53,7 @@ security find-identity -p codesigning
 
 在 `Matching identities` 下能看到 `"DesktopShell Self-Signed"` 即可。后面带着 `CSSMERR_TP_NOT_TRUSTED` 是**正常的**：自签名证书没有被系统信任，但签名不需要信任。
 
-**5.（仅在需要时）设置信任**：如果之后 `scripts/bundle.sh` 报错 `DesktopShell Self-Signed: no identity found`，才做这一步：打开"钥匙串访问"→ 左侧"登录"→"我的证书"→ 双击 `DesktopShell Self-Signed` →展开"信任"→"代码签名"选"始终信任"→ 关闭窗口并输入密码。
+**5.（通常不需要）设置信任**：2026-10-17 已在本机验证，证书未受信任也能正常签名，这一步一般用不上。如果之后 `scripts/bundle.sh` 报错 `DesktopShell Self-Signed: no identity found`，才做这一步：打开"钥匙串访问"→ 左侧"登录"→"我的证书"→ 双击 `DesktopShell Self-Signed` →展开"信任"→"代码签名"选"始终信任"→ 关闭窗口并输入密码。
 
 ## 第一次签名时的弹窗
 

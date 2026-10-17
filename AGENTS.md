@@ -63,7 +63,7 @@
 | Swift | 6.3.3，SDK 包含 MacOSX26.sdk |
 | git / Codex CLI | git 2.50.1，codex-cli 0.154.0 |
 | Cursor bundle id | `com.todesktop.230313mzl4w4u92`（已确认） |
-| 签名证书 | 目前没有代码签名证书，M2.5 按 `scripts/setup-signing.md` 创建 |
+| 签名证书 | `DesktopShell Self-Signed`（2026-10-17 由用户按 `scripts/setup-signing.md` 创建，SHA-1 `7D0B2EB5…62CE`）。已验证：未受信任也能签名；两次不同编译的指定要求都是 `identifier "…" and certificate leaf = H"7d0b2eb5…"`，完全一致，重新编译后系统权限不会失效 |
 
 由此得出的编码约束：
 
