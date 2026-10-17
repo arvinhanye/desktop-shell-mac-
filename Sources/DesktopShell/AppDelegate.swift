@@ -7,12 +7,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var backgroundPlayer: BackgroundPlayer?
     private var powerMonitor: PowerMonitor?
     private var hitTestController: HitTestController?
+    private var uiState = UiState()
+    private var uiStateStore: UiStateStore?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let paths = AppPaths.current
         NSLog("DesktopShell supportDir: %@", paths.supportDir.path)
         NSLog("DesktopShell mediaDir: %@", paths.mediaDir.path)
         NSLog("DesktopShell webDir: %@", paths.webDir.path)
+        let uiStore = UiStateStore(supportDir: paths.supportDir)
+        uiStateStore = uiStore
+        uiState = uiStore.load()
         let config: AppConfig
         do {
             config = try ConfigStore(supportDir: paths.supportDir).load()
@@ -41,6 +46,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         pauseItem.target = self
         pauseItem.state = .off
         menu.addItem(pauseItem)
+        let hideIconsItem = NSMenuItem(title: "隐藏桌面文件", action: #selector(toggleDesktopIcons(_:)), keyEquivalent: "")
+        hideIconsItem.target = self
+        hideIconsItem.state = uiState.desktopIconsHidden ? .on : .off
+        menu.addItem(hideIconsItem)
         menu.addItem(.separator())
         let quitItem = NSMenuItem(
             title: "退出 DesktopShell",
@@ -55,12 +64,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let manager = ScreenManager(backgroundPlayer: player, paths: paths)
         screenManager = manager
+        manager.setDesktopIconsHidden(uiState.desktopIconsHidden)
         let monitor = PowerMonitor(backgroundPlayer: player)
         powerMonitor = monitor
         manager.onWindowsChanged = { [weak monitor] windows in
             monitor?.updateWindows(windows)
         }
         let hitTesting = HitTestController()
+        hitTesting.passThroughEnabled = !uiState.desktopIconsHidden
         hitTestController = hitTesting
         manager.onWidgetWindowsChanged = { [weak hitTesting] windows in
             hitTesting?.updateWindows(windows)
@@ -92,6 +103,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let powerMonitor else { return }
         powerMonitor.setManualPause(!powerMonitor.manualPause)
         sender.state = powerMonitor.manualPause ? .on : .off
+    }
+
+    @objc private func toggleDesktopIcons(_ sender: NSMenuItem) {
+        guard let screenManager, let uiStateStore else { return }
+        uiState.desktopIconsHidden.toggle()
+        hitTestController?.passThroughEnabled = !uiState.desktopIconsHidden
+        screenManager.setDesktopIconsHidden(uiState.desktopIconsHidden)
+        sender.state = uiState.desktopIconsHidden ? .on : .off
+        NSLog("DesktopShell: desktop icons hidden=%@", uiState.desktopIconsHidden ? "true" : "false")
+        do {
+            try uiStateStore.save(uiState)
+        } catch {
+            // A failed save affects the next launch, not the user's current choice.
+            NSLog("DesktopShell: UI state save failed: %@", String(describing: error))
+        }
     }
 
     @objc private func quit() {

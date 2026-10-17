@@ -4,8 +4,8 @@ import AppKit
 final class VideoWindow: NSWindow {
     init(screen: NSScreen, backgroundPlayer: BackgroundPlayer) {
         super.init(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
-        level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) - 1)
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        setDesktopIconsHidden(false)
         ignoresMouseEvents = true
         hasShadow = false
         isReleasedWhenClosed = false
@@ -13,6 +13,10 @@ final class VideoWindow: NSWindow {
         isOpaque = true
         contentView = backgroundPlayer.makeVideoView()
         setFrame(screen.frame, display: true)
+    }
+
+    func setDesktopIconsHidden(_ hidden: Bool) {
+        level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + (hidden ? 1 : -1))
     }
 }
 
