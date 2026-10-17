@@ -1,6 +1,6 @@
 # M3-01: 共享状态 store.js 与通信层 bridge.js（含 mock）
 
-- **状态**：review
+- **状态**：done
 - **里程碑**：M3
 - **依赖**：无
 - **分支**：task/M3-01
@@ -203,5 +203,15 @@ export function createMock({ timers = globalThis, now = () => Date.now(), random
 
 ## 审查记录
 
-- **结论**：
+- **结论**：**通过**，已合并到 `main`。本任务没有需要用户目测的项目。
+- **复验结果**（Claude Code，2026-10-17，在 `origin/task/M3-01` 的独立检出上执行）：
+  - [x] `scripts/test-web.sh`：124 项全部通过（store 9 组、mock 8 组、bridge 10 组及展开的事件用例）
+  - [x] `grep -nE "document\.|localStorage" web/js/store.js web/js/bridge.js web/js/mock.js` 没有输出
+  - [x] `git diff --name-only main...task/M3-01` 只有允许的 8 个文件；任务单只改了状态和交付记录
+  - [x] `package.json`、`node_modules` 都不存在；`git diff --check` 通过
+  - [x] `scripts/test.sh`：76 项全部通过，Swift 部分未受影响
 - **意见**：
+  - 和任务单逐条对照：store 的未知键、`Object.is`、先写后通知、监听器快照、嵌套 `set`、浅冻结、`immediate` 都按要求实现；bridge 的模式判断、`action` 不可被覆盖、同步抛错转 rejection、`code`、`start()` 只执行一次且永不 reject、旧 Swift 返回 `undefined` 时 `ready` 仍为 `true`，以及六种事件的校验都正确，非法事件不会部分写入；mock 的参数白名单、id 格式先于存在性检查、提醒事项权限门禁、`structuredClone` 隔离内部状态，都和 Swift 端的约定一致。
+  - native 模式下用 `native.postMessage(message)` 方法调用，保留了 `this`（WebKit 要求），测试也覆盖了。
+  - 测试质量高：非法事件逐条验证"整个 store 不变 + 只警告一次"，mock 用假定时器验证暂停、静音和 `stop()` 后没有残留定时器。
+  - **改进（不阻塞，放进 M3-02 一起做）**：`store.js` 监听器出错时 `console.error` 没有带上错误对象，`bridge.js` 忽略事件时的警告没有事件名。M4 开发组件时，监听器里的错误只会显示"store: listener failed"，看不到出错位置。已在 M3-02 任务单里加上这两处小改动。

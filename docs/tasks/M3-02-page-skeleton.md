@@ -244,7 +244,13 @@ export function installHitRegions({ send, root = document, win = window })
 - 支持单段 `Range`（`bytes=a-b`、`bytes=a-`、`bytes=-n`）→ 206 和 `Content-Range`；无法满足 → 416；没有 `Range` → 200，带 `Accept-Ranges: bytes`。（Safari 播放 mp4/mp3 需要。）
 - 只接受 `GET`、`HEAD`，其他方法 → 405。所有响应带 `Cache-Control: no-store`，改完文件刷新就能看到。
 
-### 9. 测试
+### 9. 顺带改进 M3-01 的报错日志（M3-01 审查意见）
+
+- `web/js/store.js`：监听器抛错时 `console.error('store: listener failed', error)`，把错误对象一起打印出来，方便看到出错位置。
+- `web/js/bridge.js`：忽略事件时的警告带上事件名，例如 `bridge: ignored invalid event safeArea`；事件名不是字符串时写 `?`。**只打印事件名，不打印事件内容**（`todos` 里有提醒标题）。
+- 同步更新 `Tests/web/` 里断言这两条日志的测试（如果有）。这两个文件除此之外不做任何修改。
+
+### 10. 测试
 
 - `Tests/web/hit-regions.test.mjs`：`toRegions` 的向外取整、裁到视口、丢掉非法和视口外的矩形、去重、超过 64 个时截断并警告。
 
@@ -256,13 +262,14 @@ export function installHitRegions({ send, root = document, win = window })
 - `web/js/main.js`、`web/js/widgets.js`、`web/js/hit-regions.js`（新建）
 - `web/widgets/devpanel.js`、`web/widgets/devpanel.css`（新建）
 - `Tests/web/hit-regions.test.mjs`（新建）
+- `web/js/store.js`、`web/js/bridge.js`、`Tests/web/store.test.mjs`、`Tests/web/bridge.test.mjs`（修改：**只限**第 9 节的两处日志）
 - `scripts/serve-web.mjs`（新建）
 - 本任务单的"交付记录"和"状态"
 
 ## 不许做
 
 - 遵守 AGENTS.md "不要做的事"。
-- 不修改 `store.js`、`bridge.js`、`mock.js`（M3-01 的接口不够用时在交付记录里提出）。
+- 除第 9 节的两处日志外，不修改 `store.js`、`bridge.js`、`mock.js`（M3-01 的接口不够用时在交付记录里提出）。
 - 不修改任何 Swift 文件。
 - 不使用 `backdrop-filter`，不引入外部字体、图片或脚本。
 - 不调整给定的 token 数值，不在组件 CSS 和 base.css 里写死颜色或尺寸。
