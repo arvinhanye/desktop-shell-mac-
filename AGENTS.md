@@ -82,7 +82,16 @@
 
 | 探针 | 结论 |
 |---|---|
-| 系统音频捕获（process tap + vDSP） | 进行中 |
+| 系统音频捕获（process tap + vDSP），2026-10-17 | **可行**，详见下方 |
+
+**系统音频捕获探针**（全局 tap `CATapDescription(stereoGlobalTapButExcludeProcesses: [])`，`muteBehavior = .unmuted`，加上"默认输出设备 + tap"的私有聚合设备，再加 IOProc）：
+
+- 只用命令行工具就能编译；`.app` 用 **ad-hoc 签名**就能拿到"系统录音"权限，`Info.plist` 里要有 `NSAudioCaptureUsageDescription`，必须用 `open` 启动 `.app`（不能直接运行可执行文件）。
+- **第一次启动**时弹出权限框，`AudioDeviceCreateIOProcIDWithBlock` 会**阻塞到用户点完为止**（实测 5 秒），所以**捕获初始化不能放在主线程**。同一个签名再次启动不再弹框，0.1 秒内开始捕获。签名一变（例如重新 ad-hoc 签名）可能需要重新授权，所以 M2.5 的固定证书是必需的。
+- 格式：48kHz、双声道、Float32、交错存储；每秒约 94 次回调，每次 512 帧。
+- 频谱准确：440Hz 和 3000Hz 的单音、60 到 10000Hz 的扫频，峰值频率和频段都对得上。参数用 FFT 4096、hop 2048、Hann 窗、12 个对数频段（20–16500Hz）。
+- CPU（i7-9750H）：频谱分析本身约 **0.3%**；捕获期间系统音频服务 `coreaudiod` 大约**多耗 3% 的单核，安静时也是这样**。所以：暂停时必须停止捕获；建议 M5.5 再验证一下，能否监听输出设备的 `kAudioDevicePropertyDeviceIsRunningSomewhere`，只在有应用在放声音时才开启捕获。
+- 释放顺序（`AudioDeviceStop` → `AudioDeviceDestroyIOProcID` → `AudioHardwareDestroyAggregateDevice` → `AudioHardwareDestroyProcessTap`）全部成功，没有残留。
 
 ## 窗口要求
 
