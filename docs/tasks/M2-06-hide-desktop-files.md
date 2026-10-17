@@ -1,6 +1,6 @@
 # M2-06: 菜单栏"隐藏桌面文件"
 
-- **状态**：changes-requested
+- **状态**：review
 - **里程碑**：M2（用户追加的小功能）
 - **依赖**：M2-05（必须已合并到 `main`，本任务基于它的 VideoWindow / WidgetWindow）
 - **分支**：task/M2-06
@@ -132,6 +132,28 @@
 - **范围与剩余验收**：
   - 本轮仅修改 DesktopWindow.swift、ScreenManager.swift 及本任务状态与交付记录；WidgetWindow、HitTesting、HitTestController、Bridge、PowerMonitor 的逻辑保持原样；任务需求和审查记录保持原样。
   - 仍需按手动清单验证：隐藏模式重启后，从其他应用切回，反复单击、双击、右键和其他鼠标按键点击壁纸空白处，测试面板始终可见且可操作，隐藏的文件不被触发；多显示器与 Spaces 切换也需实机复验。
+
+### 第三轮（2026-10-17）
+
+- **修订内容**：
+  - 删除第二轮 VideoWindow 的 `sendEvent(_:)` / `onMouseDown`，以及 ScreenManager 的点击重排、应用激活监听和相关清理。VideoWindow 在初始化时固定 `ignoresMouseEvents = true`，切换方法只调整层级；仍保留切换和创建时先视频、后组件的顺序。
+  - HitTestController 增加默认开启的 `passThroughEnabled`。关闭穿透时，所有受管理的 WidgetWindow 立即接收鼠标，区域变化和鼠标事件也保持这一状态；恢复穿透时立即重算，沿用原有按住鼠标不切换、松开后重算的规则。
+  - AppDelegate 在启动读取 ui.json 后及菜单切换时同步穿透开关。隐藏时先关闭穿透，再调整视频层级；新窗口继续通过既有 `updateWindows` 回调继承当前开关。
+  - 测试页注册 `contextmenu` 事件并取消默认行为，避免 WidgetWindow 接住空白处右键后弹出网页菜单。
+- **验证结果**：
+  - 修改前 `scripts/test.sh` **73/73 通过**；修改后完整测试仍 **73/73 通过**（8 个 suite）。`swift build` 退出码 0，构建日志无 warning / error。本轮没有新增纯逻辑单元测试声明。
+  - 复用原生菜单夹具，将模式断言按第三轮合约更新为“视频始终穿透，隐藏时组件接住全部点击”，并增加空区域、区域变化、本地鼠标移动、取消隐藏立即恢复穿透、显示模式组件区域交互及网页右键事件检查。相同脚本在旧代码上 **15/26 通过、11 项预期失败**，修订后 **26/26 通过**；并非继续沿用第二轮“点击后重排”的断言。
+  - 原生夹具实际加载 `shell://app/index.html`，等待 ES module 完成后，在页面背景和语音按钮上分发可取消的 DOM `contextmenu` 事件，两处都取消默认行为。菜单与持久化检查包含启动恢复、保留其他 UI 字段、保存失败仍切换、暂停独立、重新创建窗口和退出清理。
+  - `CGWindowListCopyWindowInfo` 验证隐藏时组件在视频之前，例如 Widget #3293 / index 24，Video #3291 / index 25；隐藏切换、重启和重新创建窗口后顺序也通过。
+  - 另外运行实际 `.build/debug/DesktopShell`，独立临时支持目录下两种启动模式 **2/2 通过**：隐藏时两个窗口均为 **−2147483602**，Finder 图标 **−2147483603** 在下方；显示时 VideoWindow 回到 **−2147483604**。
+  - 使用本轮菜单实际保存的 ui.json 进行跨进程重启检查，隐藏 PID 39556 → 39566、显示 PID 39579 → 39589，**4/4 通过**，每次启动之间不改 ui.json，程序运行后文件内容保持原样。所有测试启动的进程均已结束。
+  - 运行前后只读检查 `defaults read com.apple.finder CreateDesktop`：均为该键不存在，退出码 1、stdout 为空，stderr 除时间戳/PID 外诊断一致。没有写入设置、重启 Finder 或发送脚本。
+  - `git diff --check` 通过；规定的源码禁用命令检查、VideoWindow 的 `sendEvent|onMouseDown` 检查、ScreenManager 的激活监听/重排/定时器检查均无输出。独立只读复核未发现已确认的代码缺陷。
+  - 本轮临时夹具及日志在 `/tmp/ds-m2-06-review3/`，包括 `MenuChecks.swift`、`run-menu.sh`、`native-red.log`、`native-green.log`、`build.log`、`final-tests.log`、`run-app-checks.sh`、`app-checks.log`、`run-restart-checks.sh`、`restart-summary.log` 及 Finder 设置对照记录。
+- **范围与剩余验收**：
+  - 本轮修改 AppDelegate.swift、DesktopWindow.swift、HitTestController.swift、ScreenManager.swift、web/index.html 及本任务状态和交付记录，均在第三轮允许范围内。HitTesting、Bridge、PowerMonitor 逻辑及任务需求、审查记录均未编辑；按第三轮任务单和 main 上 `d99a859` 同步后的窗口规范实施，未编辑 AGENTS.md / CLAUDE.md。
+  - 原生脚本验证窗口层级、鼠标接收属性和实际网页默认事件取消，不等同于真实物理点击的视觉验收。仍需用户重启后在空白处反复单击、双击、右键，确认面板无闪烁、无菜单，组件和语音按钮可用；取消隐藏后单击、框选和双击桌面文件正常。
+  - 按住鼠标期间切换模式再松开、多显示器热插拔及 Spaces 切换仍需实机复验。本次只有一块实际显示器，新窗口继承开关以重新创建窗口对验证。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 

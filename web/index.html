@@ -28,6 +28,7 @@
   </main>
   <script type="module">
     import { moduleStatus } from './m2-check.js';
+    document.addEventListener('contextmenu', event => event.preventDefault());
     document.getElementById('module-status').textContent = moduleStatus;
     const panel = document.querySelector('main');
     function reportHitRegions() {

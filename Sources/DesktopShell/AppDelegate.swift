@@ -71,6 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             monitor?.updateWindows(windows)
         }
         let hitTesting = HitTestController()
+        hitTesting.passThroughEnabled = !uiState.desktopIconsHidden
         hitTestController = hitTesting
         manager.onWidgetWindowsChanged = { [weak hitTesting] windows in
             hitTesting?.updateWindows(windows)
@@ -107,6 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func toggleDesktopIcons(_ sender: NSMenuItem) {
         guard let screenManager, let uiStateStore else { return }
         uiState.desktopIconsHidden.toggle()
+        hitTestController?.passThroughEnabled = !uiState.desktopIconsHidden
         screenManager.setDesktopIconsHidden(uiState.desktopIconsHidden)
         sender.state = uiState.desktopIconsHidden ? .on : .off
         NSLog("DesktopShell: desktop icons hidden=%@", uiState.desktopIconsHidden ? "true" : "false")

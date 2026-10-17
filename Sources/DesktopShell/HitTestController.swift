@@ -6,6 +6,9 @@ final class HitTestController {
     private var globalMonitor: Any?
     private var localMonitor: Any?
     private var isRunning = false
+    var passThroughEnabled = true {
+        didSet { updateMouseHandling() }
+    }
 
     func start() {
         guard !isRunning else { return }
@@ -49,8 +52,16 @@ final class HitTestController {
     }
 
     private func updateMouseHandling() {
+        guard isRunning else { return }
+        // Hidden desktop files must never receive clicks, including outside the widgets.
+        if !passThroughEnabled {
+            for window in windows where window.ignoresMouseEvents {
+                window.ignoresMouseEvents = false
+            }
+            return
+        }
         // Keep the owner of a drag until every button is released, even if regions change.
-        guard isRunning, NSEvent.pressedMouseButtons == 0 else { return }
+        guard NSEvent.pressedMouseButtons == 0 else { return }
         let mouse = NSEvent.mouseLocation
         for window in windows {
             let ignores = !HitTesting.isInteractive(mouse: mouse, windowFrame: window.frame, regions: window.hitRegions)
