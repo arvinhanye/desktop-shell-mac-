@@ -12,9 +12,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let paths = AppPaths.current
-        NSLog("DesktopShell supportDir: %@", paths.supportDir.path)
-        NSLog("DesktopShell mediaDir: %@", paths.mediaDir.path)
-        NSLog("DesktopShell webDir: %@", paths.webDir.path)
+        Log.notice("DesktopShell supportDir: \(paths.supportDir.path)")
+        Log.notice("DesktopShell mediaDir: \(paths.mediaDir.path)")
+        Log.notice("DesktopShell webDir: \(paths.webDir.path)")
         let uiStore = UiStateStore(supportDir: paths.supportDir)
         uiStateStore = uiStore
         uiState = uiStore.load()
@@ -22,13 +22,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             config = try ConfigStore(supportDir: paths.supportDir).load()
         } catch {
-            NSLog("DesktopShell: configuration load failed, using in-memory example: %@", String(describing: error))
+            Log.error("DesktopShell: configuration load failed, using in-memory example: \(String(describing: error))")
             config = .example
         }
         let videoURL = SchemeResolver(webRoot: paths.webDir, mediaRoot: paths.mediaDir)
             .fileURL(forPath: "/media/" + config.background.video)
         if videoURL == nil {
-            NSLog("背景视频不存在：%@，请先运行 scripts/prepare-media.sh", config.background.video)
+            Log.error("背景视频不存在：\(config.background.video)，请先运行 scripts/prepare-media.sh")
         }
         let player = BackgroundPlayer(videoURL: videoURL)
         backgroundPlayer = player
@@ -111,12 +111,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hitTestController?.passThroughEnabled = !uiState.desktopIconsHidden
         screenManager.setDesktopIconsHidden(uiState.desktopIconsHidden)
         sender.state = uiState.desktopIconsHidden ? .on : .off
-        NSLog("DesktopShell: desktop icons hidden=%@", uiState.desktopIconsHidden ? "true" : "false")
+        Log.notice("DesktopShell: desktop icons hidden=\(uiState.desktopIconsHidden ? "true" : "false")")
         do {
             try uiStateStore.save(uiState)
         } catch {
             // A failed save affects the next launch, not the user's current choice.
-            NSLog("DesktopShell: UI state save failed: %@", String(describing: error))
+            Log.error("DesktopShell: UI state save failed: \(String(describing: error))")
         }
     }
 

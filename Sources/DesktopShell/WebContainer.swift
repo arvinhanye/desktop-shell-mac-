@@ -41,7 +41,7 @@ final class WebContainer: NSObject, WKNavigationDelegate, WKUIDelegate {
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
         guard navigationAction.request.url?.scheme == "shell" else {
-            NSLog("DesktopShell: cancelled navigation to %@", navigationAction.request.url?.absoluteString ?? "<missing URL>")
+            Log.notice("DesktopShell: cancelled navigation to \(navigationAction.request.url?.absoluteString ?? "<missing URL>")")
             decisionHandler(.cancel)
             return
         }
@@ -56,10 +56,10 @@ final class WebContainer: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        NSLog("DesktopShell: page load failed: %@", String(describing: error))
+        Log.error("DesktopShell: page load failed: \(String(describing: error))")
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        NSLog("DesktopShell: navigation failed: %@", String(describing: error))
+        Log.error("DesktopShell: navigation failed: \(String(describing: error))")
     }
 }

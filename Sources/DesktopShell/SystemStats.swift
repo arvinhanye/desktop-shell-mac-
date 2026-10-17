@@ -40,7 +40,7 @@ enum SystemStats {
             if let level = Int(override), (0...100).contains(level) {
                 return BatteryStatus(level: level, isCharging: false, onBattery: true)
             }
-            NSLog("DesktopShell: invalid DESKTOPSHELL_FAKE_BATTERY; reading actual battery status")
+            Log.error("DesktopShell: invalid DESKTOPSHELL_FAKE_BATTERY; reading actual battery status")
         }
         guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
               let sources = IOPSCopyPowerSourcesList(info)?.takeRetainedValue() as? [CFTypeRef] else {

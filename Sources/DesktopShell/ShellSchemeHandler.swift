@@ -84,7 +84,7 @@ final class ShellSchemeHandler: NSObject, WKURLSchemeHandler {
                     headers["Content-Range"] = "bytes */\(data.count)"
                 }
             } catch {
-                NSLog("DesktopShell: resource read failed for %@: %@", fileURL.path, String(describing: error))
+                Log.error("DesktopShell: resource read failed for \(fileURL.path): \(String(describing: error))")
             }
         }
 
