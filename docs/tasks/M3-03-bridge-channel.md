@@ -195,5 +195,17 @@ enum MediaLibrary {
 
 ## 审查记录
 
-- **结论**：
+- **结论**：**代码审查通过，待用户手动验证**（见"用户手动验证"）。用户确认后合并到 `main`。
+- **复验结果**（Claude Code，2026-10-18，在 `a8eb045` 的独立检出上执行）：
+  - [x] `swift build` 零警告零错误
+  - [x] `scripts/test.sh`：93 项全部通过（11 个 suite）；`scripts/test-web.sh`：138 项全部通过
+  - [x] `git diff --name-only main...task/M3-03` 只有允许的 13 个文件；`web/`、`AGENTS.md`、`CLAUDE.md` 都没改；`git diff --check` 通过
+  - [x] `addScriptMessageHandler` 有输出，旧的 `.add(WeakScriptMessageHandler` 没有；`Bridge.swift` 里有 `isMainFrame` / `securityOrigin`；`removeItem|moveItem|trashItem` 和 `EventKit` 都没有输出
+  - [x] 在主目录（`task/M3-03` = `a8eb045`，工作区干净）重新 `scripts/bundle.sh --open`：日志出现 `getConfig avatars=30 backgrounds=63`，暂停日志只有一行 `paused=false reasons=[]`
 - **意见**：
+  - 来源校验放在最前面，来源不对时**不读取消息内容**（连日志都不读）；日志里的 action 名先过 `isValidID` 和 64 字节上限，否则写 `?`，网页塞不进奇怪的日志内容。
+  - 每条消息都只回复一次，包括 `Bridge` 已释放时代理回复 `failed`。
+  - `getConfig` 是手工挑选公开字段，不序列化私有配置；测试检查了整个回复里没有 `path`、`remindersList`、`bundleId`、`background`、`video`、`desktopIconsHidden`、`todos`。
+  - `setHitRegions` 解析时先用现有的 `HitTesting.parseRegions` 校验格式，保留原始数值，等到拿到真实视口再裁剪，逻辑正确。
+  - **导航例外（用户在 Codex 那边授权）接受**：只放行 `shell://app` 主页面发起、目标是子框架、地址**正好是** `about:srcdoc` 的导航。srcdoc 子框架继承页面的 CSP，不能运行内联脚本，也不能加载外部资源；Bridge 对所有子框架仍然回复 `untrusted`。这个例外只服务于自检面板的第 7 条检查。**写进 M4 的要求**：M4 移除自检面板时，同时删掉 `WebNavigationPolicy` 里的 srcdoc 例外，让导航规则恢复成"只允许 `shell://`"。
+  - Codex 这次也没有推送任务分支（M3-02 修订时也是），由 Claude Code 连同审查记录一起推送。
