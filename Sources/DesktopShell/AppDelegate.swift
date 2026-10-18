@@ -42,6 +42,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hideIconsItem.target = self
         hideIconsItem.state = appState.uiState.desktopIconsHidden ? .on : .off
         menu.addItem(hideIconsItem)
+        let voiceItem = NSMenuItem(title: "点击语音", action: #selector(toggleVoice(_:)), keyEquivalent: "")
+        voiceItem.target = self
+        voiceItem.state = appState.uiState.voiceEnabled ? .on : .off
+        menu.addItem(voiceItem)
+        menu.addItem(.separator())
+        let reloadItem = NSMenuItem(title: "重新加载", action: #selector(reloadPages), keyEquivalent: "")
+        reloadItem.target = self
+        menu.addItem(reloadItem)
+        let configFolderItem = NSMenuItem(title: "打开配置文件夹", action: #selector(openConfigFolder), keyEquivalent: "")
+        configFolderItem.target = self
+        menu.addItem(configFolderItem)
         menu.addItem(.separator())
         let quitItem = NSMenuItem(
             title: "退出 DesktopShell",
@@ -59,6 +70,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager.setDesktopIconsHidden(appState.uiState.desktopIconsHidden)
         let monitor = PowerMonitor(backgroundPlayer: player)
         powerMonitor = monitor
+        monitor.onPausedChanged = { [weak manager] paused in
+            manager?.broadcast(PageEvent.paused(paused))
+        }
+        appState.onUiStateChanged = { [weak manager] state in
+            manager?.broadcast(PageEvent.uiState(state))
+        }
+        manager.broadcast(PageEvent.uiState(appState.uiState))
         manager.onWindowsChanged = { [weak monitor] windows in
             monitor?.updateWindows(windows)
         }
@@ -78,6 +96,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         screenManager?.onWidgetWindowsChanged = nil
         hitTestController?.stop()
         hitTestController = nil
+        appState?.onUiStateChanged = nil
+        powerMonitor?.onPausedChanged = nil
         powerMonitor?.stop()
         powerMonitor = nil
         screenManager?.stop()
@@ -109,6 +129,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             // A failed save affects the next launch, not the user's current choice.
             Log.error("DesktopShell: UI state save failed: \(String(describing: error))")
+        }
+    }
+
+    @objc private func toggleVoice(_ sender: NSMenuItem) {
+        guard let appState else { return }
+        appState.toggleVoice()
+        sender.state = appState.uiState.voiceEnabled ? .on : .off
+    }
+
+    @objc private func reloadPages() {
+        appState?.reloadConfig()
+        screenManager?.reloadPages()
+        Log.notice("DesktopShell: reloaded config and pages; background.video changes require an app restart")
+    }
+
+    @objc private func openConfigFolder() {
+        guard let appState else { return }
+        do {
+            try FileManager.default.createDirectory(at: appState.paths.supportDir, withIntermediateDirectories: true)
+            if !NSWorkspace.shared.open(appState.paths.supportDir) {
+                Log.error("DesktopShell: configuration folder open failed")
+            }
+        } catch {
+            Log.error("DesktopShell: configuration folder creation failed")
         }
     }
 

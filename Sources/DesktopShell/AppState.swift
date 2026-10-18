@@ -5,6 +5,7 @@ final class AppState {
     let paths: AppPaths
     private(set) var config: AppConfig
     var uiState: UiState
+    var onUiStateChanged: ((UiState) -> Void)?
     let uiStateStore: UiStateStore
 
     init(paths: AppPaths) {
@@ -23,6 +24,30 @@ final class AppState {
         try uiStateStore.save(uiState)
     }
 
+    func reloadConfig() {
+        do {
+            // Reload must not use ConfigStore's first-launch example generation.
+            guard FileManager.default.fileExists(atPath: paths.supportDir.appendingPathComponent("config.json").path) else {
+                throw CocoaError(.fileReadNoSuchFile)
+            }
+            config = try ConfigStore(supportDir: paths.supportDir).load()
+        } catch {
+            Log.error("DesktopShell: configuration reload failed, keeping current configuration")
+        }
+    }
+
+    func toggleVoice() {
+        uiState.voiceEnabled.toggle()
+        do {
+            try saveUiState()
+        } catch {
+            // Persistence failure must not undo an explicit runtime preference.
+            Log.error("DesktopShell: voice state save failed")
+        }
+        Log.notice("DesktopShell: voice enabled=\(uiState.voiceEnabled ? "true" : "false")")
+        onUiStateChanged?(uiState)
+    }
+
     func updateAppearance(avatar: UiPatch, background: UiPatch) -> Result<UiState, BridgeError> {
         let avatars = MediaLibrary.scan(mediaDir: paths.mediaDir, subdirectory: "avatars")
         let backgrounds = MediaLibrary.scan(mediaDir: paths.mediaDir, subdirectory: "backgrounds")
@@ -35,6 +60,7 @@ final class AppState {
             uiState = updated
             do {
                 try saveUiState()
+                onUiStateChanged?(updated)
                 return .success(updated)
             } catch {
                 uiState = previous

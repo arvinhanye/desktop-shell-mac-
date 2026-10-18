@@ -4,6 +4,9 @@ import WebKit
 final class WebContainer: NSObject, WKNavigationDelegate, WKUIDelegate {
     let webView: WKWebView
     private let bridge: Bridge
+    var onPageLoaded: (() -> Void)?
+    private var pageGeneration = UUID()
+    private var didLogSendFailure = false
 
     init(appState: AppState) {
         bridge = Bridge(appState: appState)
@@ -29,10 +32,55 @@ final class WebContainer: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     func bind(to window: WidgetWindow) {
         bridge.window = window
+        reload()
+    }
+
+    func send(_ event: [String: Any]) {
+        let generation = pageGeneration
+        webView.callAsyncJavaScript("window.shell?.receive?.(event)", arguments: ["event": event],
+                                    in: nil, in: .page) { [weak self] result in
+            if case .failure = result { self?.logSendFailure(for: generation) }
+        }
+    }
+
+    func reload() {
+        resetDeliveryLog()
         webView.load(URLRequest(url: URL(string: "shell://app/index.html")!))
     }
 
+    private func resetDeliveryLog() {
+        pageGeneration = UUID()
+        didLogSendFailure = false
+    }
+
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        resetDeliveryLog()
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        let generation = pageGeneration
+        // With the custom scheme, didFinish can precede ES-module evaluation.
+        // Importing the existing entry joins its initialization (including top-level
+        // await) without executing it twice, polling, or adding a Bridge action.
+        webView.callAsyncJavaScript("await import('/js/main.js')", in: nil, in: .page) { [weak self] result in
+            guard let self, self.pageGeneration == generation else { return }
+            switch result {
+            case .success: self.onPageLoaded?()
+            case .failure: self.logSendFailure(for: generation)
+            }
+        }
+    }
+
+    private func logSendFailure(for generation: UUID) {
+        guard pageGeneration == generation, !didLogSendFailure else { return }
+        didLogSendFailure = true
+        // Do not log JS errors or payloads: either may include user content.
+        Log.error("DesktopShell: page event delivery failed")
+    }
+
     func stop() {
+        onPageLoaded = nil
+        resetDeliveryLog()
         webView.stopLoading()
         webView.configuration.userContentController.removeScriptMessageHandler(forName: "shell", contentWorld: .page)
         bridge.window = nil

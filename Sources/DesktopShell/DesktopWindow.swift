@@ -26,6 +26,13 @@ final class WidgetWindow: NSWindow {
     private(set) var safeAreaInsets = SafeAreaInsets(top: 0, right: 0, bottom: 0, left: 0)
     private(set) var hitRegions: [CGRect] = []
     var onHitRegionsChanged: (() -> Void)?
+    var onPageLoaded: (() -> Void)? {
+        get { webContainer.onPageLoaded }
+        set { webContainer.onPageLoaded = newValue }
+    }
+
+    func send(_ event: [String: Any]) { webContainer.send(event) }
+    func reload() { webContainer.reload() }
 
     init(screen: NSScreen, appState: AppState) {
         webContainer = WebContainer(appState: appState)

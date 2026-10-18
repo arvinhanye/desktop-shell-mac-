@@ -113,3 +113,20 @@ enum ConfigReply {
         ]
     }
 }
+
+enum PageEvent {
+    static func safeArea(_ insets: SafeAreaInsets) -> [String: Any] {
+        ["event": "safeArea", "top": insets.top, "right": insets.right,
+         "bottom": insets.bottom, "left": insets.left]
+    }
+
+    static func paused(_ paused: Bool) -> [String: Any] {
+        ["event": "paused", "paused": paused]
+    }
+
+    static func uiState(_ state: UiState) -> [String: Any] {
+        var event = ConfigReply.makeUiState(state)
+        event["event"] = "uiState"
+        return event
+    }
+}
