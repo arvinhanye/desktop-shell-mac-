@@ -1,4 +1,5 @@
 import Foundation
+import CoreFoundation
 
 enum WebNavigationPolicy {
     static func allows(url: URL?, targetIsMainFrame: Bool?, sourceScheme: String, sourceHost: String) -> Bool {
@@ -22,6 +23,8 @@ enum BridgeError: String, Error {
 
 enum BridgeRequest: Equatable {
     case getConfig
+    case addTodo(text: String, projectId: String?)
+    case setTodoDone(id: String, done: Bool)
     case setHitRegions([[Double]])
     case openProject(String)
     case openProjectWith(projectId: String, appId: String)
@@ -33,6 +36,22 @@ enum BridgeRequest: Equatable {
             return .failure(.invalid)
         }
         switch action {
+        case "addTodo":
+            guard Set(body.keys).isSubset(of: ["action", "text", "projectId"]),
+                  let rawText = body["text"] as? String else { return .failure(.invalid) }
+            let text = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty, text.count <= 500 else { return .failure(.invalid) }
+            var projectId: String?
+            if let value = body["projectId"], !(value is NSNull) {
+                guard let id = validID(value) else { return .failure(.invalid) }
+                projectId = id
+            }
+            return .success(.addTodo(text: text, projectId: projectId))
+        case "setTodoDone":
+            guard Set(body.keys) == ["action", "todoId", "done"], let id = validID(body["todoId"]),
+                  let done = body["done"] as? NSNumber,
+                  CFGetTypeID(done) == CFBooleanGetTypeID() else { return .failure(.invalid) }
+            return .success(.setTodoDone(id: id, done: done.boolValue))
         case "getConfig":
             guard Set(body.keys) == ["action"] else { return .failure(.invalid) }
             return .success(.getConfig)
@@ -138,5 +157,19 @@ extension PageEvent {
                      "charging": battery.isCharging, "onBattery": battery.onBattery],
          "cpu": cpu,
          "memory": ["usedBytes": memory.usedBytes, "totalBytes": memory.totalBytes, "percent": memory.percent]]
+    }
+}
+
+extension PageEvent {
+    static func todos(access: String, items: [TodoItem]) -> [String: Any] {
+        ["event": "todos", "access": access, "items": access == "granted" ? items.map(todoItem) : []]
+    }
+
+    static func todoItem(_ item: TodoItem) -> [String: Any] {
+        let due: Any = item.due.map {
+            ["date": $0.date, "time": $0.time.map { $0 as Any } ?? NSNull()] as [String: Any]
+        } ?? NSNull()
+        return ["id": item.id, "text": item.text, "done": item.done,
+                "projectId": item.projectId.map { $0 as Any } ?? NSNull(), "due": due]
     }
 }

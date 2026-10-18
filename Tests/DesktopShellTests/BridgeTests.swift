@@ -53,7 +53,7 @@ struct BridgeTests {
 
     @Test("未知与尚未实现的动作始终返回 unknown-action")
     func unimplementedActions() {
-        for action in ["deleteFile", "", "GETCONFIG", "addTodo", "setTodoDone", "focusInput", "blurInput"] {
+        for action in ["deleteFile", "", "GETCONFIG", "focusInput", "blurInput"] {
             #expect(BridgeRequest.parse(["action": action]) == .failure(.unknownAction))
             #expect(BridgeRequest.parse(["action": action, "path": "/private"]) == .failure(.unknownAction))
         }
@@ -324,5 +324,42 @@ struct BridgeTests {
             return array.reduce(into: Set<String>()) { $0.formUnion(allKeys($1)) }
         }
         return []
+    }
+}
+
+
+extension BridgeTests {
+    @Test("提醒新增按 Character 校验并修剪标题，允许缺省或 null 项目")
+    func addTodoParsing() {
+        for project: Any? in [nil, NSNull(), "project-1"] {
+            var body: [String: Any] = ["action": "addTodo", "text": "  测试 👨‍👩‍👧‍👦 \n"]
+            body["projectId"] = project
+            #expect(BridgeRequest.parse(body) == .success(.addTodo(text: "测试 👨‍👩‍👧‍👦", projectId: project as? String)))
+        }
+        let long = String(repeating: "👨‍👩‍👧‍👦", count: 500)
+        #expect(BridgeRequest.parse(["action": "addTodo", "text": long]) == .success(.addTodo(text: long, projectId: nil)))
+        for value: Any in ["", " \n\t", String(repeating: "a", count: 501), 1, true, NSNull()] {
+            #expect(BridgeRequest.parse(["action": "addTodo", "text": value]) == .failure(.invalid))
+        }
+        #expect(BridgeRequest.parse(["action": "addTodo"]) == .failure(.invalid))
+        for value: Any in ["", "bad/id", "中文", 1, true] {
+            #expect(BridgeRequest.parse(["action": "addTodo", "text": "x", "projectId": value]) == .failure(.invalid))
+        }
+        #expect(BridgeRequest.parse(["action": "addTodo", "text": "x", "extra": NSNull()]) == .failure(.invalid))
+    }
+    @Test("提醒完成状态严格接受 CFBoolean，拒绝数字一和多余参数")
+    func setTodoParsing() {
+        for value in [true, false] {
+            #expect(BridgeRequest.parse(["action": "setTodoDone", "todoId": "todo-1", "done": value]) == .success(.setTodoDone(id: "todo-1", done: value)))
+        }
+        for value: Any in [1, 0, NSNumber(value: 1), "true", NSNull()] {
+            #expect(BridgeRequest.parse(["action": "setTodoDone", "todoId": "todo-1", "done": value]) == .failure(.invalid))
+        }
+        for id: Any in ["", "bad/id", 1, NSNull()] {
+            #expect(BridgeRequest.parse(["action": "setTodoDone", "todoId": id, "done": true]) == .failure(.invalid))
+        }
+        #expect(BridgeRequest.parse(["action": "setTodoDone", "todoId": "x"]) == .failure(.invalid))
+        #expect(BridgeRequest.parse(["action": "setTodoDone", "done": true]) == .failure(.invalid))
+        #expect(BridgeRequest.parse(["action": "setTodoDone", "todoId": "x", "done": true, "text": "x"]) == .failure(.invalid))
     }
 }
