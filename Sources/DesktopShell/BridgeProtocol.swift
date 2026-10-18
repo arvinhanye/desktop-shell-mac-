@@ -23,6 +23,8 @@ enum BridgeError: String, Error {
 
 enum BridgeRequest: Equatable {
     case getConfig
+    case focusInput
+    case blurInput
     case addTodo(text: String, projectId: String?)
     case setTodoDone(id: String, done: Bool)
     case setHitRegions([[Double]])
@@ -55,6 +57,12 @@ enum BridgeRequest: Equatable {
         case "getConfig":
             guard Set(body.keys) == ["action"] else { return .failure(.invalid) }
             return .success(.getConfig)
+        case "focusInput":
+            guard Set(body.keys) == ["action"] else { return .failure(.invalid) }
+            return .success(.focusInput)
+        case "blurInput":
+            guard Set(body.keys) == ["action"] else { return .failure(.invalid) }
+            return .success(.blurInput)
         case "openProject":
             guard Set(body.keys) == ["action", "projectId"],
                   let id = validID(body["projectId"]) else { return .failure(.invalid) }

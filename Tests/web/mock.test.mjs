@@ -44,7 +44,7 @@ test('mock: getConfig returns display-only configuration and all 30/63 real medi
 const badRequests = [
   [null, 'invalid'], [[], 'invalid'], ['x', 'invalid'], [{}, 'invalid'], [{ action: 1 }, 'invalid'],
   [{ action: 'nope' }, 'unknown-action'], [{ action: '__proto__' }, 'unknown-action'],
-  [{ action: 'focusInput' }, 'unknown-action'], [{ action: 'blurInput' }, 'unknown-action'],
+  [{ action: 'focusInput', extra: null }, 'invalid'], [{ action: 'blurInput', extra: '' }, 'invalid'],
   [{ action: 'deleteTodo', todoId: 'mock-1' }, 'unknown-action'],
   [{ action: 'getConfig', path: '/' }, 'invalid'],
   [{ action: 'setHitRegions', regions: 'bad' }, 'invalid'],
@@ -77,6 +77,16 @@ for (const [index, [message, code]] of badRequests.entries()) {
     await rejects(fixture().mock, message, code);
   });
 }
+
+test('mock: keyboard focus actions resolve null without changing mock state', async () => {
+  const { mock } = fixture();
+  const before = mock.state;
+  for (const action of ['focusInput', 'blurInput']) {
+    assert.equal(await mock.handle({ action }), null);
+    for (const extra of [undefined, false, 0, [], {}]) await rejects(mock, { action, extra }, 'invalid');
+  }
+  assert.deepEqual(mock.state, before);
+});
 
 test('mock: launch actions and array hit regions succeed without requiring app/project association', async t => {
   const info = t.mock.method(console, 'info', () => {});

@@ -1,5 +1,6 @@
 const parameters = new Map([
   ['getConfig', []], ['setHitRegions', ['regions']],
+  ['focusInput', []], ['blurInput', []],
   ['openProject', ['projectId']], ['openProjectWith', ['projectId', 'appId']],
   ['launchApp', ['appId']], ['saveUiState', ['avatarId', 'backgroundId']],
   ['addTodo', ['text', 'projectId']], ['setTodoDone', ['todoId', 'done']],
@@ -95,6 +96,9 @@ export function createMock({ timers = globalThis, now = () => Date.now(), random
       switch (message.action) {
         case 'getConfig':
           return structuredClone({ config, media, uiState: ui });
+        case 'focusInput':
+        case 'blurInput':
+          return null;
         case 'setHitRegions':
           if (!Array.isArray(message.regions)) fail('invalid');
           return null;

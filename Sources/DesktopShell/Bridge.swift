@@ -57,6 +57,25 @@ final class Bridge: NSObject, WKScriptMessageHandlerWithReply {
             Log.notice("DesktopShell bridge: getConfig avatars=\(avatars.count) backgrounds=\(backgrounds.count)")
             replyHandler(ConfigReply.make(config: appState.config, avatars: avatars,
                 backgrounds: backgrounds, uiState: appState.uiState), nil)
+        case .success(.focusInput):
+            guard let window, let webView = message.webView else {
+                reject(.failed, action: action, replyHandler: replyHandler)
+                return
+            }
+            window.acceptsKeyboard = true
+            window.makeKey()
+            window.makeFirstResponder(webView)
+            Log.notice("DesktopShell bridge: focusInput ok")
+            replyHandler(nil, nil)
+        case .success(.blurInput):
+            guard let window else {
+                reject(.failed, action: action, replyHandler: replyHandler)
+                return
+            }
+            window.acceptsKeyboard = false
+            if window.isKeyWindow { NSApp.deactivate() }
+            Log.notice("DesktopShell bridge: blurInput ok")
+            replyHandler(nil, nil)
         case .success(.setHitRegions(let values)):
             guard let window, let webView = message.webView else {
                 reject(.failed, action: action, replyHandler: replyHandler)

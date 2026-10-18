@@ -21,8 +21,11 @@ final class VideoWindow: NSWindow {
 }
 
 @MainActor
-final class WidgetWindow: NSWindow {
+final class WidgetWindow: NSPanel {
     private let webContainer: WebContainer
+    var acceptsKeyboard = false
+    override var canBecomeKey: Bool { acceptsKeyboard }
+    override var canBecomeMain: Bool { false }
     private(set) var safeAreaInsets = SafeAreaInsets(top: 0, right: 0, bottom: 0, left: 0)
     private(set) var hitRegions: [CGRect] = []
     var onHitRegionsChanged: (() -> Void)?
@@ -32,18 +35,25 @@ final class WidgetWindow: NSWindow {
     }
 
     func send(_ event: [String: Any]) { webContainer.send(event) }
-    func reload() { webContainer.reload() }
+    func reload() {
+        // The old document may unload without sending blurInput.
+        acceptsKeyboard = false
+        if isKeyWindow { NSApp.deactivate() }
+        webContainer.reload()
+    }
 
     init(screen: NSScreen, appState: AppState) {
         webContainer = WebContainer(appState: appState)
         super.init(
             contentRect: screen.frame,
-            styleMask: .borderless,
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
 
         level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
+        hidesOnDeactivate = false
+        isFloatingPanel = false
         collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         ignoresMouseEvents = true
         hasShadow = false
@@ -69,6 +79,12 @@ final class WidgetWindow: NSWindow {
     func setHitRegions(_ regions: [CGRect]) {
         hitRegions = regions
         onHitRegionsChanged?()
+    }
+
+    override func resignKey() {
+        super.resignKey()
+        // AppKit may return keyboard ownership before the page sends blurInput.
+        acceptsKeyboard = false
     }
 
     override func close() {

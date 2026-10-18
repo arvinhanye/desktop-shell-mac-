@@ -1,6 +1,6 @@
 # M3-08: 组件窗口改为不激活应用的面板，实现键盘焦点（focusInput / blurInput）
 
-- **状态**：todo
+- **状态**：review
 - **里程碑**：M3
 - **依赖**：M3-07（必须已合并到 `main`；会改到 M3-04 到 M3-07 也改过的 Bridge 相关文件）
 - **分支**：task/M3-08
@@ -101,12 +101,38 @@ export function installKeyboardFocus({ doc = document, win = window, send })
 ## 交付记录
 
 - **改动摘要**：
-- **自测结果**：
+  - `WidgetWindow` 改为初始化即含 `.nonactivatingPanel` 的 `NSPanel`，保留原有层级、透明与点击穿透配置；设置 `hidesOnDeactivate = false`、`isFloatingPanel = false`，仅文本输入期间允许成为 key，始终不成为 main。通过 AppKit 的 `resignKey()` 覆盖点清除键盘资格。
+  - 接入严格无参数的 `focusInput` / `blurInput`；保留来源校验、窗口失效的 `failed` 回复及不含用户内容的日志。没有新增激活应用调用。
+  - 新增通用网页焦点模块并在入口安装，处理文本输入识别、输入框间切换、Esc 组字保护、页面失焦清理及 Promise 失败消化；mock 同步支持两个动作。
+  - 补充重载保护：替换网页前先清除键盘资格，若窗口仍为 key 则交还键盘，避免旧输入框销毁后保留键盘占用。
+- **自测结果**（2026-10-18）：
+  - 前置：从最新 `main`（`17ffd4f`）建立 `task/M3-08`，确认 M3-07 已合并，起始工作区干净。
+  - RED → GREEN：新增 Swift 焦点解析测试先因 `unknown-action` 失败；mock 三项先失败；网页焦点模块空实现时七项行为断言失败；原生面板探针先因仍为 `NSWindow` 失败。实现后全部通过。重载残留另以原生断言确认失败，再修复为通过。
+  - `swift build`：PASS，退出码 0，输出检索 `warning|error` 为空。
+  - `scripts/test.sh`：**152/152 PASS，17 suites**；`scripts/test-web.sh`：**149/149 PASS，0 FAIL / 0 SKIP**。最终重载修复后已重跑两套完整测试。
+  - 浏览器 mock：实际点击输入框并输入，`activeElement` 为 `INPUT`；实际按 Esc 后为 `BODY`，控制台 warn/error 列表为空。截图：`/tmp/ds-m3-08-validation/browser-focus-escape.png`。
+  - 隔离原生探针：**13/13 PASS**，覆盖真实 WKWebView 回复、key/第一响应者、前台应用保持、失焦后面板仍显示、额外参数拒绝、网页 Esc、合成组字事件保护、失去 key 兜底、聚焦后重载和窗口失效。探针仅使用临时配置与屏幕外面板，没有访问或改写真实提醒事项。早期连续切焦点探针出现一次时序超时；等待前一轮原生与网页失焦完成后，同一检查序列通过。合成组字事件不等于真实输入法验收。
+  - `scripts/bundle.sh --open`：最终 release 包 PASS，固定证书签名、严格验证通过，指定要求仍为 `identifier "local.desktopshell.DesktopShell" and certificate leaf = H"7d0b2eb51dec80fa75cdbd1d01ace77cee1c62ce"`。产物：`/Users/arvinhan/Desktop/desktop-shell/build/DesktopShell.app`，已打开。
+  - 范围检查：仅任务允许的 **10 个文件**；`git diff --check` PASS；两项面板配置检索均有结果；禁止的激活调用检索为空。独立只读代码审查未发现阻塞项；其建议验证的重载边界已复现并修复。
+  - 自测日志与原生探针保留于 `/tmp/ds-m3-08-validation/`，包括 `swift-final.log`、`web-final.log`、`build-final.log`、`native-final.log`、`reload-red.log`、`bundle-final.log` 和 `FocusBridgeProbe.swift`。
 - **疑问 / 偏离**：
+  - 在允许修改的 `DesktopWindow.swift` 重载入口增加键盘交还，依据是原生复现的旧文档键盘资格残留；没有扩展 Bridge 接口、修改其他模块或改变界面。
+  - 本任务的九项用户手动验证仍待完成：真实英文/中文拼音与候选框位置、按钮和勾选框不抢文本编辑键盘、Esc 与跨应用/Finder/菜单交还、面板无闪烁、移出面板继续输入、隐藏桌面文件模式及点击穿透回归。上述自动检查不替代这些 GUI 验收。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 
 ## 审查记录
 
-- **结论**：
+- **结论**：**代码审查通过，待用户手动验证**（见"用户手动验证"，需要开着"文本编辑"对照）。用户确认后合并到 `main`。
+- **复验结果**（Claude Code，2026-10-18，在 `be233f2` 的独立检出上执行）：
+  - [x] `swift build` 零警告零错误（测试编译也没有警告）
+  - [x] `scripts/test.sh`：152 项全部通过（17 个 suite）；`scripts/test-web.sh`：149 项全部通过
+  - [x] 只改了允许的 10 个文件；`HitTesting`、`HitTestController`、`ScreenManager`、`PowerMonitor` 和组件界面都没改；`git diff --check` 通过
+  - [x] `nonactivatingPanel`、`hidesOnDeactivate = false` 都有输出；`NSApp.activate` / `activate(ignoringOtherApps` 没有输出
+  - [x] 内置浏览器（mock）：聚焦自检面板的输入框后 `activeElement` 是输入框，按 Esc 后回到 `BODY`；组字中（`isComposing: true`）按 Esc 不失焦；聚焦勾选框不发请求；全程没有 warn / error
+  - [x] 在主目录（`task/M3-08` = `be233f2`）重新 `scripts/bundle.sh --open`，启动日志正常
 - **意见**：
+  - `WidgetWindow` 改为 `NSPanel`，`.nonactivatingPanel` 在初始化时就给出；`canBecomeKey` 只看 `acceptsKeyboard`，`canBecomeMain` 为 `false`；用重写 `resignKey()` 在失去 key 时清除资格，和任务单要求的 `didResignKey` 效果相同。
+  - **超出任务单但合理的补充**：重新加载页面前先清除键盘资格，如果仍是 key window 就 `NSApp.deactivate()`。Codex 实测在输入框有焦点时重新加载，旧页面销毁不会发 `blurInput`，窗口会一直占着键盘。改在允许修改的 `DesktopWindow.swift` 里，接受。
+  - 网页模块用 `isContentEditable` 判断可编辑区域（比只看 `contenteditable="true"` 属性更完整，也覆盖可编辑区域里的子元素）；`input` 没写 `type` 时按 `text` 处理；`send` 失败被吞掉，不会出现未处理的 Promise。
+  - **写进 M4 的要求**：组件里的文本输入框不需要自己处理焦点，`keyboard-focus.js` 已经统一处理；不要在组件里另外调用 `focusInput` / `blurInput`。
