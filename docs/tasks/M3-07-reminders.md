@@ -21,6 +21,10 @@
   - 提醒的 `calendarItemIdentifier` 和列表的 `calendarIdentifier` 是 UUID，满足 `isValidID`，重启后不变。
 - 日志只写数量、项目 id、错误码和状态，**不写提醒标题和列表名**。
 - 一个应用只用**一个** `EKEventStore`。
+- **Codex 自测不碰用户真实的提醒事项**（2026-10-18 补充）：用户的提醒事项经 iCloud 同步到 iPhone，自测写进去的数据会出现在手机上。
+  - 不往真实的提醒事项里新增、勾选或修改任何提醒；需要真实写入的验收项（勾选、新增、项目关联、iPhone 同步）全部留给用户手动验证。
+  - 纯函数用单元测试覆盖；EventKit 部分如果要做临时集成检查，只读取，不写入。
+  - 第一次启动 `.app` 时会弹出"提醒事项"权限框，需要用户本人点"允许"。不要用脚本或辅助功能去点它；用户不在场时，就在交付记录里写明"待用户授权"，把依赖授权的检查留给用户。
 
 ### 1. `Info.plist`（`scripts/bundle.sh`）
 
@@ -150,7 +154,7 @@ final class RemindersStore {
 - [ ] `git diff --name-only main...task/M3-07` 只包含"允许修改的文件"
 - [ ] `grep -rnE "\.remove\(|removeReminder|saveCalendar|requestAccess\(to:" Sources/` 没有输出
 - [ ] `scripts/bundle.sh` 之后，`plutil -p build/DesktopShell.app/Contents/Info.plist | grep NSRemindersFullAccessUsageDescription` 有输出
-- [ ] `.app` 启动后，日志里有 `DesktopShell reminders: access=granted` 和 `DesktopShell reminders: pushed items=<数量>`；点完自检面板的"新增测试提醒"之后，`/usr/bin/log show --last 5m --predicate 'subsystem == "local.desktopshell.DesktopShell"' | grep "DesktopShell 自检"` **没有输出**（日志里没有提醒标题）
+- [ ] （用户授权后，由 Claude Code 复验）`.app` 启动后，日志里有 `DesktopShell reminders: access=granted` 和 `DesktopShell reminders: pushed items=<数量>`；用户点完自检面板的"新增测试提醒"之后，`/usr/bin/log show --last 5m --predicate 'subsystem == "local.desktopshell.DesktopShell"' | grep "DesktopShell 自检"` **没有输出**（日志里没有提醒标题）
 
 **用户手动验证**（`scripts/bundle.sh --open`，用自检面板）：
 
