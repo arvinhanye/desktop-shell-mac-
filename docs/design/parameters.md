@@ -77,3 +77,19 @@
 
 - 屏幕 1792 × 1120 点（3072 × 1920 像素，2 倍），菜单栏 30，程序坞 85，可用区域 1792 × 1005。
 - 桌面 70 个项目，图标 64 点、网格间距 54、按添加日期排列，访达从右上角往下、往左排。
+
+## 头像超分（2026-10-18）
+
+原图 240 × 150，效果图里按 240 × 150 点显示，Retina 屏需要 480 × 300 像素。用 Real-ESRGAN 的动漫模型放大，结果放在 `assets/avatars-2x/`（不进 git），`prepare-media.sh` 从这里复制到 `media/avatars/`。
+
+- 工具：`realesrgan-ncnn-vulkan-20220424-macos.zip`，来自 GitHub `xinntao/Real-ESRGAN` 的 v0.2.5.0 发布页，51,817,124 字节，SHA-256 `e0ad05580abfeb25f8d8fb55aaf7bedf552c375b5b4d9bd3c8d59764d2cc333a`。通用二进制，未签名，只依赖系统框架；本机在 Intel UHD 630 上运行。
+- 对比了两个模型：`realesr-animevideov3-x2`（直接放大 2 倍，每张约 1 秒）线条偏硬、有细小噪点；`realesrgan-x4plus-anime`（放大 4 倍；单张约 11 秒，主要是加载模型，30 张一起处理约 10 秒）再缩到 480 × 300，线条干净，选用这个。签名的细线两种都正常。
+- 命令：
+
+```bash
+realesrgan-ncnn-vulkan -i assets/avatars -o <临时目录> -n realesrgan-x4plus-anime -m <models 目录> -f png
+for f in <临时目录>/*.png; do ffmpeg -loglevel error -y -i "$f" -vf scale=480:300:flags=lanczos "assets/avatars-2x/${f:t}"; done
+```
+
+- 立绘（726 × 660）只用作底板背景，显示得比原图小，不需要放大。
+

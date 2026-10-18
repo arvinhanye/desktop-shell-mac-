@@ -252,7 +252,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 |---|---|---|
 | `video/` | 背景视频 | ffmpeg 把 webm 转成 HEVC 的 mp4，保持原片的 3840×2160，不缩小 |
 | `voice/` | 点击语音（mp3） | 原样复制 |
-| `avatars/` | 头像（PNG） | 缩到 256px 以内 |
+| `avatars/` | 头像（PNG，"签名 + 圆形头像"的组合图） | 复制 `assets/avatars-2x/` 里的 480×300 版本（2026-10-18 定：显示尺寸 240×150 点，Retina 屏需要 2 倍）。`avatars-2x/` 由 Claude Code 一次性生成，不进 git，做法见 `docs/design/parameters.md`"头像超分" |
 | `backgrounds/` | 背景图库 | 长边超过 2400 才缩到 2400，**只缩不放**（`sips -Z` 会放大小图，必须先判断尺寸）；不透明的图转 JPEG（质量 90），带透明的角色立绘保持 PNG |
 | `ornaments/` | 心形装饰条等装饰图 | 缩到实际显示尺寸的 2 倍 |
 | `fonts/` | 用到的字体文件 | 原样复制，只复制设计定稿里用到的 |
