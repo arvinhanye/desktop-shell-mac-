@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="fonts.css">
   <link rel="stylesheet" href="tokens.css">
   <link rel="stylesheet" href="mockup.css">
+  <link rel="stylesheet" href="design.css">
   <script type="module" src="mockup.js"></script>
 </head>
 <body>
@@ -14,29 +15,30 @@
     <div class="stage" id="stage">
       <video class="wallpaper" src="/media/video/aemeath.mp4" autoplay muted loop playsinline></video>
 
-      <!-- 模拟的系统界面：菜单栏 30、程序坞 85、右侧两列访达图标 -->
+      <!-- 模拟的系统界面：菜单栏 30、程序坞、右侧两列访达图标 -->
       <div class="sys-menubar" aria-hidden="true"><b></b><span>访达</span><span>文件</span><span>编辑</span><span>显示</span><span class="spacer"></span><span id="menubar-clock"></span></div>
       <div class="sys-icons" id="icons" aria-hidden="true"></div>
       <div class="sys-dock" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
 
+      <!-- 设计：每个 section 对应 M4 的一个组件（mountWidgets 建的外壳 <section class="widget" data-widget="…">），里面的结构就是组件要生成的 DOM -->
       <main id="desktop">
-        <section class="widget w-date" aria-label="日期">
-          <div class="date-weekday" id="date-weekday"></div>
-          <div class="date-day" id="date-day"></div>
-          <div class="date-month" id="date-month"></div>
-          <div class="date-time" id="date-time"></div>
-          <div class="date-rule"></div>
-          <div class="date-cn" id="date-cn"></div>
+        <section class="widget" data-widget="clock" aria-label="日期">
+          <div class="clock-weekday" id="clock-weekday"></div>
+          <div class="clock-day" id="clock-day"></div>
+          <div class="clock-month" id="clock-month"></div>
+          <div class="clock-time" id="clock-time"></div>
+          <div class="clock-rule"></div>
+          <div class="clock-date" id="clock-date"></div>
         </section>
 
-        <section class="widget w-greeting" aria-label="问候语">
-          <p class="greeting-title"><span id="greeting-title"></span>，<span class="greeting-name" id="greeting-name"></span></p>
+        <section class="widget" data-widget="greeting" aria-label="问候语">
+          <p class="greeting-title"><span id="greeting-title"></span><span id="greeting-sep">，</span><span class="greeting-name" id="greeting-name"></span></p>
           <p class="greeting-wish" id="greeting-wish"></p>
         </section>
 
-        <section class="widget w-character" aria-label="角色卡">
-          <div class="plate">
-            <div class="plate-bg" id="character-bg"></div>
+        <section class="widget" data-widget="character" aria-label="角色卡">
+          <div class="card character-card">
+            <div class="card-art" id="character-art"></div>
             <button class="avatar-button" id="avatar" type="button" aria-label="播放一句语音"><img id="avatar-img" alt="" draggable="false"></button>
             <button class="appearance-button" id="open-appearance" type="button">
               <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.3" d="M8 1.8a6.2 6.2 0 1 0 0 12.4c.9 0 1.3-.6 1.3-1.2 0-.8-.6-1-.6-1.8 0-.6.5-1.1 1.2-1.1h1.4a2.9 2.9 0 0 0 2.9-2.9C14.2 4.1 11.4 1.8 8 1.8Z"/><circle cx="4.9" cy="7.6" r=".9" fill="currentColor"/><circle cx="6.7" cy="4.9" r=".9" fill="currentColor"/><circle cx="10" cy="4.9" r=".9" fill="currentColor"/></svg>
@@ -49,9 +51,9 @@
           </div>
         </section>
 
-        <section class="widget w-stats" aria-label="系统状态">
-          <div class="plate">
-            <div class="plate-head"><h2 class="plate-title">系统状态</h2></div>
+        <section class="widget" data-widget="stats" aria-label="系统状态">
+          <div class="card stats-card" id="stats-card">
+            <div class="card-head"><h2 class="card-title">系统状态</h2></div>
             <div class="stat-row">
               <span class="stat-label">CPU</span>
               <svg class="stat-spark" id="cpu-spark" viewBox="0 0 60 26" preserveAspectRatio="none" aria-hidden="true"><polygon points=""/><polyline points=""/></svg>
@@ -71,52 +73,54 @@
           </div>
         </section>
 
-        <section class="widget w-projects" aria-label="项目">
-          <div class="plate">
-            <div class="plate-head"><h2 class="plate-title">项目</h2></div>
+        <section class="widget" data-widget="projects" aria-label="项目">
+          <div class="card projects-card">
+            <div class="card-head"><h2 class="card-title">项目</h2></div>
             <div class="project-list scroll-list" id="project-list"></div>
           </div>
         </section>
 
-        <section class="widget w-todos" aria-label="待办">
-          <div class="plate">
-            <div class="plate-head"><h2 class="plate-title">待办</h2><span class="plate-meta" id="todo-scope"></span></div>
-            <label class="todo-add"><span aria-hidden="true">＋</span><input id="todo-input" type="text" placeholder="添加提醒，按回车保存"></label>
+        <section class="widget" data-widget="todos" aria-label="待办">
+          <div class="card todos-card">
+            <div class="card-head"><h2 class="card-title">待办</h2><span class="card-meta" id="todo-scope"></span></div>
+            <label class="todo-add" id="todo-add"><span aria-hidden="true">＋</span><input id="todo-input" type="text" placeholder="添加提醒，按回车保存"></label>
             <p class="todo-hint" id="todo-hint"></p>
             <ul class="todo-list scroll-list" id="todo-list"></ul>
           </div>
         </section>
 
-        <section class="widget w-launcher" aria-label="应用启动栏">
-          <div class="plate">
-            <div class="plate-bg" id="launcher-bg"></div>
+        <section class="widget" data-widget="launcher" aria-label="应用启动栏">
+          <div class="card launcher-card">
+            <div class="card-art" id="launcher-art"></div>
             <div class="app-row" id="app-row"></div>
           </div>
         </section>
 
-        <section class="widget w-visualizer" aria-hidden="true">
+        <section class="widget" data-widget="visualizer" aria-hidden="true">
           <div class="viz-bars left" id="viz-left"></div>
           <div class="viz-bars right" id="viz-right"></div>
           <img class="viz-ornament" src="/media/ornaments/heart.png" alt="" draggable="false">
         </section>
 
-        <div class="appearance" id="appearance">
-          <div class="appearance-panel" role="dialog" aria-label="外观">
-            <div class="appearance-head">
-              <h2>外观</h2>
-              <div class="appearance-actions">
-                <button class="ghost-button" id="appearance-reset" type="button">恢复默认</button>
-                <button class="primary-button" id="appearance-done" type="button">完成</button>
+        <section class="widget" data-widget="appearance">
+          <div class="appearance-overlay" id="appearance" data-hit hidden>
+            <div class="appearance-panel" role="dialog" aria-label="外观" data-glass>
+              <div class="appearance-head">
+                <h2>外观</h2>
+                <div class="appearance-actions">
+                  <button class="ghost-button" id="appearance-reset" type="button">恢复默认</button>
+                  <button class="primary-button" id="appearance-done" type="button">完成</button>
+                </div>
+              </div>
+              <div class="appearance-scroll">
+                <h3>头像</h3>
+                <div class="thumb-grid avatars" id="avatar-grid" role="radiogroup" aria-label="头像"></div>
+                <h3>启动栏和卡片的背景</h3>
+                <div class="thumb-grid backgrounds" id="background-grid" role="radiogroup" aria-label="背景"></div>
               </div>
             </div>
-            <div class="appearance-scroll">
-              <h3>头像</h3>
-              <div class="thumb-grid avatars" id="avatar-grid" role="radiogroup" aria-label="头像"></div>
-              <h3>启动栏和卡片的背景</h3>
-              <div class="thumb-grid backgrounds" id="background-grid" role="radiogroup" aria-label="背景"></div>
-            </div>
           </div>
-        </div>
+        </section>
       </main>
     </div>
   </div>

@@ -178,7 +178,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 | `openProject` | `projectId` | 在 Finder 中打开该项目文件夹 |
 | `openProjectWith` | `projectId`, `appId` | 用指定应用打开项目文件夹（例如 Cursor）。应用只要在 `config.apps` 里即可 |
 | `launchApp` | `appId` | 启动应用 |
-| `getConfig` | — | 回复 `{config, media, uiState}`：`config` 含 `user`（`name`）、`character`（`name`、`motto`）、`greetings`、`projects`（`id`、`name`、`tags`、`apps`、`hasReminders`）、`apps`（`id`、`name`、`iconUrl`），**不含**项目路径、应用 bundle id、提醒事项列表名和背景视频；`media.avatars`、`media.backgrounds` 由 Swift 扫描 `media/` 目录生成，每项 `{id, url}`；`apps[].iconUrl` 是 `/media/app-icons/<appId>.png`，应用没装或图标导出失败时为 `null`；`uiState` 为 `{avatarId, backgroundId, voiceEnabled}`。待办不在这里，见推送事件 `todos` |
+| `getConfig` | — | 回复 `{config, media, uiState}`：`config` 含 `user`（`name`）、`character`（`name`、`motto`）、`greetings`、`projects`（`id`、`name`、`tags`、`apps`、`hasReminders`）、`apps`（`id`、`name`、`iconUrl`），**不含**项目路径、应用 bundle id、提醒事项列表名和背景视频；`media.avatars`、`media.backgrounds`、`media.voices`（`media/voice/` 里的 mp3，2026-10-18 增加，点击语音用）由 Swift 扫描 `media/` 目录生成，每项 `{id, url}`；`apps[].iconUrl` 是 `/media/app-icons/<appId>.png`，应用没装或图标导出失败时为 `null`；`uiState` 为 `{avatarId, backgroundId, voiceEnabled}`。待办不在这里，见推送事件 `todos` |
 | `addTodo` | `text`, `projectId?` | 在系统提醒事项里新增一条，只设标题。放进该项目对应的列表；没有 `projectId`、为 `null`，或者该项目没有配置列表时，放进系统默认列表。`text` 去掉首尾空白后不为空、不超过 500 字。回复新提醒（格式同 `todos` 事件里的一项） |
 | `setTodoDone` | `todoId`, `done` | 勾选或取消勾选一条提醒。`todoId` 查不到 → `not-found`。**不提供删除**（删除在 iPhone 或 Mac 的提醒事项里做） |
 | `saveUiState` | `avatarId?`, `backgroundId?`（`null` 表示恢复默认） | 写入 `ui.json`，回复新的 `uiState`，并向所有页面推送 `uiState`。Swift 先核对 id 确实存在于 `media/avatars`、`media/backgrounds`，不存在就回复 `not-found` |
@@ -303,7 +303,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 - 每个组件是一个"卡片"，共用同一个基础卡片样式（`.card`），只在内容上区分。
 - **桌面组件交互基线**（写在 `base.css` / 页面入口里，所有组件共用）：图片和装饰元素不能拖动（`-webkit-user-drag: none`、`draggable="false"`）；除输入框外文字不能选中（`user-select: none`）；禁用右键菜单（`contextmenu` 事件 `preventDefault`）；鼠标指针默认是箭头，只有可点击的元素才变化。M2 测试页没有做这些，那只是临时页面。
 - **毛玻璃用原生 `NSVisualEffectView`**（2026-10-18 定，探针见"技术探针"）：垫在 WidgetWindow 里 WKWebView 的下面，网页通过 `setGlassRegions` 上报每块底板（`.plate`）和打开着的弹层的矩形与圆角，Swift 按区域摆放，材质 `.hudWindow`。网页底板的底色单独放一层，不透明度用 `--plate-fill-opacity`（有原生毛玻璃时 45%）。在普通浏览器里开发时没有原生毛玻璃，底色按 100% 显示。不用 CSS `backdrop-filter`：M2-05 把视频拆到单独的 VideoWindow 后，它只能跨窗口取样，macOS 按应用是否在前台切换渲染方式，透明度会在点击、切换前后台的那一刻跳动，CSS 控制不了。
-- 具体的视觉设计（token 数值、卡片样式、组件版式、桌面布局）在 **M3.5 设计定稿**中确定，记录在 `docs/design/`。M4 及之后实现组件时以定稿为准，**Codex 不自行做视觉决定**；定稿没有覆盖到的视觉问题，在交付记录里提问。
+- 具体的视觉设计（token 数值、卡片样式、组件版式、桌面布局）在 **M3.5 设计定稿**中确定，记录在 `docs/design/`（2026-10-18 定稿：`tokens.css` 是 token 数值，`design.css` 按目标文件分节写好了每个组件的样式，`index.html` 里每个 `data-widget` 区块就是组件要生成的 DOM，说明见 `docs/design/README.md`）。M4 及之后实现组件时以定稿为准，**Codex 不自行做视觉决定**；定稿没有覆盖到的视觉问题，在交付记录里提问。
 - 素材只用**图片、视频、音频和字体**。**不执行任何从壁纸包里解出来的代码**（包括 exe/dll/ps1/vbs/bat/ahk/lua 和网页 JS），需要的功能自己重写。皮肤配置文件只当作数据来读，用来提取参数。
 
 ### 素材来源
@@ -332,7 +332,7 @@ desktop-shell/
 ├── docs/tasks/                    # 任务单，智能体之间的交接载体
 │   ├── _TEMPLATE.md
 │   └── M1-01-<简述>.md
-├── docs/design/                   # M3.5 设计定稿：效果图、token 数值、截图
+├── docs/design/                   # M3.5 设计定稿：效果图、token 数值、组件样式（截图含素材，存在 assets/design-screenshots/，不进 git）
 ├── assets/                        # 用户提供的壁纸素材（视频/图片），不进 git
 ├── Package.swift
 ├── Sources/DesktopShell/
@@ -348,7 +348,8 @@ desktop-shell/
 │   ├── Bridge.swift               # 白名单消息处理（WebKit 部分）
 │   ├── BridgeProtocol.swift       # 来源校验、请求解析、回复和推送事件的内容（纯函数）
 │   ├── AppState.swift             # 配置、外观状态、待办存储的唯一持有者
-│   ├── MediaLibrary.swift         # 扫描 media/ 生成头像、背景列表
+│   ├── MediaLibrary.swift         # 扫描 media/ 生成头像、背景、语音列表
+│   ├── AppIcons.swift             # 启动时把 config.apps 的图标导出到 media/app-icons/
 │   ├── RemindersStore.swift       # EventKit：读写系统提醒事项、监听变化
 │   ├── ProjectPath.swift          # 解析项目路径（~、绝对路径）
 │   ├── OcclusionDebouncer.swift   # 遮挡防抖
@@ -360,7 +361,8 @@ desktop-shell/
 │   └── ConfigStore.swift          # 读写 JSON
 ├── web/
 │   ├── index.html
-│   ├── styles/tokens.css
+│   ├── styles/tokens.css          # 照 docs/design/tokens.css
+│   ├── styles/fonts.css           # 字体文件在 media/fonts/
 │   ├── styles/base.css
 │   ├── js/store.js
 │   ├── js/bridge.js               # 在普通浏览器里自动切换为 mock
@@ -368,6 +370,7 @@ desktop-shell/
 │   ├── js/widgets.js              # 组件注册与挂载
 │   ├── js/hit-regions.js          # 自动上报点击区域
 │   ├── js/glass-regions.js        # 自动上报毛玻璃区域（底板和弹层）
+│   ├── js/scroll-hints.js         # 可滚动列表上下边缘的淡出提示
 │   ├── js/main.js                 # 页面入口
 │   └── widgets/
 │       ├── devpanel.js            # M3 骨架自检面板（调试用）
@@ -377,7 +380,8 @@ desktop-shell/
 │       ├── todos.js
 │       ├── stats.js
 │       ├── greeting.js
-│       ├── character.js           # 角色卡 + 外观面板
+│       ├── character.js           # 角色卡
+│       ├── appearance.js          # 外观面板（角色卡上的"外观"按钮通过 store 打开）
 │       ├── visualizer.js          # 音频律动 + 心形装饰条
 │       └── voice.js               # 点击头像播放语音（无界面）
 ├── Tests/DesktopShellTests/        # swift-testing 单元测试

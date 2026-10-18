@@ -71,18 +71,20 @@ let phaseOverride = null;
 
 function renderClock() {
   const now = new Date();
-  $('date-day').textContent = pad(now.getDate());
-  $('date-month').textContent = MONTHS_EN[now.getMonth()];
-  $('date-weekday').textContent = WEEKDAYS_EN[now.getDay()];
-  $('date-time').textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-  $('date-cn').textContent = `${now.getMonth() + 1}月${now.getDate()}日 ${WEEKDAYS_CN[now.getDay()]}`;
+  $('clock-day').textContent = pad(now.getDate());
+  $('clock-month').textContent = MONTHS_EN[now.getMonth()];
+  $('clock-weekday').textContent = WEEKDAYS_EN[now.getDay()];
+  $('clock-time').textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+  $('clock-date').textContent = `${now.getMonth() + 1}月${now.getDate()}日 ${WEEKDAYS_CN[now.getDay()]}`;
   $('menubar-clock').textContent = `${now.getMonth() + 1}月${now.getDate()}日 ${WEEKDAYS_CN[now.getDay()].replace('星期', '周')}  ${pad(now.getHours())}:${pad(now.getMinutes())}`;
   const phase = phaseOverride ?? phaseForHour(now.getHours());
   root.dataset.phase = phase;
   const hour = phaseOverride ? PHASE_HOUR[phaseOverride] : now.getHours();
   const greeting = config.greetings.filter(g => g.from <= hour).at(-1);
   $('greeting-title').textContent = greeting.title;
-  $('greeting-name').textContent = config.user.name;
+  // 没有 user.name 时只显示 title
+  $('greeting-name').textContent = config.user?.name ?? '';
+  $('greeting-sep').hidden = $('greeting-name').hidden = !config.user?.name;
   $('greeting-wish').textContent = greeting.wish;
   document.querySelectorAll('[data-phase]').forEach(b => { if (b.tagName === 'BUTTON') b.setAttribute('aria-pressed', String(b.dataset.phase === phase)); });
 }
@@ -91,7 +93,7 @@ function renderClock() {
 function renderAppearance() {
   $('avatar-img').src = avatars.find(a => a.id === ui.avatarId)?.url ?? avatars[0].url;
   const bg = backgrounds.find(b => b.id === ui.backgroundId);
-  for (const id of ['character-bg', 'launcher-bg']) $(id).style.backgroundImage = bg ? `url("${bg.url}")` : 'none';
+  for (const id of ['character-art', 'launcher-art']) $(id).style.backgroundImage = bg ? `url("${bg.url}")` : 'none';
   $('character-name').textContent = config.character.name;
   $('character-motto').textContent = config.character.motto ?? '';
   for (const [gridId, items, key] of [['avatar-grid', avatars, 'avatarId'], ['background-grid', backgrounds, 'backgroundId']]) {
@@ -99,7 +101,7 @@ function renderAppearance() {
     if (!grid.childElementCount) {
       for (const item of items) {
         const button = document.createElement('button');
-        button.type = 'button'; button.className = `thumb ${key === 'backgroundId' ? 'backgrounds-item' : ''}`;
+        button.type = 'button'; button.className = `thumb${key === 'backgroundId' ? ' background-thumb' : ''}`;
         button.setAttribute('role', 'radio'); button.dataset.id = item.id;
         button.innerHTML = `<img alt="" draggable="false" loading="lazy" src="${item.url}">`;
         button.addEventListener('click', () => { ui[key] = item.id; renderAppearance(); });
@@ -116,14 +118,14 @@ $('avatar').addEventListener('click', () => {
   setTimeout(() => button.classList.remove('playing'), 2400);
 });
 const setAppearanceOpen = open => {
-  $('appearance').classList.toggle('open', open);
+  $('appearance').hidden = !open;
   $('toggle-appearance').setAttribute('aria-pressed', String(open));
   reportGlass();
 };
 $('open-appearance').addEventListener('click', () => setAppearanceOpen(true));
 $('appearance-done').addEventListener('click', () => setAppearanceOpen(false));
 $('appearance-reset').addEventListener('click', () => { ui.avatarId = '1'; ui.backgroundId = null; renderAppearance(); });
-$('appearance').addEventListener('click', event => { if (event.target === $('appearance')) setAppearanceOpen(false); });
+$('appearance').addEventListener('click', event => { if (event.target === $('appearance')) setAppearanceOpen(false); });   // 点面板外面关闭
 
 // —— 系统状态 ——
 let cpu = 18.4;
@@ -258,7 +260,7 @@ document.querySelectorAll('.controls [data-phase]').forEach(b => b.addEventListe
 $('toggle-select').addEventListener('click', () => selectProject(state.selectedProject ? state.selectedProject : 'desktop-shell'));
 $('toggle-lowbat').addEventListener('click', () => {
   state.lowBattery = !state.lowBattery; press('toggle-lowbat', state.lowBattery);
-  root.toggleAttribute('data-low-battery', state.lowBattery);
+  $('stats-card').classList.toggle('low-battery', state.lowBattery);
   setPaused(state.lowBattery || $('toggle-paused').getAttribute('aria-pressed') === 'true'); renderStats();
 });
 function setPaused(paused) {
@@ -268,7 +270,7 @@ function setPaused(paused) {
 }
 $('toggle-paused').addEventListener('click', () => { const on = $('toggle-paused').getAttribute('aria-pressed') !== 'true'; press('toggle-paused', on); setPaused(on || state.lowBattery); });
 $('toggle-denied').addEventListener('click', () => { state.denied = !state.denied; press('toggle-denied', state.denied); renderTodos(); });
-$('toggle-appearance').addEventListener('click', () => setAppearanceOpen(!$('appearance').classList.contains('open')));
+$('toggle-appearance').addEventListener('click', () => setAppearanceOpen($('appearance').hidden));
 $('toggle-icons').addEventListener('click', () => { const hidden = $('icons').classList.toggle('hidden'); press('toggle-icons', !hidden); });
 $('toggle-actual').addEventListener('click', () => { const on = $('viewer').classList.toggle('actual'); press('toggle-actual', on); fit(); });
 document.addEventListener('contextmenu', event => { if (event.target.closest('#stage')) event.preventDefault(); });
@@ -297,7 +299,7 @@ function reportGlass() {
   const handler = window.webkit?.messageHandlers?.glass;
   if (!handler) return;
   requestAnimationFrame(() => {
-    const plates = [...document.querySelectorAll('#desktop .plate, .appearance.open .appearance-panel')];
+    const plates = [...document.querySelectorAll('#desktop .card, #desktop [data-glass]')];
     handler.postMessage(plates.map(el => {
       const r = el.getBoundingClientRect();
       return [r.x, r.y, r.width, r.height, parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0];
@@ -307,9 +309,9 @@ function reportGlass() {
 new ResizeObserver(reportGlass).observe(document.body);
 window.probe = {
   setGlass(on) { root.dataset.glass = on ? 'on' : 'off'; },
-  setFill(value) { root.style.setProperty('--plate-fill-opacity', String(value)); },
+  setFill(value) { root.style.setProperty('--card-fill-opacity', String(value)); },
   setPhase(phase) { phaseOverride = phase; renderClock(); },
-  toggleAppearance() { setAppearanceOpen(!$('appearance').classList.contains('open')); },
+  toggleAppearance() { setAppearanceOpen($('appearance').hidden); },
   setPaused(on) { press('toggle-paused', on); setPaused(on); },
 };
 

@@ -1,22 +1,22 @@
-/* DesktopShell 设计规范（M3.5 定稿候选）。
+/* DesktopShell 设计规范（M3.5 定稿，2026-10-18）。M4 原样复制到 web/styles/tokens.css。
    数值来源见 docs/design/parameters.md：颜色取自美化包 Ageo / prototype / Lano-Visualizer，
    并按壁纸亮度调整了底板，保证白字在头发等亮色区域上也看得清。
-   变量名尽量沿用 web/styles/tokens.css；新增的变量在注释里标明。 */
+   组件 CSS 和 base.css 只能引用这里的变量，不写死颜色和尺寸。 */
 :root {
   /* —— 基础色板 —— */
-  --color-night: rgb(27 32 56);            /* 新增：夜靛，底板的底色 */
-  --color-mist: rgb(184 182 210);          /* 新增：雾紫，次要文字 */
-  --color-sakura: rgb(250 192 207);        /* 新增：樱粉 = Ageo Color2 */
-  --color-rose: rgb(230 138 161);          /* 新增：玫瑰 = prototype ColorBG 的颜色 */
-  --color-ice: rgb(173 225 255);           /* 新增：冰蓝 = Lano-Visualizer Color */
-  --color-snow: rgb(255 255 255);          /* 新增：雪白 = Ageo Color1 */
+  --color-night: rgb(27 32 56);            /* 夜靛，底板的底色 */
+  --color-mist: rgb(184 182 210);          /* 雾紫 */
+  --color-sakura: rgb(250 192 207);        /* 樱粉 = Ageo Color2 */
+  --color-rose: rgb(230 138 161);          /* 玫瑰 = prototype ColorBG 的颜色 */
+  --color-ice: rgb(173 225 255);           /* 冰蓝 = Lano-Visualizer Color */
+  --color-snow: rgb(255 255 255);          /* 雪白 = Ageo Color1 */
 
   /* —— 文字 —— */
   --color-text: var(--color-snow);
   --color-text-muted: rgb(232 228 244 / 0.78);
   --color-text-faint: rgb(214 210 232 / 0.56);
   --shadow-text: 0 1px 2px rgb(14 16 32 / 0.55);
-  --shadow-text-wallpaper: 0 1px 2px rgb(14 16 32 / 0.7), 0 0 18px rgb(14 16 32 / 0.55); /* 新增：直接写在壁纸上的字 */
+  --shadow-text-wallpaper: 0 1px 2px rgb(14 16 32 / 0.7), 0 0 18px rgb(14 16 32 / 0.55); /* 直接写在壁纸上的字 */
 
   /* —— 强调色与状态 —— */
   --color-accent: var(--color-sakura);
@@ -29,24 +29,28 @@
   --color-danger: rgb(255 150 170);
   --color-focus-ring: var(--color-ice);
 
-  /* —— 底板（不用毛玻璃：半透明纯色，夜靛打底再叠一层玫瑰） —— */
+  /* —— 底板：底下垫原生毛玻璃，网页只画一层半透明底色（夜靛打底再叠玫瑰） —— */
   --color-card-bg: rgb(27 32 56 / 0.52);
-  --color-card-tint: rgb(230 138 161 / 0.20);   /* 新增：叠在底板上的玫瑰色，对应 prototype ColorBG */
+  --color-card-tint: rgb(230 138 161 / 0.20);   /* 叠在底色上的玫瑰色，对应 prototype ColorBG */
+  --card-fill-opacity: 1;                       /* 底色层的不透明度；应用里有毛玻璃时见下方 data-glass */
+  --card-art-opacity: 0.32;                     /* 角色卡、启动栏的背景图 */
   --color-card-bg-hover: rgb(230 138 161 / 0.30);
   --color-card-border: rgb(250 192 207 / 0.16);
-  --plate-fill-opacity: 1;                      /* 新增：底色层的不透明度，垫毛玻璃时调低 */
-  --color-panel-bg: rgb(22 26 46 / 0.9);
-  --color-overlay: rgb(10 12 26 / 0.45);
+  --color-row-bg: rgb(255 255 255 / 0.04);      /* 项目行、缩略图的底 */
+  --color-row-hover: rgb(255 255 255 / 0.05);   /* 待办行悬停 */
+  --color-input-bg: rgb(255 255 255 / 0.05);
+  --color-panel-bg: rgb(22 26 46 / 0.9);        /* 外观面板 */
+  --color-overlay: rgb(10 12 26 / 0.45);        /* 外观面板打开时压暗桌面 */
   --color-shadow: rgb(8 10 22 / 0.35);
-  --color-track: rgb(255 255 255 / 0.18);       /* 新增：进度条底轨，对应 prototype 的 alpha 100 */
+  --color-track: rgb(255 255 255 / 0.18);       /* 进度条底轨、滚动条，对应 prototype 的 alpha 100 */
   --color-debug: rgb(255 96 96 / 0.85);
+  --mask-solid: black;                          /* 遮罩只看透明度，颜色无意义 */
 
-  /* —— 字体 —— */
+  /* —— 字体（文件在 media/fonts/，见 fonts.css） —— */
   --font-sans: "Google Sans", -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
   --font-serif: "Source Han Serif SC", "Songti SC", serif;
-  --font-display: "Gobold", "Google Sans", sans-serif;   /* 新增：超大号日期数字 */
-  --font-label: "Porter", "Google Sans", sans-serif;     /* 新增：月份、时间、竖排星期 */
-  --font-script: "Emilea", cursive;                      /* 新增：签名 */
+  --font-display: "Gobold", "Google Sans", sans-serif;   /* 超大号日期数字 */
+  --font-label: "Porter", "Google Sans", sans-serif;     /* 月份、时间、竖排星期 */
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
   --text-xs: 11px;
   --text-sm: 12px;
@@ -55,19 +59,26 @@
   --text-xl: 20px;
   --text-2xl: 28px;
   --text-display: 236px;      /* Gobold 日期，原皮肤 250pt × 缩放 */
-  --text-month: 50px;         /* 新增：Porter 月份（9 个字母的 SEPTEMBER 也要放得下） */
-  --text-weekday: 15px;       /* 新增：Porter 竖排星期 */
-  --text-time: 21px;          /* 新增：Porter 时间 */
-  --text-greeting: 28px;      /* 新增：问候第一行，原皮肤 19.5pt */
-  --text-wish: 20px;          /* 新增：祝福语，原皮肤 15.6pt */
+  --text-month: 50px;         /* Porter 月份（9 个字母的 SEPTEMBER 也要放得下） */
+  --text-weekday: 15px;       /* Porter 竖排星期 */
+  --text-time: 21px;          /* Porter 时间 */
+  --text-greeting: 28px;      /* 问候第一行，原皮肤 19.5pt */
+  --text-wish: 20px;          /* 祝福语，原皮肤 15.6pt */
   --weight-regular: 400;
   --weight-medium: 500;
   --weight-bold: 700;
+  --leading-none: 1;
   --leading-tight: 1.2;
+  --leading-snug: 1.45;       /* 待办标题 */
   --leading-normal: 1.5;
-  --tracking-weekday: 9px;    /* 新增：原皮肤字间距 7 */
+  --leading-loose: 1.7;       /* 标签、空状态提示 */
+  --tracking-display: -4px;   /* 日期数字 */
+  --tracking-title: 1px;      /* 卡片标题、问候、时间 */
+  --tracking-name: 2px;       /* 角色名、外观面板标题 */
+  --tracking-weekday: 9px;    /* 竖排星期，原皮肤字间距 7 */
 
   /* —— 间距 —— */
+  --space-half: 2px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -77,42 +88,101 @@
   --space-8: 32px;
   --space-10: 40px;
 
-  /* —— 形状：原皮肤是圆角 1 的矩形，这里只留 2 的圆角，不加阴影 —— */
+  /* —— 形状：原皮肤是圆角 1 的矩形，这里只留 2 的圆角 —— */
   --radius-sm: 2px;
   --radius-md: 2px;
   --radius-lg: 2px;
   --radius-full: 9999px;
   --border-width: 1px;
-  --rule-width: 2px;          /* 新增：时间下面的细线，原皮肤 1.5 */
-  --bar-height: 3px;          /* 新增：进度条，原皮肤 3 */
+  --rule-width: 2px;          /* 时间下面的细线，原皮肤 1.5 */
+  --bar-height: 3px;          /* 进度条，原皮肤 3 */
+  --selected-bar-width: 3px;  /* 选中项目左边的竖条 */
+  --selected-ring-width: 2px; /* 外观面板里选中的缩略图 */
+  --check-size: 18px;         /* 待办勾选圈 */
+  --check-border-width: 1.5px;
+  --check-mark-size: 10px;
+  --icon-sm: 14px;            /* 按钮里的小图标 */
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
-  --shadow-card: none;
-  --shadow-icon: 0 2px 6px rgb(10 12 26 / 0.4);   /* 新增：启动栏图标 */
-  --shadow-raised: 0 18px 48px var(--color-shadow);
 
-  /* —— 布局（1792 × 1120 点屏幕，右侧 240 留给两列图标） —— */
+  /* —— 阴影和光晕（box-shadow / drop-shadow 的参数） —— */
+  --shadow-card: none;
+  --shadow-raised: 0 18px 48px var(--color-shadow);
+  --shadow-icon: 0 2px 6px rgb(10 12 26 / 0.4);          /* 启动栏图标 */
+  --shadow-avatar: 0 2px 6px rgb(10 12 26 / 0.45);       /* 头像组合图 */
+  --glow-voice: 0 0 14px var(--color-ice);               /* 播放语音时头像发光 */
+  --glow-related: 0 0 10px color-mix(in srgb, var(--color-highlight) 70%, transparent);  /* 相关应用 */
+  --glow-viz: 0 0 6px color-mix(in srgb, var(--color-ice) 55%, transparent);            /* 律动条 */
+
+  /* —— 布局：1792 × 1120 点屏幕，安全区域 1792 × 1003；左侧两列组件，右侧 240 留给两列图标 —— */
   --card-padding: var(--space-4);
   --card-gap: var(--space-3);
   --widget-gap: var(--space-4);
-  --column-width: 360px;      /* 新增：左侧两列的宽度 */
-  --column-gap: 16px;         /* 新增 */
-  --icon-area-width: 240px;   /* 新增：右侧留给访达图标 */
-  --app-icon-size: 48px;      /* 新增：启动栏图标（Swift 导出 128px PNG） */
-  --app-tile-width: 80px;     /* 新增 */
-  --scrollbar-width: 4px;     /* 新增 */
-  --scroll-fade: 28px;        /* 新增：列表上下还有内容时的淡出高度 */
-  --mask-solid: black;        /* 新增：遮罩只看透明度，颜色无意义 */
-  --safe-top: 0px;
+  --layout-inset: 32px;       /* 组件区离安全区域左边 */
+  --column-width: 360px;
+  --column-gap: 16px;
+  --column-1: var(--layout-inset);
+  --column-2: calc(var(--layout-inset) + var(--column-width) + var(--column-gap));
+  --icon-area-width: 240px;   /* 右侧留给访达图标（布局约定，组件不进这块） */
+  --safe-top: 0px;            /* 由 main.js 按 store.safeArea 覆盖 */
   --safe-right: 0px;
   --safe-bottom: 0px;
   --safe-left: 0px;
 
+  /* —— 各组件的位置（相对 #desktop，也就是安全区域的左上角） —— */
+  --clock-top: 10px;
+  --clock-height: 278px;
+  --greeting-top: 34px;       /* 第二列，右对齐 */
+  --character-top: 300px;
+  --character-height: 212px;
+  --stats-top: 528px;
+  --projects-top: 222px;
+  --projects-height: 252px;
+  --todos-top: 490px;         /* 下边停在启动栏上方 --column-gap 处 */
+  --launcher-bottom: 12px;    /* 横跨两列 */
+  --launcher-height: 110px;
+  --visualizer-center: calc(50% + 264px);   /* 心形中心的横坐标 */
+  --visualizer-bottom: 2px;
+  --visualizer-height: 178px;
+  --appearance-top: 120px;    /* 外观面板，左边和第二列对齐 */
+  --appearance-width: 760px;
+  --appearance-max-height: 760px;
+
+  /* —— 时钟内部（相对时钟组件左上角，照 Ageo / Time and Date） —— */
+  --clock-day-x: 30px;
+  --clock-day-y: -6px;
+  --clock-month-x: 112px;
+  --clock-month-y: 150px;
+  --clock-weekday-x: 4px;
+  --clock-weekday-y: 38px;
+  --clock-time-x: 114px;
+  --clock-time-y: 224px;
+  --clock-rule-x: 114px;
+  --clock-rule-y: 256px;
+  --clock-rule-width: 112px;
+  --clock-date-x: 240px;
+  --clock-date-y: 228px;
+
+  /* —— 组件内部尺寸 —— */
+  --avatar-width: 240px;      /* 头像组合图整张显示，图片本身 480 × 300（2 倍） */
+  --avatar-height: 150px;
+  --stat-label-width: 48px;
+  --spark-height: 26px;       /* CPU 历史折线 */
+  --spark-stroke: 1.5;        /* 折线粗细（SVG 单位） */
+  --app-icon-size: 48px;      /* 启动栏图标（Swift 导出 128px PNG） */
+  --app-tile-width: 80px;
+  --scrollbar-width: 4px;
+  --scroll-fade: 28px;        /* 列表上下还有内容时的淡出高度 */
+  --todo-row-padding: 7px;
+
   /* —— 律动条（Lano-Visualizer 原值） —— */
-  --viz-ornament-width: 640px; /* 新增：心形装饰条显示宽度（原图 2400 × 400） */
-  --viz-bar-width: 10px;       /* 新增 */
-  --viz-bar-gap: 3px;          /* 新增 */
-  --viz-bar-max: 120px;        /* 新增：原皮肤 134 */
+  --viz-ornament-width: 640px; /* 心形装饰条显示宽度（素材 1280 × 213，2 倍） */
+  --viz-bar-width: 10px;
+  --viz-bar-gap: 3px;
+  --viz-bar-max: 120px;        /* 原皮肤 134 */
+  --viz-bars-bottom: 31px;     /* 柱子底边离装饰条底边 */
+  --viz-bars-center-gap: 34px; /* 柱子离心形中心，给心形留位置 */
+  --viz-bar-rest: 0.02;        /* 静止时的高度比例 */
 
   /* —— 层级 —— */
   --z-widgets: 1;
@@ -123,17 +193,18 @@
   --duration-fast: 120ms;
   --duration-normal: 200ms;
   --duration-slow: 400ms;
+  --duration-voice-pulse: 1200ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 }
 
 /* 在应用里（底板下面垫着原生毛玻璃 NSVisualEffectView，材质 .hudWindow）时，网页底色只负责上色。
    2026-10-18 探针定稿：底色层 45%。在普通浏览器里开发时没有原生毛玻璃，不设 data-glass，底色按 100%。 */
 :root[data-glass="on"] {
-  --plate-fill-opacity: 0.45;
+  --card-fill-opacity: 0.45;
   --color-panel-bg: rgb(22 26 46 / 0.6);
 }
 
-/* 时段主题：只动底板和强调色的冷暖，保持克制。 */
+/* 时段主题（store.phase → <html data-phase>）：只动底板和强调色的冷暖，保持克制。白天用上面的默认值。 */
 :root[data-phase="morning"] {
   --color-card-bg: rgb(36 40 70 / 0.46);
   --color-card-tint: rgb(250 192 207 / 0.22);
