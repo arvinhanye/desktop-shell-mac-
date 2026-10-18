@@ -130,3 +130,13 @@ enum PageEvent {
         return event
     }
 }
+
+extension PageEvent {
+    static func systemStats(battery: BatteryStatus, cpu: Double, memory: MemoryUsage) -> [String: Any] {
+        ["event": "systemStats",
+         "battery": ["level": battery.level.map { $0 as Any } ?? NSNull(),
+                     "charging": battery.isCharging, "onBattery": battery.onBattery],
+         "cpu": cpu,
+         "memory": ["usedBytes": memory.usedBytes, "totalBytes": memory.totalBytes, "percent": memory.percent]]
+    }
+}

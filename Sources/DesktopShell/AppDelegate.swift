@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var screenManager: ScreenManager?
     private var backgroundPlayer: BackgroundPlayer?
     private var powerMonitor: PowerMonitor?
+    private var statsMonitor: SystemStatsMonitor?
     private var hitTestController: HitTestController?
     private var appState: AppState?
 
@@ -86,8 +87,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager.onWidgetWindowsChanged = { [weak hitTesting] windows in
             hitTesting?.updateWindows(windows)
         }
+        let stats = SystemStatsMonitor()
+        statsMonitor = stats
+        stats.onSample = { [weak manager] event in manager?.broadcast(event) }
         manager.start()
         monitor.start()
+        stats.start()
         hitTesting.start()
     }
 
@@ -98,6 +103,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hitTestController = nil
         appState?.onUiStateChanged = nil
         powerMonitor?.onPausedChanged = nil
+        statsMonitor?.onSample = nil
+        statsMonitor?.stop()
+        statsMonitor = nil
         powerMonitor?.stop()
         powerMonitor = nil
         screenManager?.stop()
