@@ -27,8 +27,8 @@ final class WidgetWindow: NSWindow {
     private(set) var hitRegions: [CGRect] = []
     var onHitRegionsChanged: (() -> Void)?
 
-    init(screen: NSScreen, paths: AppPaths) {
-        webContainer = WebContainer(paths: paths)
+    init(screen: NSScreen, appState: AppState) {
+        webContainer = WebContainer(appState: appState)
         super.init(
             contentRect: screen.frame,
             styleMask: .borderless,

@@ -27,6 +27,7 @@ struct AppConfig: Codable, Equatable {
         var path: String
         var tags: [String]?
         var apps: [String]?
+        var remindersList: String? = nil
     }
 
     struct App: Codable, Equatable {

@@ -80,6 +80,29 @@ struct ConfigStoreTests {
         #expect(try Data(contentsOf: file) == Data(json.utf8))
     }
 
+    @Test("提醒列表字段可选且读取后保留，不重写旧配置")
+    func remindersListCompatibility() throws {
+        let fixture = try TemporaryTestDirectory()
+        defer { fixture.cleanup() }
+        for list: String? in [nil, "", "  ", "项目提醒"] {
+            var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(AppConfig.example)) as? [String: Any])
+            var projects = try #require(json["projects"] as? [[String: Any]])
+            projects[0]["remindersList"] = list
+            json["projects"] = projects
+            let data = try JSONSerialization.data(withJSONObject: json)
+            let file = fixture.root.appendingPathComponent("config.json")
+            try data.write(to: file)
+            let loaded = try ConfigStore(supportDir: fixture.root).load()
+            let encoded = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(loaded)) as? [String: Any])
+            let decodedProjects = try #require(encoded["projects"] as? [[String: Any]])
+            #expect(decodedProjects[0]["remindersList"] as? String == list)
+            #expect(try Data(contentsOf: file) == data)
+        }
+        let example = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(AppConfig.example)) as? [String: Any])
+        let projects = try #require(example["projects"] as? [[String: Any]])
+        #expect(projects[0]["remindersList"] == nil)
+    }
+
     @Test("目录占用 config.json 时抛错，不替换目录")
     func preservesNonFileConfig() throws {
         let fixture = try TemporaryTestDirectory()

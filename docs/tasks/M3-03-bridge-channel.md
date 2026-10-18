@@ -1,6 +1,6 @@
 # M3-03: Bridge 回复通道、来源校验与 getConfig
 
-- **状态**：todo
+- **状态**：review
 - **里程碑**：M3
 - **依赖**：M3-02（必须已合并到 `main`，手动验证要用它的自检面板）
 - **分支**：task/M3-03
@@ -176,9 +176,20 @@ enum MediaLibrary {
 
 ## 交付记录
 
-- **改动摘要**：
+- **改动摘要**：从 `main` 的 `0c20fc1` 建立 `task/M3-03`；完成带回复通道、来源优先校验、严格请求解析、公开配置投影、素材扫描和共享 AppState 接线。未实现后续里程碑动作，未修改网页或指定保持原样的模块。
 - **自测结果**：
-- **疑问 / 偏离**：
+  - **RED → GREEN** 旧配置模型读取 `remindersList` 的断言先失败；旧原生 Bridge 未返回 getConfig 数据。旧导航规则的原生 srcdoc 检查在 load 前超时；限定例外测试先对原规则产生 1 个断言失败，修正后通过。记录在 `/tmp/ds-m3-03-validation/`。
+  - **PASS** `scripts/test.sh` **93/93**（11 suites）、`scripts/test-web.sh` **138/138**（0 fail / skip）；`swift build` 零 warning/error。首次沙盒测试因正常编译缓存写入受限未执行到断言，按权限流程重跑后通过，未修改工具链设置。
+  - **PASS** 临时原生 WKWebView 检查 **39/39**：真实公开配置回复、参数错误、延期动作、点击区域裁剪和清空、素材重扫、多页面共用 AppState、外观持久化、移除处理器、弱引用释放、目标释放后的 failed 回复、每条拦截消息恰好一次回复、错误 host 主框架及 srcdoc 子框架返回 untrusted。实际自检面板按钮的 7 条请求全部完成：第 1 条及第 7 条 ✓，第 2–6 条按当前里程碑返回 unknown-action。此前隔离执行的 1 项 SKIP 已由完整检查覆盖，不作为最终通过依据。
+  - **PASS** `scripts/bundle.sh --open` release 编译、固定证书签名和严格签名校验通过；指定要求仍绑定证书 `7d0b2eb5…62ce`。用户在本机允许钥匙串访问后，正式 `.app` 启动。应用 PID 8661 在 `2026-10-17 23:32:51` 输出 `getConfig avatars=30 backgrounds=63`；日志为 `/tmp/ds-m3-03-validation/app-getConfig.log`，应用为 `/Users/arvinhan/Desktop/desktop-shell/build/DesktopShell.app`。
+  - **PASS** handler 注册/来源校验 grep 命中；旧注册方式、删除/移动 API 和 EventKit 检查无输出；共 13 个变更文件均在允许范围，网页、AGENTS.md、任务需求区及审查区未变，`git diff --check` 通过。
+  - **PASS** 内部只读复核未发现 Critical / Important / Minor 代码问题；不替代 Claude Code 的正式审查与合并。
+- **用户手动验证待办**：
+  - 已启动的正式应用里确认 `native`、`ready = true`、爱弥斯、7 条问候、头像 30、背景 63，UI 三字段与 `ui.json` 一致；提醒事项为 unknown / 0 条。
+  - 点项目、应用按钮与“发送非法请求”，核对任务验收区的预期结果，尤其第 7 条 `✓ untrusted`。
+  - 面板可点、空白处可选中访达图标；切换“隐藏桌面文件”并重启，确认状态保持且其他 UI 字段未丢。临时原生测试不等同于这些实际 GUI 验收。
+- **疑问 / 偏离**：用户已明确允许限定导航例外。`WebNavigationPolicy` 仅在目标 URL 精确等于 `about:srcdoc`、目标明确为子框架、来源 scheme/host 精确为 `shell`/`app` 时放行；现有 shell 导航规则及其他 URL / 主框架限制保持原样，Bridge 仍对全部子框架回复 untrusted。网页文件未变，无未决接口问题。
+- **提交 / 发布**：交付保留在 `task/M3-03`，正式审查与合并由 Claude Code 完成；未推送远端。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 
