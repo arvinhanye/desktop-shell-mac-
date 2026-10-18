@@ -172,5 +172,16 @@ enum PageEvent {
 
 ## 审查记录
 
-- **结论**：
+- **结论**：**代码审查通过，待用户手动验证**（见"用户手动验证"）。用户确认后合并到 `main`。
+- **复验结果**（Claude Code，2026-10-18，在 `cfc2d80` 的独立检出上执行）：
+  - [x] `swift build` 零警告零错误
+  - [x] `scripts/test.sh`：116 项全部通过（14 个 suite）；`scripts/test-web.sh`：138 项全部通过
+  - [x] 改动文件都在允许范围内（`Bridge.swift` 没有改动，外观推送通过 `AppState.onUiStateChanged` 完成）；`web/`、`PowerPolicy`、`HitTesting`、`HitTestController` 都没改；`git diff --check` 通过
+  - [x] `WebContainer.swift` 里有 `callAsyncJavaScript`；`Sources/` 里没有 `evaluateJavaScript`；`PowerMonitor` 和 `OcclusionDebouncer` 里没有 `Timer`
+  - [x] 在主目录（`task/M3-05` = `cfc2d80`）重新 `scripts/bundle.sh --open`：启动后 5 秒内 `DesktopShell power:` 只有一行 `paused=false reasons=[]`，没有 `occluded`，也没有推送失败的日志
 - **意见**：
+  - 推送用 `arguments` 传参，不拼接 JS；每次页面加载有一个代号，旧页面的异步回调和失败日志互不干扰，失败日志每次加载最多一条且不含内容。
+  - **页面就绪的判断**：Codex 实测发现 `shell://` 页面的 `didFinish` 可能早于 ES module 初始化，这时推送的事件会丢。改为在 `didFinish` 后执行 `await import('/js/main.js')`——它会等入口模块（包括顶层 `await`）执行完，不会重复执行，也不需要新的 Bridge 动作。代价是首批推送要等 `main.js` 整个跑完（组件挂载完、`getConfig` 返回之后）。**写进 M4 的要求**：组件的 `mount` 不要等待耗时操作（例如图片加载完成），否则会推迟首批推送（安全区域、暂停状态等）。
+  - `PageEventCache` 只缓存四类事件，重推顺序固定为 `safeArea → paused → uiState → systemStats → todos`；安全区域没变化时不重复推送。
+  - `OcclusionDebouncer` 和任务单的状态表一致：重复遮挡不重新计时，恢复立即生效，取消后用代号保证旧任务即使被执行也没有效果；`PowerMonitor.stop()` 时取消并重置。暂停通知只在第一次确定和暂停与否真正变化时发出。
+  - "重新加载"在配置文件不存在时保留当前配置（不会生成示例覆盖），读取失败只记日志；语音开关写盘失败时保留本次选择。
