@@ -123,5 +123,16 @@ export function installKeyboardFocus({ doc = document, win = window, send })
 
 ## 审查记录
 
-- **结论**：
+- **结论**：**代码审查通过，待用户手动验证**（见"用户手动验证"，需要开着"文本编辑"对照）。用户确认后合并到 `main`。
+- **复验结果**（Claude Code，2026-10-18，在 `be233f2` 的独立检出上执行）：
+  - [x] `swift build` 零警告零错误（测试编译也没有警告）
+  - [x] `scripts/test.sh`：152 项全部通过（17 个 suite）；`scripts/test-web.sh`：149 项全部通过
+  - [x] 只改了允许的 10 个文件；`HitTesting`、`HitTestController`、`ScreenManager`、`PowerMonitor` 和组件界面都没改；`git diff --check` 通过
+  - [x] `nonactivatingPanel`、`hidesOnDeactivate = false` 都有输出；`NSApp.activate` / `activate(ignoringOtherApps` 没有输出
+  - [x] 内置浏览器（mock）：聚焦自检面板的输入框后 `activeElement` 是输入框，按 Esc 后回到 `BODY`；组字中（`isComposing: true`）按 Esc 不失焦；聚焦勾选框不发请求；全程没有 warn / error
+  - [x] 在主目录（`task/M3-08` = `be233f2`）重新 `scripts/bundle.sh --open`，启动日志正常
 - **意见**：
+  - `WidgetWindow` 改为 `NSPanel`，`.nonactivatingPanel` 在初始化时就给出；`canBecomeKey` 只看 `acceptsKeyboard`，`canBecomeMain` 为 `false`；用重写 `resignKey()` 在失去 key 时清除资格，和任务单要求的 `didResignKey` 效果相同。
+  - **超出任务单但合理的补充**：重新加载页面前先清除键盘资格，如果仍是 key window 就 `NSApp.deactivate()`。Codex 实测在输入框有焦点时重新加载，旧页面销毁不会发 `blurInput`，窗口会一直占着键盘。改在允许修改的 `DesktopWindow.swift` 里，接受。
+  - 网页模块用 `isContentEditable` 判断可编辑区域（比只看 `contenteditable="true"` 属性更完整，也覆盖可编辑区域里的子元素）；`input` 没写 `type` 时按 `text` 处理；`send` 失败被吞掉，不会出现未处理的 Promise。
+  - **写进 M4 的要求**：组件里的文本输入框不需要自己处理焦点，`keyboard-focus.js` 已经统一处理；不要在组件里另外调用 `focusInput` / `blurInput`。
