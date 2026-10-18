@@ -22,6 +22,18 @@ export function toRegions(rects, viewport) {
   return regions;
 }
 
+export function affectsHitRegions(records, selector = '.card, [data-hit]') {
+  const containsRegion = node => node.nodeType === 1
+    && (node.matches(selector) || node.querySelector(selector) !== null);
+  return records.some(record => {
+    if (record.type === 'attributes') return containsRegion(record.target);
+    if (record.type === 'childList') {
+      return [...record.addedNodes, ...record.removedNodes].some(containsRegion);
+    }
+    return false;
+  });
+}
+
 export function installHitRegions({ send, root = document, win = window }) {
   let pending = false;
   let last = Object.freeze([]);
@@ -56,7 +68,11 @@ export function installHitRegions({ send, root = document, win = window }) {
     });
   }
   collect();
-  new win.MutationObserver(schedule).observe(root, {
+  new win.MutationObserver(records => {
+    // Decorative descendants (e.g. spectrum bars) do not change the hit rectangle.
+    // If their content changes the card's size, ResizeObserver schedules that update.
+    if (affectsHitRegions(records)) schedule();
+  }).observe(root, {
     subtree: true, childList: true, attributes: true,
     attributeFilter: ['class', 'style', 'hidden', 'data-hit'],
   });

@@ -175,7 +175,7 @@ export default {
 
     let audioCount = 0;
     dispose.push(bridge.subscribeEvents(name => {
-      if (name === 'audioSpectrum') { audioCount++; return; }
+      if (name === 'audioSpectrum') { audioCount++; scheduleDiagnostics(); return; }
       eventHistory.unshift(`${name} · ${new Date().toLocaleTimeString()}`); eventHistory.splice(6);
       events.replaceChildren(...eventHistory.map(value => node('li', value)));
     }));
@@ -218,18 +218,22 @@ export default {
       const age = sample ? Math.max(0, at - sample.at) : Infinity;
       const decay = age <= 200 ? 1 : Math.max(0, 1 - (age - 200) / 200);
       drawBars(sample ? sample.bands.map(value => value * decay) : []);
-      drawDiagnostics();
-      animation = win.requestAnimationFrame(frame);
+      if (decay > 0) animation = win.requestAnimationFrame(frame);
     }
     function updateAnimation() {
-      if (animation !== null) { win.cancelAnimationFrame(animation); animation = null; }
-      if (store.get('paused') || doc.hidden) drawBars([]);
-      else animation = win.requestAnimationFrame(frame);
+      if (destroyed) return;
+      const sample = store.get('audioSpectrum');
+      // Stay idle until fresh data arrives; resuming must not replay an expired sample.
+      if (store.get('paused') || doc.hidden || !sample || win.performance.now() - sample.at >= 400) {
+        if (animation !== null) { win.cancelAnimationFrame(animation); animation = null; }
+        drawBars([]);
+      } else if (animation === null) animation = win.requestAnimationFrame(frame);
       scheduleDiagnostics();
     }
     subscribe('paused', value => {
       text(pausedLine, `暂停 paused：${value}`); pausedLine.classList.toggle('devpanel-warning', value); updateAnimation();
     });
+    subscribe('audioSpectrum', updateAnimation);
     const diagnosticsObserver = new win.MutationObserver(records => {
       if (records.some(record => !record.target.closest?.('.devpanel-spectrum, .hit-overlay'))) scheduleDiagnostics();
     });

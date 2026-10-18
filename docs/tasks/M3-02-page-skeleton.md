@@ -1,6 +1,6 @@
 # M3-02: 页面骨架（tokens、交互基线、组件注册、点击区域上报、自检面板）
 
-- **状态**：changes-requested
+- **状态**：review
 - **里程碑**：M3
 - **依赖**：M3-01（必须已合并到 `main`）
 - **分支**：task/M3-02
@@ -378,6 +378,26 @@ export function installHitRegions({ send, root = document, win = window })
   - 用户于本轮明确回复“允许补事件观察接口和测试”，因此 `bridge.js` / `bridge.test.mjs` 除指定日志外增加上述只传事件名的观察接口及 3 项测试；任务需求区保持原文。事件记录含重复收到的事件，即使对应 store 值未变化；非字符串事件名记为 `?`，不代表该事件通过数据校验。
   - 临时 HTTP 测试首次监听端口受沙箱限制，按权限流程重跑通过；临时原生程序首次编译的 MainActor 入口错误已修正后重跑通过。两者均非产品失败，未降低检查条件。
   - 独立只读复核发现的两项问题（CSS 可见性缓存、事件与状态混淆）均已建立失败测试并修正；没有遗留实现问题。Safari/Finder 手动门禁保留，未计作通过。
+
+### 第一轮审查修订（Codex，2026-10-17）
+
+- **范围**：继续现有 `task/M3-02`，仅修改 `web/js/hit-regions.js`、`web/widgets/devpanel.js`、`Tests/web/hit-regions.test.mjs` 和本任务的状态/交付记录。保留需求、审查记录、token 数值及全部 Swift 实现。
+- **修正**：
+  - 导出 `affectsHitRegions(records, selector)`，先按目标或增删子树是否包含区域元素过滤 MutationObserver 记录；律动条 transform、普通文字和装饰节点不再触发收集。区域自身/祖先变化、区域增删仍重算；ResizeObserver、字体、load、transitionend、animationend、resize、显式 schedule 保持原有行为。
+  - 自检律动改为由新频谱唤醒，最后样本满 400ms 后绘制零值并停止续帧；无样本、暂停、页面隐藏及过期样本恢复时保持空闲。诊断只从 `scheduleDiagnostics` 绘制，音频事件累计也合并调度，不再随律动每帧刷新。
+- **RED → GREEN**：
+  - 点击区域新增 4 项测试。修正前装饰变化确实排入额外 RAF（期望 0，实际 1）；修正后连续 60 轮装饰变化不排帧、不 collect，祖先变化和区域尺寸通知仍生效。纯函数覆盖区域自身、内部、祖先、增删区域/外壳、文字/普通节点及自定义 selector。
+  - 临时 `/tmp/ds-m3-02-review/devpanel.test.mjs` 直接挂载真实 devpanel、使用真实 store，只替代 DOM 和帧时钟。修正前 4 FAIL / 1 PASS，修正后 **5 PASS / 0 FAIL**：无数据空闲、400ms 衰减停帧与重新唤醒、暂停/隐藏、过期样本恢复、累计事件合并。为遵守允许修改的文件清单，该验证文件留在临时目录，未新增仓库测试文件。
+- **最终验收**：
+  - **PASS** `scripts/test-web.sh`：**138/138**，0 FAIL、0 SKIP。
+  - **PASS** `scripts/test.sh`：**76/76**，9 suites。
+  - **PASS** Chrome 实页性能：临时本机代理仅在响应 HTML 中加观测脚本，复用实际页面模块；使用与验收代码相同的 RAF 和 `.card, [data-hit]` 查询计数。页面采样起止均可见；有声采样 2.002 秒，点击区域 **0 次/秒**（RAF 请求 118 次/秒，含律动和诊断）；静音稳定后采样 2.419 秒，**RAF 0 次/秒、点击区域 0 次/秒**，满足两个阈值。12 条全部归零，重新勾选声音后恢复非零，暂停立即归零。
+  - **PASS** 未加探针的原页面：mock / ready、角色和素材数量、安全区域正常；静音时仍可显示点击区域框、安全区域框并切换夜晚主题；提醒勾选、新增至 6 条、denied 清空、新增返回 failed、恢复 granted 均通过；非法请求前 6 条全部符合预期，子框架项按要求跳过；控制台 error 为空。
+  - **PASS** 三项 grep 检查无输出，HTML/token 与任务代码块逐字一致，`git diff --check` 通过；七项 HTTP 验收为 200 / JS MIME 正确 / 200 / 404 / 404 / 206（`bytes 0-99/14515867`）/ 405。
+  - **PASS** `scripts/bundle.sh`：release 构建、固定证书签名、designated requirement 验证通过，产物为 `build/DesktopShell.app`。本轮不启动正式应用、不写入真实提醒事项。
+- **环境记录**：首次 Swift 验证被沙箱阻止写模块缓存，签名身份读取和本机 HTTP 访问也受限；按权限流程重跑后均通过。签名阶段等待系统钥匙串交互，用户确认已在本机允许后成功，未切换 ad-hoc 或调整签名规则。测试桩曾错误地让 `querySelector` 返回 false，已按真实 DOM 的 null 语义修正并重跑。
+- **仍待手动验收**：Safari 目测、真实文字/图片拖拽，以及正式 `.app` 中 Finder 点击穿透、框选、右键和隐藏桌面文件菜单；本轮浏览器及临时测试不替代这些检查。
+- **复验资料**：临时测试、日志和帧率探针位于 `/tmp/ds-m3-02-review/`，静音截图为 `/tmp/ds-m3-02-review/silent-performance.png`；探针未进入 `.app` 或 Git。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 

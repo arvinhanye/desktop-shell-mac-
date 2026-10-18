@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { toRegions, installHitRegions } from '../../web/js/hit-regions.js';
+import { toRegions, installHitRegions, affectsHitRegions } from '../../web/js/hit-regions.js';
 
 const viewport = { width: 100, height: 80 };
 test('hit regions: round outwards then clip on all four viewport edges', () => {
@@ -42,11 +42,11 @@ function environment() {
   const frames = [];
   const events = new Map();
   const elements = [];
-  let resized, mutated;
+  let resized, mutated, collections = 0;
   const observed = new Set();
   const root = {
     documentElement: {}, fonts: { ready: Promise.resolve() },
-    querySelectorAll: () => elements,
+    querySelectorAll: () => { collections++; return elements; },
     addEventListener: (name, fn) => events.set(name, fn),
   };
   const win = {
@@ -58,11 +58,15 @@ function environment() {
     MutationObserver: class { constructor(fn) { mutated = fn; } observe() {} },
   };
   const element = (x, attributes = {}) => ({
+    nodeType: 1,
+    matches: selector => selector === '.card, [data-hit]',
+    querySelector: () => null,
     getAttribute: name => attributes[name] ?? null,
     getBoundingClientRect: () => ({ x, y: 2, width: 3, height: 4 }),
   });
   return { root, win, elements, events, frames, observed, element,
-    resize: () => resized(), mutate: () => mutated([]), flush: () => frames.splice(0).forEach(fn => fn()) };
+    get collections() { return collections; },
+    resize: () => resized(), mutate: records => mutated(records), flush: () => frames.splice(0).forEach(fn => fn()) };
 }
 
 test('hit regions: observers coalesce per frame, recollect elements and suppress unchanged sends', async () => {
@@ -84,8 +88,9 @@ test('hit regions: observers coalesce per frame, recollect elements and suppress
   for (const name of ['transitionend', 'animationend', 'load']) env.events.get(name)();
   env.flush();
   assert.equal(calls.length, 1);
-  env.elements.splice(0, 1, env.element(30));
-  env.mutate(); env.flush();
+  const replacement = env.element(30);
+  env.elements.splice(0, 1, replacement);
+  env.mutate([{ type: 'childList', addedNodes: [replacement], removedNodes: [visible] }]); env.flush();
   assert.deepEqual(hit.last, [[30, 2, 3, 4]]);
   assert.ok(!env.observed.has(visible));
 });
@@ -115,4 +120,72 @@ test('hit regions: CSS-only visibility changes are rechecked on transitions, res
   assert.ok(env.observed.has(card));
   card.visibility = 'hidden'; hit.schedule(); env.flush();
   assert.deepEqual(calls, [[[10, 2, 3, 4]], [], [[10, 2, 3, 4]], []]);
+});
+
+const mutationElement = ({ matches = false, contains = false } = {}) => ({
+  nodeType: 1, matches: () => matches, querySelector: () => contains ? {} : null,
+});
+
+test('hit regions: only region elements and their ancestors invalidate attribute geometry', () => {
+  for (const [target, attributeName, expected] of [
+    [mutationElement({ matches: true }), 'style', true],
+    [mutationElement(), 'style', false],
+    [mutationElement({ contains: true }), 'class', true],
+    [mutationElement({ matches: true }), 'hidden', true],
+    [mutationElement({ matches: true }), 'data-hit', true],
+  ]) {
+    assert.equal(affectsHitRegions([{ type: 'attributes', target, attributeName }]), expected);
+  }
+});
+
+test('hit regions: additions and removals require a region or a subtree containing one', () => {
+  for (const [changed, expected] of [
+    [mutationElement({ matches: true }), true],
+    [mutationElement({ contains: true }), true],
+    [mutationElement(), false],
+    [{ nodeType: 3 }, false],
+    [{ nodeType: 8 }, false],
+  ]) {
+    for (const key of ['addedNodes', 'removedNodes']) {
+      const record = { type: 'childList', target: mutationElement({ matches: true }), addedNodes: [], removedNodes: [] };
+      record[key] = [changed];
+      assert.equal(affectsHitRegions([record]), expected);
+    }
+  }
+  assert.equal(affectsHitRegions([]), false);
+  assert.equal(affectsHitRegions([{ type: 'characterData', target: { nodeType: 3 } }]), false);
+});
+
+test('hit regions: custom selectors apply to both the changed node and its descendants', () => {
+  for (const method of ['matches', 'querySelector']) {
+    const target = mutationElement();
+    target[method] = selector => method === 'matches'
+      ? selector === '[data-interactive]'
+      : selector === '[data-interactive]' ? mutationElement() : null;
+    assert.equal(affectsHitRegions([{ type: 'attributes', target }], '[data-interactive]'), true);
+    assert.equal(affectsHitRegions([{ type: 'attributes', target }]), false);
+  }
+});
+
+test('hit regions: decorative mutations do not schedule frames or collect, but real changes still do', async () => {
+  const env = environment();
+  const card = env.element(10);
+  env.elements.push(card);
+  const hit = installHitRegions({ send: () => {}, root: env.root, win: env.win });
+  await Promise.resolve(); env.flush();
+  const collections = env.collections;
+  for (let i = 0; i < 60; i++) {
+    env.mutate([{ type: 'attributes', attributeName: 'style', target: mutationElement() }]);
+    env.mutate([{ type: 'childList', target: card, addedNodes: [{ nodeType: 3 }], removedNodes: [mutationElement()] }]);
+    assert.equal(env.frames.length, 0);
+    env.flush();
+  }
+  assert.equal(env.collections, collections);
+  card.visibility = 'hidden';
+  env.mutate([{ type: 'attributes', attributeName: 'class', target: mutationElement({ contains: true }) }]);
+  assert.equal(env.frames.length, 1); env.flush();
+  assert.deepEqual(hit.last, []);
+  card.visibility = 'visible';
+  env.resize(); env.flush();
+  assert.deepEqual(hit.last, [[10, 2, 3, 4]]);
 });
