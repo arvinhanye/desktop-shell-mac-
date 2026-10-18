@@ -125,5 +125,16 @@ enum UiStateUpdate {
 
 ## 审查记录
 
-- **结论**：
+- **结论**：**代码审查通过，待用户手动验证**（见"用户手动验证"）。用户确认、并核对对应的 `ok` 日志后合并到 `main`。
+- **复验结果**（Claude Code，2026-10-18，在 `ef19d3e` 的独立检出上执行）：
+  - [x] `swift build` 零警告零错误
+  - [x] `scripts/test.sh`：102 项全部通过（12 个 suite）；`scripts/test-web.sh`：138 项全部通过
+  - [x] `git diff --name-only main...task/M3-04` 只有允许的 7 个文件；`git diff --check` 通过
+  - [x] `Process(` / `NSTask` / `NSAppleScript` / `osascript` / `/bin/sh` / `/bin/zsh`、`removeItem|moveItem|trashItem`、`EventKit` 都没有输出
+  - [x] 在主目录（`task/M3-04` = `ef19d3e`，工作区干净）重新 `scripts/bundle.sh --open`：日志出现 `getConfig avatars=30 backgrounds=63`（Codex 启动的那份 `.app` 比提交早两分钟打包，为确保验证的是提交内容，重新打包）
 - **意见**：
+  - 四个动作的解析都是"先校验参数集合完全一致，再校验 id 格式"，`saveUiState` 用三态补丁（缺失 / `null` / 字符串），两个都缺失时拒绝。路径和 bundle id 只从配置里查，网页传不进来。
+  - `openProjectWith` 只要求应用在 `config.apps` 里，不受项目 `apps`（只用于高亮）限制，符合规范；两个异步打开动作在系统回调里回到主线程再回复。
+  - `updateAppearance` 先扫描素材、校验，再写内存和文件，保存失败时恢复修改前的状态并回复 `failed`；回复始终带三个字段，空值是 `null`。
+  - `ProjectPath.resolve` 只接受 `~`、`~/…` 和绝对路径，`~user/…`、相对路径、空字符串都返回 `nil`。
+  - 小偏离（接受）：`saveUiState` 的成功日志只写 `saveUiState ok`，没有像任务单示例那样带上 id。头像和背景 id 是素材文件名，不算用户内容，写不写都可以，不要求修改。
