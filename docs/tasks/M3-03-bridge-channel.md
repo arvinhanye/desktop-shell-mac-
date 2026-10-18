@@ -1,6 +1,6 @@
 # M3-03: Bridge 回复通道、来源校验与 getConfig
 
-- **状态**：review
+- **状态**：done
 - **里程碑**：M3
 - **依赖**：M3-02（必须已合并到 `main`，手动验证要用它的自检面板）
 - **分支**：task/M3-03
@@ -195,7 +195,8 @@ enum MediaLibrary {
 
 ## 审查记录
 
-- **结论**：**代码审查通过，待用户手动验证**（见"用户手动验证"）。用户确认后合并到 `main`。
+- **结论**：**通过**，已合并到 `main`。用户 2026-10-18 手动验证全部正常：面板显示 `native`、`ready = true`、爱弥斯、7 条问候、头像 30、背景 63，外观三字段和 `ui.json` 一致；项目和应用按钮返回 `unknown-action`；非法请求第 1 条和第 7 条（子框架 `untrusted`）✓、第 2–6 条 `unknown-action`；提醒事项 `unknown` / 0 条；点击穿透正常；"隐藏桌面文件"重启后保持。
+- **验证中发现（预期，不属于本任务）**：自检面板的输入框在显示和隐藏两种状态下都打不了字。WidgetWindow 是无边框窗口，默认不能成为 key window；`focusInput` / `blurInput` 按计划等"键盘焦点"探针之后再做（见 `AGENTS.md` 技术探针）。
 - **复验结果**（Claude Code，2026-10-18，在 `a8eb045` 的独立检出上执行）：
   - [x] `swift build` 零警告零错误
   - [x] `scripts/test.sh`：93 项全部通过（11 个 suite）；`scripts/test-web.sh`：138 项全部通过
