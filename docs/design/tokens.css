@@ -1,0 +1,138 @@
+/* DesktopShell 设计规范（M3.5 定稿候选）。
+   数值来源见 docs/design/parameters.md：颜色取自美化包 Ageo / prototype / Lano-Visualizer，
+   并按壁纸亮度调整了底板，保证白字在头发等亮色区域上也看得清。
+   变量名尽量沿用 web/styles/tokens.css；新增的变量在注释里标明。 */
+:root {
+  /* —— 基础色板 —— */
+  --color-night: rgb(27 32 56);            /* 新增：夜靛，底板的底色 */
+  --color-mist: rgb(184 182 210);          /* 新增：雾紫，次要文字 */
+  --color-sakura: rgb(250 192 207);        /* 新增：樱粉 = Ageo Color2 */
+  --color-rose: rgb(230 138 161);          /* 新增：玫瑰 = prototype ColorBG 的颜色 */
+  --color-ice: rgb(173 225 255);           /* 新增：冰蓝 = Lano-Visualizer Color */
+  --color-snow: rgb(255 255 255);          /* 新增：雪白 = Ageo Color1 */
+
+  /* —— 文字 —— */
+  --color-text: var(--color-snow);
+  --color-text-muted: rgb(232 228 244 / 0.78);
+  --color-text-faint: rgb(214 210 232 / 0.56);
+  --shadow-text: 0 1px 2px rgb(14 16 32 / 0.55);
+  --shadow-text-wallpaper: 0 1px 2px rgb(14 16 32 / 0.7), 0 0 18px rgb(14 16 32 / 0.55); /* 新增：直接写在壁纸上的字 */
+
+  /* —— 强调色与状态 —— */
+  --color-accent: var(--color-sakura);
+  --color-accent-contrast: rgb(52 24 40);
+  --color-selected-bg: rgb(230 138 161 / 0.24);
+  --color-selected-border: var(--color-sakura);
+  --color-highlight: var(--color-ice);
+  --color-success: rgb(158 226 196);
+  --color-warning: rgb(246 205 138);
+  --color-danger: rgb(255 150 170);
+  --color-focus-ring: var(--color-ice);
+
+  /* —— 底板（不用毛玻璃：半透明纯色，夜靛打底再叠一层玫瑰） —— */
+  --color-card-bg: rgb(27 32 56 / 0.52);
+  --color-card-tint: rgb(230 138 161 / 0.20);   /* 新增：叠在底板上的玫瑰色，对应 prototype ColorBG */
+  --color-card-bg-hover: rgb(230 138 161 / 0.30);
+  --color-card-border: rgb(250 192 207 / 0.16);
+  --color-panel-bg: rgb(22 26 46 / 0.9);
+  --color-overlay: rgb(10 12 26 / 0.45);
+  --color-shadow: rgb(8 10 22 / 0.35);
+  --color-track: rgb(255 255 255 / 0.18);       /* 新增：进度条底轨，对应 prototype 的 alpha 100 */
+  --color-debug: rgb(255 96 96 / 0.85);
+
+  /* —— 字体 —— */
+  --font-sans: "Google Sans", -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  --font-serif: "Source Han Serif SC", "Songti SC", serif;
+  --font-display: "Gobold", "Google Sans", sans-serif;   /* 新增：超大号日期数字 */
+  --font-label: "Porter", "Google Sans", sans-serif;     /* 新增：月份、时间、竖排星期 */
+  --font-script: "Emilea", cursive;                      /* 新增：签名 */
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+  --text-display: 236px;      /* Gobold 日期，原皮肤 250pt × 缩放 */
+  --text-month: 50px;         /* 新增：Porter 月份（9 个字母的 SEPTEMBER 也要放得下） */
+  --text-weekday: 15px;       /* 新增：Porter 竖排星期 */
+  --text-time: 21px;          /* 新增：Porter 时间 */
+  --text-greeting: 28px;      /* 新增：问候第一行，原皮肤 19.5pt */
+  --text-wish: 20px;          /* 新增：祝福语，原皮肤 15.6pt */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-bold: 700;
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+  --tracking-weekday: 9px;    /* 新增：原皮肤字间距 7 */
+
+  /* —— 间距 —— */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* —— 形状：原皮肤是圆角 1 的矩形，这里只留 2 的圆角，不加阴影 —— */
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-full: 9999px;
+  --border-width: 1px;
+  --rule-width: 2px;          /* 新增：时间下面的细线，原皮肤 1.5 */
+  --bar-height: 3px;          /* 新增：进度条，原皮肤 3 */
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --shadow-card: none;
+  --shadow-raised: 0 18px 48px var(--color-shadow);
+
+  /* —— 布局（1792 × 1120 点屏幕，右侧 240 留给两列图标） —— */
+  --card-padding: var(--space-4);
+  --card-gap: var(--space-3);
+  --widget-gap: var(--space-4);
+  --column-width: 360px;      /* 新增：左侧两列的宽度 */
+  --column-gap: 16px;         /* 新增 */
+  --icon-area-width: 240px;   /* 新增：右侧留给访达图标 */
+  --safe-top: 0px;
+  --safe-right: 0px;
+  --safe-bottom: 0px;
+  --safe-left: 0px;
+
+  /* —— 律动条（Lano-Visualizer 原值） —— */
+  --viz-ornament-width: 640px; /* 新增：心形装饰条显示宽度（原图 2400 × 400） */
+  --viz-bar-width: 10px;       /* 新增 */
+  --viz-bar-gap: 3px;          /* 新增 */
+  --viz-bar-max: 120px;        /* 新增：原皮肤 134 */
+
+  /* —— 层级 —— */
+  --z-widgets: 1;
+  --z-panel: 10;
+  --z-overlay: 20;
+
+  /* —— 动效 —— */
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+  --duration-slow: 400ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* 时段主题：只动底板和强调色的冷暖，保持克制。 */
+:root[data-phase="morning"] {
+  --color-card-bg: rgb(36 40 70 / 0.46);
+  --color-card-tint: rgb(250 192 207 / 0.22);
+  --color-accent: rgb(255 206 214);
+}
+:root[data-phase="evening"] {
+  --color-card-bg: rgb(34 26 56 / 0.54);
+  --color-card-tint: rgb(236 140 150 / 0.26);
+  --color-accent: rgb(255 178 186);
+}
+:root[data-phase="night"] {
+  --color-card-bg: rgb(16 20 40 / 0.62);
+  --color-card-tint: rgb(150 170 230 / 0.12);
+  --color-accent: var(--color-sakura);
+  --color-text-muted: rgb(214 220 244 / 0.74);
+}

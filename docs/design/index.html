@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="zh-CN" data-phase="night">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DesktopShell 设计稿</title>
+  <link rel="stylesheet" href="fonts.css">
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="mockup.css">
+  <script type="module" src="mockup.js"></script>
+</head>
+<body>
+  <div class="viewer" id="viewer">
+    <div class="stage" id="stage">
+      <video class="wallpaper" src="/media/video/aemeath.mp4" autoplay muted loop playsinline></video>
+
+      <!-- 模拟的系统界面：菜单栏 30、程序坞 85、右侧两列访达图标 -->
+      <div class="sys-menubar" aria-hidden="true"><b></b><span>访达</span><span>文件</span><span>编辑</span><span>显示</span><span class="spacer"></span><span id="menubar-clock"></span></div>
+      <div class="sys-icons" id="icons" aria-hidden="true"></div>
+      <div class="sys-dock" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+      <main id="desktop">
+        <section class="widget w-date" aria-label="日期">
+          <div class="date-weekday" id="date-weekday"></div>
+          <div class="date-day" id="date-day"></div>
+          <div class="date-month" id="date-month"></div>
+          <div class="date-time" id="date-time"></div>
+          <div class="date-rule"></div>
+          <div class="date-cn" id="date-cn"></div>
+        </section>
+
+        <section class="widget w-greeting" aria-label="问候语">
+          <p class="greeting-title"><span id="greeting-title"></span>，<span class="greeting-name" id="greeting-name"></span></p>
+          <p class="greeting-wish" id="greeting-wish"></p>
+        </section>
+
+        <section class="widget w-character" aria-label="角色卡">
+          <div class="plate">
+            <div class="plate-bg" id="character-bg"></div>
+            <button class="avatar-button" id="avatar" type="button" aria-label="播放一句语音"><img id="avatar-img" alt="" draggable="false"></button>
+            <button class="appearance-button" id="open-appearance" type="button">
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.3" d="M8 1.8a6.2 6.2 0 1 0 0 12.4c.9 0 1.3-.6 1.3-1.2 0-.8-.6-1-.6-1.8 0-.6.5-1.1 1.2-1.1h1.4a2.9 2.9 0 0 0 2.9-2.9C14.2 4.1 11.4 1.8 8 1.8Z"/><circle cx="4.9" cy="7.6" r=".9" fill="currentColor"/><circle cx="6.7" cy="4.9" r=".9" fill="currentColor"/><circle cx="10" cy="4.9" r=".9" fill="currentColor"/></svg>
+              外观
+            </button>
+            <div class="character-info">
+              <div class="character-name" id="character-name"></div>
+              <div class="character-motto">愿星光一直落在你走的路上</div>
+              <div class="character-tags"><span class="tag">鸣潮</span><span class="tag">共鸣者</span><span class="tag">Waves</span></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="widget w-stats" aria-label="系统状态">
+          <div class="plate">
+            <div class="plate-head"><h2 class="plate-title">系统状态</h2><span class="plate-meta" id="stats-meta">每 5 秒更新</span></div>
+            <div class="stat-row">
+              <span class="stat-label">CPU</span>
+              <svg class="stat-spark" id="cpu-spark" viewBox="0 0 60 26" preserveAspectRatio="none" aria-hidden="true"><polygon points=""/><polyline points=""/></svg>
+              <span class="stat-value" id="cpu-value"></span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">内存</span>
+              <div class="stat-bar"><span id="mem-bar"></span></div>
+              <span class="stat-value" id="mem-value"></span>
+            </div>
+            <div class="stat-row stat-battery">
+              <span class="stat-label">电量</span>
+              <div class="stat-bar"><span id="bat-bar"></span></div>
+              <span class="stat-value" id="bat-value"></span>
+            </div>
+            <p class="power-hint">电量低于 20%，已暂停背景视频和动画来省电</p>
+          </div>
+        </section>
+
+        <section class="widget w-projects" aria-label="项目">
+          <div class="plate">
+            <div class="plate-head"><h2 class="plate-title">项目</h2><span class="plate-meta">点一下只看这个项目的待办</span></div>
+            <div class="project-list" id="project-list"></div>
+          </div>
+        </section>
+
+        <section class="widget w-todos" aria-label="待办">
+          <div class="plate">
+            <div class="plate-head"><h2 class="plate-title">待办</h2><span class="plate-meta" id="todo-scope"></span></div>
+            <label class="todo-add"><span aria-hidden="true">＋</span><input id="todo-input" type="text" placeholder="添加提醒，按回车保存"></label>
+            <p class="todo-hint" id="todo-hint"></p>
+            <ul class="todo-list" id="todo-list"></ul>
+          </div>
+        </section>
+
+        <section class="widget w-launcher" aria-label="应用启动栏">
+          <div class="plate">
+            <div class="plate-bg" id="launcher-bg"></div>
+            <div class="app-row" id="app-row"></div>
+          </div>
+        </section>
+
+        <section class="widget w-visualizer" aria-hidden="true">
+          <div class="viz-bars left" id="viz-left"></div>
+          <div class="viz-bars right" id="viz-right"></div>
+          <img class="viz-ornament" src="/media/ornaments/heart.png" alt="" draggable="false">
+        </section>
+
+        <div class="appearance" id="appearance">
+          <div class="appearance-panel" role="dialog" aria-label="外观">
+            <div class="appearance-head">
+              <h2>外观</h2>
+              <div class="appearance-actions">
+                <button class="ghost-button" id="appearance-reset" type="button">恢复默认</button>
+                <button class="primary-button" id="appearance-done" type="button">完成</button>
+              </div>
+            </div>
+            <div class="appearance-scroll">
+              <h3>头像</h3>
+              <div class="thumb-grid avatars" id="avatar-grid" role="radiogroup" aria-label="头像"></div>
+              <h3>启动栏和卡片的背景</h3>
+              <div class="thumb-grid backgrounds" id="background-grid" role="radiogroup" aria-label="背景"></div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <aside class="controls" aria-label="效果图控制">
+    <div class="group"><span class="label">时段</span><button data-phase="morning">早晨</button><button data-phase="day">白天</button><button data-phase="evening">傍晚</button><button data-phase="night">夜晚</button></div>
+    <div class="group"><span class="label">状态</span><button id="toggle-select">选中项目</button><button id="toggle-lowbat">电量低</button><button id="toggle-paused">暂停</button><button id="toggle-denied">提醒事项未授权</button><button id="toggle-appearance">外观面板</button></div>
+    <div class="group"><span class="label">视图</span><button id="toggle-icons" aria-pressed="true">桌面图标</button><button id="toggle-actual">实际尺寸</button></div>
+  </aside>
+</body>
+</html>
