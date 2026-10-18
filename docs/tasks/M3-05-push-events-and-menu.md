@@ -1,6 +1,6 @@
 # M3-05: Swift → 网页推送（安全区域、暂停、外观）、遮挡防抖与菜单栏补全
 
-- **状态**：todo
+- **状态**：review
 - **里程碑**：M3
 - **依赖**：M3-04（必须已合并到 `main`）
 - **分支**：task/M3-05
@@ -150,8 +150,23 @@ enum PageEvent {
 ## 交付记录
 
 - **改动摘要**：
+  - 新增平铺的 `PageEvent`；通过 `callAsyncJavaScript` 的 arguments 推送，页面加载内发送错误最多记录一次，旧页面的异步回调由加载代号隔离。
+  - `ScreenManager` 广播并缓存最新状态，首载、重载和新窗口按各自 safeArea → paused → uiState → systemStats → todos 顺序重推；未缓存的事件跳过。安全区域未变化不重复发送。后两类仅预留缓存能力，没有实际生产者或推送。
+  - 新增可注入调度器的 `OcclusionDebouncer`：持续遮挡一秒才暂停，恢复立即生效，重复遮挡不重置计时，取消/停止后的旧任务不产生效果。`PowerMonitor` 首次及总暂停状态变化时才通知网页。
+  - 成功保存外观及切换语音后广播 `uiState`；隐藏桌面文件只持久化、不通知网页。补齐语音开关、重新读取配置并加载页面、创建并打开配置目录的菜单项。配置读取失败保留当前值，语音写盘失败保留本次开关选择。
 - **自测结果**：
+  - **RED → GREEN**：新增纯函数/状态测试先以空实现确认事件内容、缓存、防抖、通知、重读配置等行为断言失败，再完成实现。真实 WKWebView 也先复现页面 safeArea 全零（原生为 top=30、bottom=83），最终初始推送与 CSS 变量均通过。
+  - **PASS**：`scripts/test.sh` **116/116，14 suites**（新增 14 项）；`scripts/test-web.sh` **138/138**；`swift build` 无 warning/error；`git diff --check` 通过。没有改动网页、暂停策略或点击穿透逻辑。
+  - **PASS**：独立只读审查发现 1 项配置缺失重载边界；新增 `missingReloadConfig` 先确认两条断言失败，再修复为保留最后有效配置且不生成示例，完整测试通过。无剩余已知审查问题。
+  - **PASS**：临时真实 AppKit/WKWebView 探针 **33/33**：实际菜单顺序和 selector、首次安全区域和 CSS、暂停去重、语音写盘、隐藏图标不广播、配置重读、按顺序重推、页面独立加载、安全区域去重、默认一秒延迟/立即恢复/停止取消/重启初始状态。连续发送失败在两个页面加载周期内恰好记录 2 次，未记录异常携带的内容。
+  - **PASS**：`scripts/bundle.sh --open` Release 打包、固定证书签名及严格校验；应用 PID **11791**，2026-10-18 03:17:19 启动，首 5 秒 power 日志仅 `paused=false reasons=[]` 一行，没有 `occluded`。实际读取 30 个头像、63 个背景。
+  - **PASS**：`callAsyncJavaScript` 静态检查；Sources 中没有 `evaluateJavaScript`；PowerMonitor/OcclusionDebouncer 中没有 `Timer`；改动文件限定于任务允许列表。
+  - **待手动验收**：实际 Dock 大小/自动隐藏与虚线框位置、全屏/快速切屏体验、多屏接入、Finder 打开配置目录、真实鼠标点击穿透/框选，以及菜单视觉与应用重启后的体验。原生 selector 和模拟通知测试不替代这些 GUI 验收。
+  - 详细临时证据：`/tmp/ds-m3-05-validation/`（`red-swift.log`、`swift-final.log`、`web-final.log`、`missing-config-red.log`、`native-baseline-red.log`、`native-green.log`、`bundle-final.log`、`app-startup.log`）。
 - **疑问 / 偏离**：
+  - 实测本机 `shell://` 页面的 `didFinish` 早于 ES module 初始化，立即调用 receive 会静默丢失首批事件。现在该回调先等待现有 `/js/main.js` 的模块导入完成，再通知页面就绪；模块缓存避免重复初始化，无轮询、无网页变更、无新增 Bridge 动作。
+  - 无接口扩展；本次只推送 safeArea/paused/uiState，未提前实现 systemStats/todos/audioSpectrum。改背景视频仍需重启，重新加载日志已明确说明。
+  - 按用户要求推送 `task/M3-05`，不合并 `main`；本单保留 `review` 等待 Claude Code 复验及用户手动验收。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 

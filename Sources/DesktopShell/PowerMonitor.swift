@@ -4,6 +4,8 @@ import IOKit.ps
 @MainActor
 final class PowerMonitor: NSObject {
     private let backgroundPlayer: BackgroundPlayer
+    private let occlusionDebouncer = OcclusionDebouncer()
+    var onPausedChanged: ((Bool) -> Void)?
     private let workspaceCenter = NSWorkspace.shared.notificationCenter
     private var windows: [VideoWindow] = []
     private var observedOcclusion = Set<ObjectIdentifier>()
@@ -18,6 +20,11 @@ final class PowerMonitor: NSObject {
     init(backgroundPlayer: BackgroundPlayer) {
         self.backgroundPlayer = backgroundPlayer
         super.init()
+        occlusionDebouncer.onChange = { [weak self] occluded in
+            guard let self, self.isRunning else { return }
+            self.state.allWindowsOccluded = occluded
+            self.applyPolicy()
+        }
     }
 
     func start() {
@@ -59,6 +66,8 @@ final class PowerMonitor: NSObject {
         windows.removeAll()
         observedOcclusion.removeAll()
         hasAppliedState = false
+        occlusionDebouncer.cancel()
+        state.allWindowsOccluded = false
     }
 
     deinit {
@@ -97,9 +106,10 @@ final class PowerMonitor: NSObject {
         // With no desktop windows there is no visible video to decode either.
         // AppKit's pre-notification state is not a visibility result. Each newly
         // added video window stays provisionally visible until its own first event.
-        state.allWindowsOccluded = windows.allSatisfy {
+        let rawOccluded = windows.allSatisfy {
             observedOcclusion.contains(ObjectIdentifier($0)) && !$0.occlusionState.contains(.visible)
         }
+        occlusionDebouncer.update(rawOccluded: rawOccluded)
         applyPolicy()
     }
 
@@ -134,11 +144,13 @@ final class PowerMonitor: NSObject {
         let next = pauseReasons(for: state)
         guard !hasAppliedState || next != reasons else { return }
         let paused = !next.isEmpty
-        if !hasAppliedState || paused != !reasons.isEmpty {
+        let pausedChanged = !hasAppliedState || paused != !reasons.isEmpty
+        if pausedChanged {
             if paused { backgroundPlayer.pause() } else { backgroundPlayer.play() }
         }
         reasons = next
         hasAppliedState = true
+        if pausedChanged { onPausedChanged?(paused) }
         let description = "[" + next.map(\.rawValue).sorted().joined(separator: ", ") + "]"
         Log.notice("DesktopShell power: paused=\(paused ? "true" : "false") reasons=\(description)")
     }
