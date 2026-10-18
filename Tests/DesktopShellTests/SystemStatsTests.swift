@@ -178,7 +178,7 @@ struct SystemStatsTests {
         fixture.ticks = CPUTicks(user: 30, system: 0, idle: 50, nice: 0)
         fixture.actions[0](); #expect(fixture.events.isEmpty)
         fixture.actions[1](); #expect(fixture.events.count == 1)
-        weak var weakMonitor = monitor; monitor = nil
+        weak let weakMonitor = monitor; monitor = nil
         #expect(weakMonitor == nil && fixture.cancellations == 2)
         fixture.actions[1](); #expect(fixture.events.count == 1)
     }
