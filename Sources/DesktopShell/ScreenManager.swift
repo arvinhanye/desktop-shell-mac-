@@ -24,11 +24,11 @@ final class ScreenManager: NSObject {
     var onWindowsChanged: (([VideoWindow]) -> Void)?
     var onWidgetWindowsChanged: (([WidgetWindow]) -> Void)?
     private let backgroundPlayer: BackgroundPlayer
-    private let paths: AppPaths
+    private let appState: AppState
 
-    init(backgroundPlayer: BackgroundPlayer, paths: AppPaths) {
+    init(backgroundPlayer: BackgroundPlayer, appState: AppState) {
         self.backgroundPlayer = backgroundPlayer
-        self.paths = paths
+        self.appState = appState
         super.init()
     }
 
@@ -94,7 +94,7 @@ final class ScreenManager: NSObject {
                 pair.widget.updateSafeArea(insets)
             } else {
                 let video = VideoWindow(screen: screen, backgroundPlayer: backgroundPlayer)
-                let widget = WidgetWindow(screen: screen, paths: paths)
+                let widget = WidgetWindow(screen: screen, appState: appState)
                 let pair = WindowPair(video: video, widget: widget)
                 windows[displayID] = pair
                 widget.updateSafeArea(insets)

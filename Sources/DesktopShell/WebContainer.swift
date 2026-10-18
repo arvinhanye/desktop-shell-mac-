@@ -3,15 +3,17 @@ import WebKit
 @MainActor
 final class WebContainer: NSObject, WKNavigationDelegate, WKUIDelegate {
     let webView: WKWebView
-    private let bridge = Bridge()
+    private let bridge: Bridge
 
-    init(paths: AppPaths) {
+    init(appState: AppState) {
+        bridge = Bridge(appState: appState)
+        let paths = appState.paths
         let configuration = WKWebViewConfiguration()
         configuration.setURLSchemeHandler(
             ShellSchemeHandler(resolver: SchemeResolver(webRoot: paths.webDir, mediaRoot: paths.mediaDir)),
             forURLScheme: "shell"
         )
-        configuration.userContentController.add(WeakScriptMessageHandler(bridge), name: "shell")
+        configuration.userContentController.addScriptMessageHandler(WeakScriptMessageHandler(bridge), contentWorld: .page, name: "shell")
         webView = WKWebView(frame: .zero, configuration: configuration)
         super.init()
 
@@ -32,7 +34,7 @@ final class WebContainer: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     func stop() {
         webView.stopLoading()
-        webView.configuration.userContentController.removeScriptMessageHandler(forName: "shell")
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: "shell", contentWorld: .page)
         bridge.window = nil
     }
 
@@ -40,7 +42,10 @@ final class WebContainer: NSObject, WKNavigationDelegate, WKUIDelegate {
         _ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
     ) {
-        guard navigationAction.request.url?.scheme == "shell" else {
+        let source = navigationAction.sourceFrame.securityOrigin
+        guard WebNavigationPolicy.allows(url: navigationAction.request.url,
+            targetIsMainFrame: navigationAction.targetFrame?.isMainFrame,
+            sourceScheme: source.protocol, sourceHost: source.host) else {
             Log.notice("DesktopShell: cancelled navigation to \(navigationAction.request.url?.absoluteString ?? "<missing URL>")")
             decisionHandler(.cancel)
             return

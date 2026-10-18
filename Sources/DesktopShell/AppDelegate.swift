@@ -7,24 +7,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var backgroundPlayer: BackgroundPlayer?
     private var powerMonitor: PowerMonitor?
     private var hitTestController: HitTestController?
-    private var uiState = UiState()
-    private var uiStateStore: UiStateStore?
+    private var appState: AppState?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let paths = AppPaths.current
         Log.notice("DesktopShell supportDir: \(paths.supportDir.path)")
         Log.notice("DesktopShell mediaDir: \(paths.mediaDir.path)")
         Log.notice("DesktopShell webDir: \(paths.webDir.path)")
-        let uiStore = UiStateStore(supportDir: paths.supportDir)
-        uiStateStore = uiStore
-        uiState = uiStore.load()
-        let config: AppConfig
-        do {
-            config = try ConfigStore(supportDir: paths.supportDir).load()
-        } catch {
-            Log.error("DesktopShell: configuration load failed, using in-memory example: \(String(describing: error))")
-            config = .example
-        }
+        let appState = AppState(paths: paths)
+        self.appState = appState
+        let config = appState.config
         let videoURL = SchemeResolver(webRoot: paths.webDir, mediaRoot: paths.mediaDir)
             .fileURL(forPath: "/media/" + config.background.video)
         if videoURL == nil {
@@ -48,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(pauseItem)
         let hideIconsItem = NSMenuItem(title: "隐藏桌面文件", action: #selector(toggleDesktopIcons(_:)), keyEquivalent: "")
         hideIconsItem.target = self
-        hideIconsItem.state = uiState.desktopIconsHidden ? .on : .off
+        hideIconsItem.state = appState.uiState.desktopIconsHidden ? .on : .off
         menu.addItem(hideIconsItem)
         menu.addItem(.separator())
         let quitItem = NSMenuItem(
@@ -62,16 +54,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.menu = menu
         statusItem = item
 
-        let manager = ScreenManager(backgroundPlayer: player, paths: paths)
+        let manager = ScreenManager(backgroundPlayer: player, appState: appState)
         screenManager = manager
-        manager.setDesktopIconsHidden(uiState.desktopIconsHidden)
+        manager.setDesktopIconsHidden(appState.uiState.desktopIconsHidden)
         let monitor = PowerMonitor(backgroundPlayer: player)
         powerMonitor = monitor
         manager.onWindowsChanged = { [weak monitor] windows in
             monitor?.updateWindows(windows)
         }
         let hitTesting = HitTestController()
-        hitTesting.passThroughEnabled = !uiState.desktopIconsHidden
+        hitTesting.passThroughEnabled = !appState.uiState.desktopIconsHidden
         hitTestController = hitTesting
         manager.onWidgetWindowsChanged = { [weak hitTesting] windows in
             hitTesting?.updateWindows(windows)
@@ -106,14 +98,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func toggleDesktopIcons(_ sender: NSMenuItem) {
-        guard let screenManager, let uiStateStore else { return }
-        uiState.desktopIconsHidden.toggle()
-        hitTestController?.passThroughEnabled = !uiState.desktopIconsHidden
-        screenManager.setDesktopIconsHidden(uiState.desktopIconsHidden)
-        sender.state = uiState.desktopIconsHidden ? .on : .off
-        Log.notice("DesktopShell: desktop icons hidden=\(uiState.desktopIconsHidden ? "true" : "false")")
+        guard let screenManager, let appState else { return }
+        appState.uiState.desktopIconsHidden.toggle()
+        hitTestController?.passThroughEnabled = !appState.uiState.desktopIconsHidden
+        screenManager.setDesktopIconsHidden(appState.uiState.desktopIconsHidden)
+        sender.state = appState.uiState.desktopIconsHidden ? .on : .off
+        Log.notice("DesktopShell: desktop icons hidden=\(appState.uiState.desktopIconsHidden ? "true" : "false")")
         do {
-            try uiStateStore.save(uiState)
+            try appState.saveUiState()
         } catch {
             // A failed save affects the next launch, not the user's current choice.
             Log.error("DesktopShell: UI state save failed: \(String(describing: error))")
