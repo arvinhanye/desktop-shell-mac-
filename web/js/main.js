@@ -2,8 +2,10 @@ import { store } from './store.js';
 import { createBridge } from './bridge.js';
 import { mountWidgets } from './widgets.js';
 import { installHitRegions } from './hit-regions.js';
+import { installKeyboardFocus } from './keyboard-focus.js';
 
 const bridge = createBridge(store, { target: window, now: () => performance.now() });
+installKeyboardFocus({ send: action => bridge.send(action) });
 document.addEventListener('contextmenu', event => event.preventDefault());
 document.addEventListener('dragstart', event => {
   if (!event.target.closest?.('input, textarea, [contenteditable="true"]')) event.preventDefault();

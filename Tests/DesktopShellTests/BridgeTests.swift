@@ -53,9 +53,28 @@ struct BridgeTests {
 
     @Test("未知与尚未实现的动作始终返回 unknown-action")
     func unimplementedActions() {
-        for action in ["deleteFile", "", "GETCONFIG", "focusInput", "blurInput"] {
+        for action in ["deleteFile", "", "GETCONFIG"] {
             #expect(BridgeRequest.parse(["action": action]) == .failure(.unknownAction))
             #expect(BridgeRequest.parse(["action": action, "path": "/private"]) == .failure(.unknownAction))
+        }
+    }
+
+    @Test("焦点动作接受无参数请求并解析为独立动作")
+    func keyboardFocusRequests() {
+        for action in ["focusInput", "blurInput"] {
+            switch BridgeRequest.parse(["action": action]) {
+            case .success(let request): #expect(String(describing: request) == action)
+            case .failure(let error): Issue.record("\(action) rejected: \(error.rawValue)")
+            }
+        }
+    }
+
+    @Test("焦点动作拒绝任何多余参数，包含 null 和空字符串")
+    func keyboardFocusRejectsExtraKeys() {
+        for action in ["focusInput", "blurInput"] {
+            for value: Any in [NSNull(), "", true, 0, []] {
+                #expect(BridgeRequest.parse(["action": action, "extra": value]) == .failure(.invalid))
+            }
         }
     }
 
