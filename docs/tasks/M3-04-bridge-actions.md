@@ -1,6 +1,6 @@
 # M3-04: Bridge 动作——打开项目、启动应用、保存外观
 
-- **状态**：todo
+- **状态**：review
 - **里程碑**：M3
 - **依赖**：M3-03（必须已合并到 `main`）
 - **分支**：task/M3-04
@@ -105,13 +105,36 @@ enum UiStateUpdate {
 
 ## 交付记录
 
-- **改动摘要**：
+- **改动摘要**：从已合入 M3-03 的最新 `main`（`49cefb4`，已 fetch 确认与远端一致）创建 `task/M3-04`。实现四个白名单动作、严格 id/参数解析、纯函数项目路径解析、三态外观补丁及保存失败回滚；复用公开 UI 回复投影，始终输出三个字段，空头像/背景为 null。应用仅从 config.apps 查找，不受项目 apps 高亮列表限制；两个异步系统动作均在完成回调后回到 MainActor 回复。
 - **自测结果**：
-- **疑问 / 偏离**：
+  - **RED → GREEN** 旧实现的请求解析新增测试先失败（91 个断言问题，原本都返回 unknown-action）；临时原生缺失项目检查也先失败（unknown-action 而非 not-found）。路径和外观补丁先用最小占位实现确认行为断言失败，再补完整实现，覆盖保存失败回滚。基线 Swift 93/93，最终 **102/102**（12 suites）。
+  - **PASS** `scripts/test.sh` 102/102，`scripts/test-web.sh` 138/138（0 fail / skip）；debug 构建零 warning/error。网页及指定保护模块未修改。
+  - **PASS** 临时原生 WKWebView 检查 **32/32**，全用临时配置和素材：未知项目、缺失目录、普通文件和相对路径均 not-found；配置外或本机找不到的应用 not-found；非法类型/id/额外 path 或 bundleId 均 invalid；外观保存真实落盘、显式 null、两个开关保留、素材缺失不产生部分更新、写失败回复 failed 并回滚、子框架写请求 untrusted。实际自检面板随机头像/背景及恢复默认按钮均验证；非法请求第 1–5、7 条 ✓，第 6 条 unknown-action。
+  - **PASS** `scripts/bundle.sh --open` release 编译、固定证书签名与严格签名校验完成，指定要求仍绑定证书 `7d0b2eb5…62ce`；正式应用已启动，日志确认 `getConfig avatars=30 backgrounds=63`。产物：`/Users/arvinhan/Desktop/desktop-shell/build/DesktopShell.app`。
+  - **PASS** 禁止的进程/脚本执行、删除/移动 API 及 EventKit 扫描无匹配；7 个变更文件均在允许范围，任务需求区和审查区未变，`git diff --check` 通过。
+  - **PASS** 独立只读内部复核覆盖全部 7 个文件，未发现 Critical / Important / Minor 代码问题；不替代 Claude Code 的正式审查。
+  - 验证日志与临时原生程序：`/tmp/ds-m3-04-validation/`（parser-red.log、state-path-red.log、native-red.log、swift-green.log、web-green.log、native-green.log、build.log、bundle.log、app-bridge.log）。
+- **手动验收 / 未自动覆盖**：
+  - **待验证** 在正式应用点击 Finder、用 Cursor 打开、启动 Safari，确认实际目标与前台激活，并按验收区命令检查各自 ok 日志。自动检查刻意不启动其他真实应用；系统打开成功/失败回调的真实触发亦未算作自动通过。
+  - **待验证** 正式应用随机头像、随机背景、恢复默认后的显示与真实 ui.json；确认 voiceEnabled、desktopIconsHidden 保持。
+  - **待验证** 按任务验收区临时改真实项目 path 为不存在目录，退出并重新打开后确认 not-found，再恢复配置。本轮仅在临时配置里验证此失败路径，未改用户 config.json。
+- **疑问 / 偏离**：无未决接口问题。UiStateUpdate 放在允许修改的 AppState.swift 中；saveUiState 成功日志只记录动作与 ok，避免输出用户内容，未增加广播（M3-05 实现）。保留真实 GUI 手动验收边界。
+- **提交 / 推送**：推送目标为 `origin/task/M3-04`（用户本轮明确授权）；不创建 PR、不合并 main，正式审查与合并交给 Claude Code。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 
 ## 审查记录
 
-- **结论**：
+- **结论**：**代码审查通过，待用户手动验证**（见"用户手动验证"）。用户确认、并核对对应的 `ok` 日志后合并到 `main`。
+- **复验结果**（Claude Code，2026-10-18，在 `ef19d3e` 的独立检出上执行）：
+  - [x] `swift build` 零警告零错误
+  - [x] `scripts/test.sh`：102 项全部通过（12 个 suite）；`scripts/test-web.sh`：138 项全部通过
+  - [x] `git diff --name-only main...task/M3-04` 只有允许的 7 个文件；`git diff --check` 通过
+  - [x] `Process(` / `NSTask` / `NSAppleScript` / `osascript` / `/bin/sh` / `/bin/zsh`、`removeItem|moveItem|trashItem`、`EventKit` 都没有输出
+  - [x] 在主目录（`task/M3-04` = `ef19d3e`，工作区干净）重新 `scripts/bundle.sh --open`：日志出现 `getConfig avatars=30 backgrounds=63`（Codex 启动的那份 `.app` 比提交早两分钟打包，为确保验证的是提交内容，重新打包）
 - **意见**：
+  - 四个动作的解析都是"先校验参数集合完全一致，再校验 id 格式"，`saveUiState` 用三态补丁（缺失 / `null` / 字符串），两个都缺失时拒绝。路径和 bundle id 只从配置里查，网页传不进来。
+  - `openProjectWith` 只要求应用在 `config.apps` 里，不受项目 `apps`（只用于高亮）限制，符合规范；两个异步打开动作在系统回调里回到主线程再回复。
+  - `updateAppearance` 先扫描素材、校验，再写内存和文件，保存失败时恢复修改前的状态并回复 `failed`；回复始终带三个字段，空值是 `null`。
+  - `ProjectPath.resolve` 只接受 `~`、`~/…` 和绝对路径，`~user/…`、相对路径、空字符串都返回 `nil`。
+  - 小偏离（接受）：`saveUiState` 的成功日志只写 `saveUiState ok`，没有像任务单示例那样带上 id。头像和背景 id 是素材文件名，不算用户内容，写不写都可以，不要求修改。
