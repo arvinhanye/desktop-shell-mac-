@@ -86,6 +86,7 @@ cat > "$CONTENTS/Info.plist" <<EOF
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSAudioCaptureUsageDescription</key><string>DesktopShell 读取系统正在播放的声音的频谱，用来驱动桌面上的音频律动条；不录制、不保存任何音频。</string>
+  <key>NSRemindersFullAccessUsageDescription</key><string>DesktopShell 在桌面上显示和勾选你的提醒事项，并把在桌面上新增的提醒写进提醒事项；不会删除任何提醒。</string>
 </dict>
 </plist>
 EOF

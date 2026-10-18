@@ -1,6 +1,6 @@
 # M3-07: 接入系统提醒事项（权限、读取、勾选、新增、变化推送）
 
-- **状态**：todo
+- **状态**：review
 - **里程碑**：M3
 - **依赖**：M3-06（必须已合并到 `main`；用到 M3-05 的广播和重推）
 - **分支**：task/M3-07
@@ -172,8 +172,23 @@ final class RemindersStore {
 ## 交付记录
 
 - **改动摘要**：
-- **自测结果**：
+  - 新增不依赖 EventKit 的 `TodoItems`：精确列表匹配、同名/共用列表规则、日期原样格式化、未完成及今天完成过滤、到期/创建时间排序和 500 条上限。全天到期按日历当天末尾排序，覆盖夏令时边界。
+  - 新增单实例 EventKit 后端及 `RemindersStore`：权限请求和状态推送、两个查询合并、重复状态抑制、0.5 秒变化防抖、跨日重读、醒屏/会话恢复/每 5 分钟主动同步（容差 60 秒）、停止清理及过期异步结果保护。
+  - 接通 `addTodo` / `setTodoDone` 的严格请求校验、错误码及回复；`setTodoDone` 成功显式返回 `NSNull`，避免原生 Promise 返回 undefined。新增/勾选之后重新读取并广播，外观/配置等既有动作保持不变。
+  - `AppState` 持有提醒事项服务；配置重载触发重新映射。窗口创建后启动、退出时停止；复用既有 `todos` 广播与缓存重推。打包脚本只新增指定的提醒事项权限说明。
+- **自测结果**（2026-10-18）：
+  - **PASS / 基线与 RED → GREEN**：原有 Swift 130/130；纯函数/Bridge/事件新增 9 项先失败（44 个断言），实现后 139/139；存储生命周期新增 11 项先失败（25 个断言），实现后及最终回归 **150/150（17 suites）**。测试夹具初次编译的 MainActor 标注问题已修正后重跑 RED，不把编译失败作为行为证据。
+  - **PASS / 网页与构建**：`scripts/test-web.sh` **138/138**；`swift build` 成功，warning/error 检索无输出；`bash -n scripts/bundle.sh` 通过。Swift 测试完整重编译曾提示既有 `SystemStatsTests.swift:181` 的 weak-var 警告，未修改此范围外文件。
+  - **PASS / 原生内存夹具 17/17**：实际 WKWebView 加载项目网页，经真实 Bridge 通道验证新增回复、标题修剪、勾选与取消、今天完成仍保留、0.5 秒后推送、重新加载缓存重推、保存失败与权限拒绝；现有自检面板“发送非法请求” **7/7**（含子框架 `untrusted`）。首次接线前新增被拒为 unknown-action，接线后另捕获 nil → undefined 的差异，修正显式 null 后全绿。
+  - **PASS / 隐私与真实数据边界**：所有自动新增/勾选测试只使用内存后端；原生探针未创建 EventKit store。测试标题标记未出现在原生日志。实际应用只检查权限和读取日志，未由 Codex 新增、勾选、修改或删除真实提醒/列表，也未用脚本处理权限框。
+  - **PASS / 签名与真实只读启动**：`scripts/bundle.sh --open` 完成 release 打包和固定证书 strict 校验，指定要求仍为原 bundle id + 固定证书 leaf；`plutil` 确认权限说明与任务单完全一致。实际应用日志：06:01:40.301 `access=notDetermined`，06:01:46.623 `access=granted`，06:01:46.707 `pushed items=7`。这证明授权后读取/推送已运行，不替代用户对列表内容及权限弹窗的目测。
+  - **PASS / 范围与自查**：仅修改允许的 11 个文件；需求与审查记录区域未变；`git diff --check` 通过；`grep -rnE "\.remove\(|removeReminder|saveCalendar|requestAccess\(to:" Sources/` 无输出；未修改 web、PowerMonitor 或点击区域逻辑。一次独立只读最终检查覆盖 11/11 文件，Critical/Important/Minor 均为 0。
+  - 本地证据目录：`/tmp/ds-m3-07-validation/`；包括 `pure-red.log` / `pure-green.log`、`store-red.log` / `store-green.log`、`native-red.log` / `native-green.log`、`full-swift.log`、`full-web.log`、`build.log`、`bundle.log`、`launch.log` 及内存后端原生探针。临时夹具不入 Git。
 - **疑问 / 偏离**：
+  - 无接口或文件范围扩展。已获授权并只读推送 7 条；尚未执行用户真实写入类验收。新增动作从“尚未实现”测试移至独立校验测试，符合本任务启用这两个动作的要求。
+  - **用户手动验证待完成**：与 Mac 提醒事项对照条数/前 5 条标题及到期时间；确认首次权限框及再次启动免弹框；真实勾选/取消、新增及在提醒事项应用删除后刷新；项目列表关联后重载；系统设置撤权/恢复；在实际签名应用再次检查 7 条非法请求。
+  - **iPhone 同步待测 3 次**：Mac 提醒事项应用关闭时记录各次从手机改动到桌面出现的时间。当前没有实测时延，不填写模拟结果；超过 3 分钟由用户和 Claude Code 决定后续处理。用户新增测试提醒后的真实日志隐私验收由 Claude Code 复验。
+  - 交付到 `task/M3-07`，状态为 `review`；不合并 main、不创建 PR。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 

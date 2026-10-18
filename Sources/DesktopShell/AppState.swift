@@ -2,6 +2,7 @@ import Foundation
 
 @MainActor
 final class AppState {
+    var remindersStore: RemindersStore?
     let paths: AppPaths
     private(set) var config: AppConfig
     var uiState: UiState
@@ -25,6 +26,7 @@ final class AppState {
     }
 
     func reloadConfig() {
+        defer { remindersStore?.configDidReload() }
         do {
             // Reload must not use ConfigStore's first-launch example generation.
             guard FileManager.default.fileExists(atPath: paths.supportDir.appendingPathComponent("config.json").path) else {

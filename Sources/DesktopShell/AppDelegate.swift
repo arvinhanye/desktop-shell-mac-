@@ -94,6 +94,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         monitor.start()
         stats.start()
         hitTesting.start()
+        let reminders = RemindersStore(appState: appState)
+        appState.remindersStore = reminders
+        reminders.onChange = { [weak manager] event in manager?.broadcast(event) }
+        reminders.start()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -103,6 +107,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hitTestController = nil
         appState?.onUiStateChanged = nil
         powerMonitor?.onPausedChanged = nil
+        appState?.remindersStore?.onChange = nil
+        appState?.remindersStore?.stop()
+        appState?.remindersStore = nil
         statsMonitor?.onSample = nil
         statsMonitor?.stop()
         statsMonitor = nil

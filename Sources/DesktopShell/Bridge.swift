@@ -25,6 +25,32 @@ final class Bridge: NSObject, WKScriptMessageHandlerWithReply {
         switch BridgeRequest.parse(message.body) {
         case .failure(let error):
             reject(error, action: action, replyHandler: replyHandler)
+        case .success(.addTodo(let text, let projectId)):
+            guard let reminders = appState.remindersStore else {
+                reject(.failed, action: action, replyHandler: replyHandler)
+                return
+            }
+            reminders.add(text: text, projectId: projectId) { result in
+                switch result {
+                case .success(let item):
+                    Log.notice("DesktopShell bridge: addTodo ok")
+                    replyHandler(PageEvent.todoItem(item), nil)
+                case .failure(let error): self.reject(error, action: action, replyHandler: replyHandler)
+                }
+            }
+        case .success(.setTodoDone(let id, let done)):
+            guard let reminders = appState.remindersStore else {
+                reject(.failed, action: action, replyHandler: replyHandler)
+                return
+            }
+            reminders.setDone(id: id, done: done) { result in
+                switch result {
+                case .success:
+                    Log.notice("DesktopShell bridge: setTodoDone ok")
+                    replyHandler(NSNull(), nil)
+                case .failure(let error): self.reject(error, action: action, replyHandler: replyHandler)
+                }
+            }
         case .success(.getConfig):
             let avatars = MediaLibrary.scan(mediaDir: appState.paths.mediaDir, subdirectory: "avatars")
             let backgrounds = MediaLibrary.scan(mediaDir: appState.paths.mediaDir, subdirectory: "backgrounds")

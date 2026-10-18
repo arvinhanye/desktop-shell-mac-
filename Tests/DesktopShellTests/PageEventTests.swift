@@ -122,3 +122,31 @@ struct PageEventTests {
     }
 
 }
+
+
+extension PageEventTests {
+    @Test("todos 事件完整序列化 null，非 granted 时永不泄露 items")
+    func todoEvent() throws {
+        let input = [TodoItem(id: "a", text: "", done: false, projectId: nil, due: nil),
+                     TodoItem(id: "b", text: "title", done: true, projectId: "p", due: .init(date: "2026-01-05", time: nil)),
+                     TodoItem(id: "c", text: "third", done: false, projectId: nil, due: .init(date: "2026-01-05", time: "09:05"))]
+        let event = PageEvent.todos(access: "granted", items: input)
+        #expect(Set(event.keys) == ["event", "access", "items"])
+        #expect(event["event"] as? String == "todos" && event["access"] as? String == "granted")
+        let items = try #require(event["items"] as? [[String: Any]])
+        try #require(items.count == 3)
+        #expect(Set(items[0].keys) == ["id", "text", "done", "projectId", "due"])
+        #expect(items[0]["id"] as? String == "a" && items[0]["text"] as? String == "" && items[0]["done"] as? Bool == false)
+        #expect(items[0]["projectId"] is NSNull && items[0]["due"] is NSNull)
+        #expect(items[1]["projectId"] as? String == "p" && items[1]["done"] as? Bool == true)
+        let due = try #require(items[1]["due"] as? [String: Any])
+        #expect(Set(due.keys) == ["date", "time"] && due["date"] as? String == "2026-01-05" && due["time"] is NSNull)
+        #expect((items[2]["due"] as? [String: Any])?["time"] as? String == "09:05")
+        #expect(JSONSerialization.isValidJSONObject(event))
+        for access in ["denied", "notDetermined", "restricted", "writeOnly"] {
+            let event = PageEvent.todos(access: access, items: input)
+            #expect(event["access"] as? String == access)
+            #expect((event["items"] as? [[String: Any]])?.isEmpty == true)
+        }
+    }
+}
