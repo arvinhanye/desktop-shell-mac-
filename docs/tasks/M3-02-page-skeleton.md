@@ -1,6 +1,6 @@
 # M3-02: 页面骨架（tokens、交互基线、组件注册、点击区域上报、自检面板）
 
-- **状态**：todo
+- **状态**：review
 - **里程碑**：M3
 - **依赖**：M3-01（必须已合并到 `main`）
 - **分支**：task/M3-02
@@ -254,6 +254,27 @@ export function installHitRegions({ send, root = document, win = window })
 
 - `Tests/web/hit-regions.test.mjs`：`toRegions` 的向外取整、裁到视口、丢掉非法和视口外的矩形、去重、超过 64 个时截断并警告。
 
+### 11. 审查后补充：空闲时不做多余的工作（2026-10-17）
+
+审查时实测发现两处在没有变化时仍然按帧率干活的地方（详见"审查记录"）。项目在 Intel Mac 上常驻桌面，要求省电，这两处都要改：
+
+1. **点击区域只在可能影响组件矩形的变化时重新计算**（`hit-regions.js`）。现在 `MutationObserver` 监听整个页面所有元素的 `style` / `class` 变化，律动条每一帧改 `transform` 都会触发一次重新计算。改为先过滤变化记录，抽成纯函数并导出供测试：
+
+   ```js
+   export function affectsHitRegions(records, selector = '.card, [data-hit]')
+   ```
+
+   - 属性变化：只有目标元素本身匹配 `selector`，或者它的子孙里有匹配 `selector` 的元素（例如组件外壳、`#desktop`），才算有影响。区域元素**内部**元素的变化不算：它们如果改变了区域元素的尺寸，`ResizeObserver` 会捕获。
+   - 子节点增删：增加或删除的节点里，有元素本身匹配 `selector` 或者包含匹配的元素，才算有影响。只换文字、或增删不含区域元素的节点（例如结果列表、点击区域的调试虚线框）不算。
+   - 其余触发（`resize`、`load`、`transitionend`、`animationend`、字体加载、外部 `schedule()`）保持不变。
+   - 在 `Tests/web/hit-regions.test.mjs` 里用假的变化记录测试 `affectsHitRegions`：区域元素自身的 `style` 变化 → 有影响；区域元素内部的 `style` 变化 → 没有；区域元素祖先的 `class` 变化 → 有；增加一个 `.card` → 有；增加一个包含 `.card` 的外壳 → 有；删除一个 `.card` → 有；只增删文字或普通元素 → 没有。
+
+2. **律动条没有东西要画时停止动画循环**（`devpanel.js`）。现在只要没暂停、页面可见，`requestAnimationFrame` 就一直按帧率运行，没有声音时也一样。在 `.app` 里，M5.5 之前根本没有 `audioSpectrum`，这个循环会永远空转。改为：
+   - 收到新的 `audioSpectrum`（订阅 store）、没有暂停、页面可见时，才启动循环。
+   - 各条衰减到 0（最后一份数据超过 400 毫秒）之后，画完这一帧就**不再**请求下一帧。
+   - `drawDiagnostics` 不再每帧调用，只在 `scheduleDiagnostics` 里调用。"audioSpectrum 累计"的文字在收到事件时用 `scheduleDiagnostics` 合并到下一帧更新。
+   - 暂停和页面隐藏时的行为不变（立刻归零、不运行循环）。
+
 ## 允许修改的文件
 
 - `web/index.html`（重写）
@@ -303,6 +324,23 @@ export function installHitRegions({ send, root = document, win = window })
   await mountWidgets(document.getElementById('desktop'), ['no-such-widget'], {});
   ```
 - [ ] `scripts/bundle.sh` 打包成功，`build/DesktopShell.app/Contents/Resources/web/` 里有新页面的全部文件，没有 `m2-check.js`，也没有 `Tests/`
+- [ ] **（审查后补充）** 浏览器里打开页面，**保持页面在前台可见**，控制台执行下面的代码。预期 `withSound.hitRegions` 不超过 2（修改前约 28），`silent.raf` 和 `silent.hitRegions` 都不超过 1（修改前 `raf` 约 60）：
+  ```js
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  let frames = 0, collects = 0;
+  const raf = window.requestAnimationFrame.bind(window);
+  window.requestAnimationFrame = cb => { frames++; return raf(cb); };
+  const qsa = Document.prototype.querySelectorAll;
+  Document.prototype.querySelectorAll = function (s) { if (s === '.card, [data-hit]') collects++; return qsa.call(this, s); };
+  const rate = async () => { const f = frames, c = collects; await sleep(2000); return { raf: (frames - f) / 2, hitRegions: (collects - c) / 2 }; };
+  const sound = [...document.querySelectorAll('label')].find(l => l.textContent === '模拟声音').querySelector('input');
+  const withSound = await rate();
+  sound.click(); await sleep(1000);
+  const silent = await rate();
+  sound.click();
+  ({ withSound, silent })
+  ```
+- [ ] **（审查后补充）** 上面的代码跑完、重新勾上"模拟声音"后，律动条马上恢复跳动；"模拟暂停"时仍然立刻归零
 
 **用户手动验证**：
 
@@ -321,12 +359,81 @@ export function installHitRegions({ send, root = document, win = window })
 ## 交付记录
 
 - **改动摘要**：
+  - 从已合并 M3-01 的 `main`（`27f5619`）创建 `task/M3-02`。替换 M2 测试页，逐字采用本任务的 HTML/CSP 和 token 数值，删除 `m2-check.js`。
+  - 新增交互基线、组件独立加载/失败隔离、每帧合并和去重的点击区域上报、安全区域/时段/暂停状态同步；补齐可见性仅由 CSS 改变时的重新计算。
+  - 自检面板接入配置、外观、系统状态、12 频段律动、提醒事项、非法请求、输入框和调试开关。暂停或页面隐藏时停止律动 RAF；无新频谱超过 200ms 后衰减至零。结果与事件日志各保留最近 6 条，音频事件仅累计计数。
+  - 新增仅监听 `127.0.0.1` 的零依赖开发服务器：web/media/design 路由、解码路径检查、realpath 根目录约束、普通文件限制、MIME、GET/HEAD、单段 Range 和 no-store。
+  - 完成指定日志改进；经用户追加授权，另增加 `bridge.subscribeEvents(listener)`：只回调事件名，覆盖 native 和 mock 的实际 receive，不把 getConfig/saveUiState 回复或本地状态写入当作推送；监听器独立取消，异常隔离，不暴露事件内容。
 - **自测结果**：
+  - **PASS** `scripts/test-web.sh`：134/134，0 FAIL、0 SKIP。RED→GREEN 已分别验证日志断言、点击区域模块、CSS visibility 变化和事件观察接口；最终回归全部通过。
+  - **PASS** `scripts/test.sh`：76/76（9 suites），0 FAIL。
+  - **PASS** 任务要求的三项 grep 检查均无输出；HTML 与 tokens.css 和任务代码块逐字一致；`git diff --check` 无输出。无 Swift、mock、AGENTS.md、CLAUDE.md 或其他任务文件修改。
+  - **PASS** 任务列出的 7 个 curl 检查：首页 200，JS 为 `text/javascript; charset=utf-8`，头像 200，两项目录穿越 404，视频 Range 为 206 / `bytes 0-99/14515867`，POST 为 405。
+  - **PASS** 临时 Node 集成测试 3/3：服务器真实 HTTP 路由、编码穿越、符号链接逃逸、HEAD、Range/416/空文件；组件顺序、CSS 等待、清理函数保存、模块/导出/mount 失败隔离。测试和日志位于 `/tmp/ds-m3-02-validation/`，未新增 npm 依赖或扩大仓库文件范围。
+  - **PASS** Chrome 实页：控制台 error 为空；mock、ready、角色/素材数量、安全区域符合预期；系统状态持续更新；暂停后 data-paused 生效且 12 条归零，恢复后重新律动，关闭声音后归零；提醒勾选、新增至 6 条、denied 清空与 failed 提示、恢复授权均验证；非法请求前 6 条全部 ✓，子框架项跳过；头像加载、时段变量、调试框、输入框验证通过。
+  - **PASS** `scripts/bundle.sh`：release 构建、固定证书签名及 designated requirement 验证通过；产物 `build/DesktopShell.app` 的 web 资源齐全，无 `m2-check.js`、无 `Tests/`。
+  - **PASS** 临时原生 WKWebView 集成程序使用实际 `ShellSchemeHandler` / `SchemeResolver` 和最终打包资源：`shell://app/index.html` 加载成功，三份样式加载，native / ready / 未获取到配置正确，面板宽 360、点击区域 1，CSP violation 为 0。旧式无回复处理器产生预期的 getConfig 错误日志。真实模块导入失败只记录一条“组件 no-such-widget 加载失败”，失败外壳移除、自检面板保留；合成事件验证右键和非输入区域拖拽被阻止，输入区域拖拽保留。
+  - **待手动验证**：任务单列出的 Safari 目测、文字/图片真实拖拽，以及正式 `.app` 中 Finder 桌面点击穿透、框选、右键、隐藏桌面文件菜单交互。原生集成程序与合成事件不替代这些实际 GUI 验收。
 - **疑问 / 偏离**：
+  - 用户于本轮明确回复“允许补事件观察接口和测试”，因此 `bridge.js` / `bridge.test.mjs` 除指定日志外增加上述只传事件名的观察接口及 3 项测试；任务需求区保持原文。事件记录含重复收到的事件，即使对应 store 值未变化；非字符串事件名记为 `?`，不代表该事件通过数据校验。
+  - 临时 HTTP 测试首次监听端口受沙箱限制，按权限流程重跑通过；临时原生程序首次编译的 MainActor 入口错误已修正后重跑通过。两者均非产品失败，未降低检查条件。
+  - 独立只读复核发现的两项问题（CSS 可见性缓存、事件与状态混淆）均已建立失败测试并修正；没有遗留实现问题。Safari/Finder 手动门禁保留，未计作通过。
+
+### 第一轮审查修订（Codex，2026-10-17）
+
+- **范围**：继续现有 `task/M3-02`，仅修改 `web/js/hit-regions.js`、`web/widgets/devpanel.js`、`Tests/web/hit-regions.test.mjs` 和本任务的状态/交付记录。保留需求、审查记录、token 数值及全部 Swift 实现。
+- **修正**：
+  - 导出 `affectsHitRegions(records, selector)`，先按目标或增删子树是否包含区域元素过滤 MutationObserver 记录；律动条 transform、普通文字和装饰节点不再触发收集。区域自身/祖先变化、区域增删仍重算；ResizeObserver、字体、load、transitionend、animationend、resize、显式 schedule 保持原有行为。
+  - 自检律动改为由新频谱唤醒，最后样本满 400ms 后绘制零值并停止续帧；无样本、暂停、页面隐藏及过期样本恢复时保持空闲。诊断只从 `scheduleDiagnostics` 绘制，音频事件累计也合并调度，不再随律动每帧刷新。
+- **RED → GREEN**：
+  - 点击区域新增 4 项测试。修正前装饰变化确实排入额外 RAF（期望 0，实际 1）；修正后连续 60 轮装饰变化不排帧、不 collect，祖先变化和区域尺寸通知仍生效。纯函数覆盖区域自身、内部、祖先、增删区域/外壳、文字/普通节点及自定义 selector。
+  - 临时 `/tmp/ds-m3-02-review/devpanel.test.mjs` 直接挂载真实 devpanel、使用真实 store，只替代 DOM 和帧时钟。修正前 4 FAIL / 1 PASS，修正后 **5 PASS / 0 FAIL**：无数据空闲、400ms 衰减停帧与重新唤醒、暂停/隐藏、过期样本恢复、累计事件合并。为遵守允许修改的文件清单，该验证文件留在临时目录，未新增仓库测试文件。
+- **最终验收**：
+  - **PASS** `scripts/test-web.sh`：**138/138**，0 FAIL、0 SKIP。
+  - **PASS** `scripts/test.sh`：**76/76**，9 suites。
+  - **PASS** Chrome 实页性能：临时本机代理仅在响应 HTML 中加观测脚本，复用实际页面模块；使用与验收代码相同的 RAF 和 `.card, [data-hit]` 查询计数。页面采样起止均可见；有声采样 2.002 秒，点击区域 **0 次/秒**（RAF 请求 118 次/秒，含律动和诊断）；静音稳定后采样 2.419 秒，**RAF 0 次/秒、点击区域 0 次/秒**，满足两个阈值。12 条全部归零，重新勾选声音后恢复非零，暂停立即归零。
+  - **PASS** 未加探针的原页面：mock / ready、角色和素材数量、安全区域正常；静音时仍可显示点击区域框、安全区域框并切换夜晚主题；提醒勾选、新增至 6 条、denied 清空、新增返回 failed、恢复 granted 均通过；非法请求前 6 条全部符合预期，子框架项按要求跳过；控制台 error 为空。
+  - **PASS** 三项 grep 检查无输出，HTML/token 与任务代码块逐字一致，`git diff --check` 通过；七项 HTTP 验收为 200 / JS MIME 正确 / 200 / 404 / 404 / 206（`bytes 0-99/14515867`）/ 405。
+  - **PASS** `scripts/bundle.sh`：release 构建、固定证书签名、designated requirement 验证通过，产物为 `build/DesktopShell.app`。本轮不启动正式应用、不写入真实提醒事项。
+- **环境记录**：首次 Swift 验证被沙箱阻止写模块缓存，签名身份读取和本机 HTTP 访问也受限；按权限流程重跑后均通过。签名阶段等待系统钥匙串交互，用户确认已在本机允许后成功，未切换 ad-hoc 或调整签名规则。测试桩曾错误地让 `querySelector` 返回 false，已按真实 DOM 的 null 语义修正并重跑。
+- **仍待手动验收**：Safari 目测、真实文字/图片拖拽，以及正式 `.app` 中 Finder 点击穿透、框选、右键和隐藏桌面文件菜单；本轮浏览器及临时测试不替代这些检查。
+- **复验资料**：临时测试、日志和帧率探针位于 `/tmp/ds-m3-02-review/`，静音截图为 `/tmp/ds-m3-02-review/silent-performance.png`；探针未进入 `.app` 或 Git。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 
 ## 审查记录
 
-- **结论**：
+### 第二轮（Claude Code，2026-10-17）
+
+- **结论**：**代码复审通过，待用户手动验证**（Safari 目测和 `.app` 里的点击穿透，见"用户手动验证"）。用户确认后合并到 `main`。
+- **复验结果**（在 `a128405` 的独立检出上执行）：
+  - [x] `scripts/test-web.sh`：138 项全部通过（新增 `affectsHitRegions` 和空闲帧测试）
+  - [x] 硬编码检查没有输出，`git diff --check` 通过；本轮只改了 `hit-regions.js`、`devpanel.js`、`hit-regions.test.mjs` 和交付记录
+  - [x] **帧率对比**（内置浏览器，和第一轮同样的测法：模拟页面可见，每 16 毫秒一帧）：有声音时点击区域重算 **28 → 0 次/秒**；没声音时动画循环 **60 → 0 次/秒**；暂停时 0 次/秒，律动条归零，取消暂停后恢复跳动
+  - [x] 点击区域仍会在真正需要时更新：面板宽度改成 300 后上报宽度变为 300；新增一个视口内的 `.card` 后区域变成 2 个，删除后回到 1 个；改变面板位置后区域跟着移动
 - **意见**：
+  - `affectsHitRegions` 的判断规则和第 11 节一致：区域元素自身和祖先的变化、增删区域元素都会重算，区域内部的装饰变化交给 `ResizeObserver`。
+  - 律动循环只由新的频谱数据唤醒，从隐藏切回前台时不会重放过期数据，暂停和隐藏时立即归零。
+  - 小问题（不阻塞）：有声音时自检面板每帧请求两次 `requestAnimationFrame`（律动一次，诊断信息一次），实测约 114 次/秒。只在播放声音时发生，自检面板 M4 也会移除，不要求修改；M4 的律动组件应该在同一帧里一起更新。
+  - Codex 本轮的提交 `a128405` 只在本地，没有推送；Claude Code 复审后连同这条记录一起推送了 `task/M3-02`。
+
+### 第一轮（Claude Code，2026-10-17）
+
+- **结论**：**需修改**（两处空闲时的多余工作，见下）。其余部分通过；Safari 和 `.app` 的手动验证等修改完再一起做。
+- **复验结果**（在 `origin/task/M3-02` 的独立检出上执行）：
+  - [x] `scripts/test-web.sh`：134 项全部通过
+  - [x] 硬编码检查、`backdrop-filter`、内联脚本和样式检查都没有输出；`git diff --check` 通过
+  - [x] 改动文件都在允许范围内（`bridge.js` 的 `subscribeEvents` 是你在 Codex 那边授权追加的，见下），`web/m2-check.js` 已删除
+  - [x] `tokens.css` 与任务单代码块**逐字一致**（脚本比对）
+  - [x] 开发服务器 7 项 curl 检查全部符合预期；另外 `/.git/config`、`/media/avatars/`（目录）、错误的百分号编码都是 404，超出范围的 `Range` 是 416，只监听 `127.0.0.1`，带 `Cache-Control: no-store`
+  - [x] 内置浏览器（mock）：控制台没有错误；`mock`、`ready = true`、爱弥斯、问候 7 条、头像 30、背景 63、安全区域 25 / 0 / 80 / 0；非法请求前 6 条 ✓、第 7 条跳过；模拟暂停时 `<html data-paused>` 且律动条归零，取消后恢复；提醒事项勾选、新增后 6 条、未授权时 `denied · 0 条` 且新增返回 `failed`、恢复授权正常；切到"夜晚"后 `data-phase="night"`、强调色 `rgb(140 150 200)`；`mountWidgets` 加载不存在的组件只报一条"组件 no-such-widget 加载失败"、不留外壳、面板仍在；`--safe-top` / `--safe-bottom` 为 `25px` / `80px`
+  - [x] `scripts/bundle.sh` 打包、签名通过，`Resources/web/` 里 11 个文件齐全，没有 `m2-check.js` 和 `Tests/`
+- **需修改的两处**（已写进第 11 节和验收标准；根源在我写的任务单，不是实现失误：任务单要求 `MutationObserver` 监听 `style`，也没要求律动循环空闲时停下）：
+  1. **点击区域每帧重新计算**：mock 有声音时，实测 `collect()`（`querySelectorAll` + 每个区域元素的 `getComputedStyle` 和 `getBoundingClientRect`）每秒约 **28 次**，没声音时约 0.5 次。原因是律动条每帧改 `style.transform`，被全页面的 `MutationObserver` 捕获。M4 的律动组件会一直这样改样式，所以要在骨架这一层修掉。
+  2. **律动循环空转**：mock 关掉声音后，自检面板的 `requestAnimationFrame` 仍然每秒约 **60 次**。`.app` 里 M5.5 之前没有频谱数据，这个循环会一直空转。
+- **其他意见**：
+  - `bridge.subscribeEvents` 只回调事件名、不暴露内容、监听器出错互不影响，设计合适，接受。它是网页内部接口，不影响 Bridge 白名单。
+  - 日志改进（M3-01 审查意见）已按要求完成。
+  - 开发服务器的路径检查和 `SchemeResolver` 同一套规则（解码后逐段检查、`realpath` 后确认仍在根目录内、只返回普通文件），Range 用 `BigInt` 处理大数，读流在客户端断开时会关闭。
+  - 组件注册按顺序先建外壳、各自独立加载、等样式加载完再挂载，失败时移除外壳，符合要求。
+  - **写进 M4 的要求**：律动组件和其他有持续动画的组件，都要做到"没有东西要画时停止循环"，不能只在暂停时停。

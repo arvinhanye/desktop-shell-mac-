@@ -1,0 +1,99 @@
+/* 设计规范：所有颜色、字体、尺寸、阴影、动效只在这里定义。
+   M3 为中性深色占位值，M3.5 设计定稿后替换数值。 */
+:root {
+  /* 文字 */
+  --color-text: rgb(255 255 255 / 0.92);
+  --color-text-muted: rgb(255 255 255 / 0.64);
+  --color-text-faint: rgb(255 255 255 / 0.40);
+
+  /* 强调色与状态 */
+  --color-accent: rgb(160 172 196);
+  --color-accent-contrast: rgb(18 20 26);
+  --color-selected-bg: rgb(255 255 255 / 0.14);
+  --color-selected-border: var(--color-accent);
+  --color-highlight: var(--color-accent);
+  --color-success: rgb(132 200 152);
+  --color-warning: rgb(230 192 112);
+  --color-danger: rgb(232 120 120);
+  --color-focus-ring: rgb(255 255 255 / 0.80);
+
+  /* 面板 */
+  --color-card-bg: rgb(22 24 30 / 0.62);
+  --color-card-bg-hover: rgb(34 37 46 / 0.70);
+  --color-card-border: rgb(255 255 255 / 0.12);
+  --color-panel-bg: rgb(18 20 26 / 0.92);
+  --color-overlay: rgb(0 0 0 / 0.35);
+  --color-shadow: rgb(0 0 0 / 0.35);
+  --color-debug: rgb(255 96 96 / 0.85);
+
+  /* 字体 */
+  --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  --font-serif: "Songti SC", "STSong", serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 28px;
+  --text-display: 48px;
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-bold: 600;
+  --leading-tight: 1.2;
+  --leading-normal: 1.5;
+  --shadow-text: 0 1px 2px rgb(0 0 0 / 0.5);
+
+  /* 间距 */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+
+  /* 形状 */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 9999px;
+  --border-width: 1px;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+  --shadow-card: 0 4px 16px var(--color-shadow);
+  --shadow-raised: 0 12px 32px var(--color-shadow);
+
+  /* 布局 */
+  --card-padding: var(--space-4);
+  --card-gap: var(--space-3);
+  --widget-gap: var(--space-4);
+  --safe-top: 0px;      /* 由 main.js 按 store.safeArea 覆盖 */
+  --safe-right: 0px;
+  --safe-bottom: 0px;
+  --safe-left: 0px;
+
+  /* 层级 */
+  --z-widgets: 1;
+  --z-panel: 10;
+  --z-overlay: 20;
+
+  /* 动效 */
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+  --duration-slow: 400ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* 自检面板（M3 调试用） */
+  --devpanel-width: 360px;
+  --devpanel-avatar-size: 48px;
+  --devpanel-spectrum-height: 40px;
+}
+
+/* 时段主题（store.phase → <html data-phase>）。
+   占位：只换强调色，便于肉眼确认切换生效。M3.5 定稿后替换。 */
+:root[data-phase="morning"] { --color-accent: rgb(204 184 150); }
+:root[data-phase="day"]     { --color-accent: rgb(160 172 196); }
+:root[data-phase="evening"] { --color-accent: rgb(204 156 160); }
+:root[data-phase="night"]   { --color-accent: rgb(140 150 200); --color-card-bg: rgb(14 16 22 / 0.70); }

@@ -7,7 +7,7 @@ export function createStore(initialState) {
   const listeners = new Map(Object.keys(state).map(key => [key, []]));
   const notify = (listener, value, previous) => {
     try { listener(value, previous); }
-    catch { console.error('store: listener failed'); }
+    catch (error) { console.error('store: listener failed', error); }
   };
 
   return {

@@ -228,6 +228,8 @@ for (const [index, event] of invalidEvents.entries()) {
     applyEvent(s, event, now);
     assert.deepEqual(s.getState(), before);
     assert.equal(warn.mock.callCount(), 1);
+    const name = typeof event?.event === 'string' ? event.event : '?';
+    assert.deepEqual(warn.mock.calls[0].arguments, [`bridge: ignored invalid event ${name}`]);
   });
 }
 
@@ -261,4 +263,59 @@ test('bridge: receive never throws for null, primitives, unknown objects or thro
     assert.doesNotThrow(() => target.shell.receive(value));
   }
   assert.deepEqual(s.getState(), initialState);
+});
+
+test('bridge: event observers report each native receipt by name only, not replies or local writes', async () => {
+  const s = fresh(), target = {}, calls = [];
+  const bridge = createBridge(s, { target, native: { postMessage: () => reply() } });
+  const unsubscribe = bridge.subscribeEvents((...args) => calls.push(args));
+  await bridge.start();
+  await bridge.send('saveUiState', { avatarId: '1' });
+  s.set({ ui: { avatarId: '1', backgroundId: null, voiceEnabled: true } });
+  assert.deepEqual(calls, []);
+  target.shell.receive({ event: 'paused', paused: false });
+  target.shell.receive({ event: 'paused', paused: false });
+  target.shell.receive({ event: 'todos', access: 'granted', items: [{ ...todo(), text: 'private title' }] });
+  assert.deepEqual(calls, [['paused'], ['paused'], ['todos']]);
+  unsubscribe(); unsubscribe();
+  target.shell.receive({ event: 'uiState' });
+  assert.equal(calls.length, 3);
+});
+
+test('bridge: event observer failures and malformed event names preserve delivery without leaking payloads', t => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const target = {}, s = fresh(), calls = [];
+  const bridge = createBridge(s, { target, native: { postMessage() {} } });
+  bridge.subscribeEvents(() => { throw new Error('private observer details'); });
+  bridge.subscribeEvents(name => calls.push(name));
+  assert.doesNotThrow(() => target.shell.receive({ event: 'paused', paused: true }));
+  assert.equal(s.get('paused'), true);
+  const revoked = Proxy.revocable({}, {}); revoked.revoke();
+  for (const event of [null, { event: 7 }, revoked.proxy, { get event() { throw Error('private payload'); } }]) {
+    assert.doesNotThrow(() => target.shell.receive(event));
+  }
+  assert.deepEqual(calls, ['paused', '?', '?', '?', '?']);
+  assert.ok(!JSON.stringify(warn.mock.calls.map(call => call.arguments)).includes('private'));
+});
+
+test('bridge: event observers also cover mock closure delivery and are independent subscriptions', async () => {
+  const jobs = new Map();
+  const mock = createMock({ timers: { setInterval(fn, delay) { jobs.set(delay, fn); return delay; }, clearInterval(id) { jobs.delete(id); } } });
+  const bridge = createBridge(fresh(), { target: {}, mock });
+  const names = [];
+  const listener = name => names.push(name);
+  const first = bridge.subscribeEvents(listener), second = bridge.subscribeEvents(listener);
+  try {
+    await bridge.start();
+    assert.equal(names.filter(name => name === 'uiState').length, 2);
+    assert.equal(names.filter(name => name === 'paused').length, 2);
+    names.length = 0; first();
+    const value = await bridge.send('saveUiState', { avatarId: '1' });
+    assert.equal(value.avatarId, '1');
+    assert.deepEqual(names, ['uiState']);
+    jobs.get(33)();
+    assert.deepEqual(names, ['uiState', 'audioSpectrum']);
+    second(); jobs.get(33)();
+    assert.equal(names.length, 2);
+  } finally { mock.stop(); }
 });
