@@ -144,5 +144,15 @@ extension PageEvent {
 
 ## 审查记录
 
-- **结论**：
+- **结论**：**代码审查通过，待用户手动验证**（见"用户手动验证"）。用户确认后合并到 `main`。
+- **复验结果**（Claude Code，2026-10-18，在 `a62d9ab` 的独立检出上执行）：
+  - [x] `swift build` 零警告零错误
+  - [x] `scripts/test.sh`：130 项全部通过（15 个 suite）；`scripts/test-web.sh`：138 项全部通过
+  - [x] 只改了允许的 6 个文件；`parseBattery` / `readBattery` 没有改动；`PowerPolicy`、`PowerMonitor` 没有改动；`Process(` / `NSTask` 没有输出；`git diff --check` 通过
+  - [x] **CPU 对照**（交付记录里这一项待复验，Claude Code 改用独立对照）：把本分支的 `SystemStats.swift` 原样编进临时程序，每 5 秒用 `readCPUTicks` + `cpuUsage` 采样，同时运行系统的 `iostat -w 5`（读同一套内核计数）。每个区间都对得上，相差不到 1 个百分点：加负载前 12.9 / 12.5（iostat 13 / 12），用 `yes` 占满一个核的 15 秒内 **20.2 / 19.6 / 19.9（iostat 20 / 20 / 20）**，结束后 12.2（iostat 12）。单核负载升高约 7 个百分点（理论 1/12 ≈ 8.3，6 核 12 线程共享物理核，略低正常）。这样对照不受后台负载波动影响，判为通过。（第一次尝试用了 macOS 没有的 `timeout` 命令，负载没有跑起来，已重做。）
+  - [x] **内存对照**：同一程序 78.0%–78.4%，用 `vm_stat` 按同样口径独立计算为 78.0%；Codex 对照活动监视器相差 0.19 个百分点
+  - [x] 在主目录（`task/M3-06` = `a62d9ab`）重新 `scripts/bundle.sh --open`：日志出现 `DesktopShell stats: sampling every 5s`，没有读取失败的日志
 - **意见**：
+  - CPU 用回绕减法后再扩宽到 64 位求和，零差值返回 `nil`；内存按活动监视器的"已使用内存"口径，做了饱和加法、乘法溢出和封顶处理。
+  - `SystemStatsMonitor` 启动时记基准，5 秒后首次推送；CPU 读取失败时丢弃基准，内存失败时仍推进 CPU 基准，下一次只覆盖一个区间，处理得细致。定时器容差 1 秒，停止后用代号保证过期回调无效。
+  - 相同来源、相同错误码的读取失败只记录一次。
