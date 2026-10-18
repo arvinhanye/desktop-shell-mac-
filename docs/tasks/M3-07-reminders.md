@@ -194,5 +194,16 @@ final class RemindersStore {
 
 ## 审查记录
 
-- **结论**：
+- **结论**：**代码审查通过，待用户手动验证**（见"用户手动验证"，包括 iPhone 同步实测）。用户确认后合并到 `main`。
+- **复验结果**（Claude Code，2026-10-18，在 `53ad224` 的独立检出上执行）：
+  - [x] `swift build` 零警告零错误
+  - [x] `scripts/test.sh`：150 项全部通过（17 个 suite）；`scripts/test-web.sh`：138 项全部通过
+  - [x] 只改了允许的 11 个文件；`web/`、`PowerMonitor`、`HitTesting`、`HitTestController` 没改；`bundle.sh` 只多了 `NSRemindersFullAccessUsageDescription` 一行；`git diff --check` 通过
+  - [x] `\.remove\(|removeReminder|saveCalendar|requestAccess\(to:` 没有输出
+  - [x] 在主目录（`task/M3-07` = `53ad224`）重新 `scripts/bundle.sh --open`：**没有再弹权限框**（重新编译后授权仍有效），日志 `access=granted`，0.08 秒后 `pushed items=7`；`plutil` 确认权限说明已写入
 - **意见**：
+  - EventKit 全部隔离在 `EventKitRemindersBackend` 里，`RemindersStore` 依赖协议，测试用内存后端，自动测试没有碰真实提醒事项，符合补充约束。
+  - 两个查询合并时按 id 去重（提醒可能在两次查询之间被勾选）；变化通知防抖 0.5 秒；每 5 分钟、唤醒和会话恢复时调用 `refreshSourcesIfNecessary()`；跨日重新读取；每次读写前检查授权，撤权后推送 `access` 和空列表。
+  - 日志只写数量、项目 id 和错误码，不写标题和列表名。
+  - `setTodoDone` 成功时回复 `NSNull`（网页拿到 `null`），其他动作回复 `nil`（网页拿到 `undefined`），网页两种都当作成功，不影响使用。
+  - 测试编译时有一条警告：`Tests/DesktopShellTests/SystemStatsTests.swift:181` 的 `weak var` 从未修改（M3-06 引入，当时漏看）。不影响产品构建，合并本任务后由 Claude Code 顺手改成 `weak let`。
