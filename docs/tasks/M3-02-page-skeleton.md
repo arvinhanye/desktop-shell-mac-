@@ -1,6 +1,6 @@
 # M3-02: 页面骨架（tokens、交互基线、组件注册、点击区域上报、自检面板）
 
-- **状态**：review
+- **状态**：changes-requested
 - **里程碑**：M3
 - **依赖**：M3-01（必须已合并到 `main`）
 - **分支**：task/M3-02
@@ -254,6 +254,27 @@ export function installHitRegions({ send, root = document, win = window })
 
 - `Tests/web/hit-regions.test.mjs`：`toRegions` 的向外取整、裁到视口、丢掉非法和视口外的矩形、去重、超过 64 个时截断并警告。
 
+### 11. 审查后补充：空闲时不做多余的工作（2026-10-17）
+
+审查时实测发现两处在没有变化时仍然按帧率干活的地方（详见"审查记录"）。项目在 Intel Mac 上常驻桌面，要求省电，这两处都要改：
+
+1. **点击区域只在可能影响组件矩形的变化时重新计算**（`hit-regions.js`）。现在 `MutationObserver` 监听整个页面所有元素的 `style` / `class` 变化，律动条每一帧改 `transform` 都会触发一次重新计算。改为先过滤变化记录，抽成纯函数并导出供测试：
+
+   ```js
+   export function affectsHitRegions(records, selector = '.card, [data-hit]')
+   ```
+
+   - 属性变化：只有目标元素本身匹配 `selector`，或者它的子孙里有匹配 `selector` 的元素（例如组件外壳、`#desktop`），才算有影响。区域元素**内部**元素的变化不算：它们如果改变了区域元素的尺寸，`ResizeObserver` 会捕获。
+   - 子节点增删：增加或删除的节点里，有元素本身匹配 `selector` 或者包含匹配的元素，才算有影响。只换文字、或增删不含区域元素的节点（例如结果列表、点击区域的调试虚线框）不算。
+   - 其余触发（`resize`、`load`、`transitionend`、`animationend`、字体加载、外部 `schedule()`）保持不变。
+   - 在 `Tests/web/hit-regions.test.mjs` 里用假的变化记录测试 `affectsHitRegions`：区域元素自身的 `style` 变化 → 有影响；区域元素内部的 `style` 变化 → 没有；区域元素祖先的 `class` 变化 → 有；增加一个 `.card` → 有；增加一个包含 `.card` 的外壳 → 有；删除一个 `.card` → 有；只增删文字或普通元素 → 没有。
+
+2. **律动条没有东西要画时停止动画循环**（`devpanel.js`）。现在只要没暂停、页面可见，`requestAnimationFrame` 就一直按帧率运行，没有声音时也一样。在 `.app` 里，M5.5 之前根本没有 `audioSpectrum`，这个循环会永远空转。改为：
+   - 收到新的 `audioSpectrum`（订阅 store）、没有暂停、页面可见时，才启动循环。
+   - 各条衰减到 0（最后一份数据超过 400 毫秒）之后，画完这一帧就**不再**请求下一帧。
+   - `drawDiagnostics` 不再每帧调用，只在 `scheduleDiagnostics` 里调用。"audioSpectrum 累计"的文字在收到事件时用 `scheduleDiagnostics` 合并到下一帧更新。
+   - 暂停和页面隐藏时的行为不变（立刻归零、不运行循环）。
+
 ## 允许修改的文件
 
 - `web/index.html`（重写）
@@ -303,6 +324,23 @@ export function installHitRegions({ send, root = document, win = window })
   await mountWidgets(document.getElementById('desktop'), ['no-such-widget'], {});
   ```
 - [ ] `scripts/bundle.sh` 打包成功，`build/DesktopShell.app/Contents/Resources/web/` 里有新页面的全部文件，没有 `m2-check.js`，也没有 `Tests/`
+- [ ] **（审查后补充）** 浏览器里打开页面，**保持页面在前台可见**，控制台执行下面的代码。预期 `withSound.hitRegions` 不超过 2（修改前约 28），`silent.raf` 和 `silent.hitRegions` 都不超过 1（修改前 `raf` 约 60）：
+  ```js
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  let frames = 0, collects = 0;
+  const raf = window.requestAnimationFrame.bind(window);
+  window.requestAnimationFrame = cb => { frames++; return raf(cb); };
+  const qsa = Document.prototype.querySelectorAll;
+  Document.prototype.querySelectorAll = function (s) { if (s === '.card, [data-hit]') collects++; return qsa.call(this, s); };
+  const rate = async () => { const f = frames, c = collects; await sleep(2000); return { raf: (frames - f) / 2, hitRegions: (collects - c) / 2 }; };
+  const sound = [...document.querySelectorAll('label')].find(l => l.textContent === '模拟声音').querySelector('input');
+  const withSound = await rate();
+  sound.click(); await sleep(1000);
+  const silent = await rate();
+  sound.click();
+  ({ withSound, silent })
+  ```
+- [ ] **（审查后补充）** 上面的代码跑完、重新勾上"模拟声音"后，律动条马上恢复跳动；"模拟暂停"时仍然立刻归零
 
 **用户手动验证**：
 
@@ -345,5 +383,23 @@ export function installHitRegions({ send, root = document, win = window })
 
 ## 审查记录
 
-- **结论**：
-- **意见**：
+### 第一轮（Claude Code，2026-10-17）
+
+- **结论**：**需修改**（两处空闲时的多余工作，见下）。其余部分通过；Safari 和 `.app` 的手动验证等修改完再一起做。
+- **复验结果**（在 `origin/task/M3-02` 的独立检出上执行）：
+  - [x] `scripts/test-web.sh`：134 项全部通过
+  - [x] 硬编码检查、`backdrop-filter`、内联脚本和样式检查都没有输出；`git diff --check` 通过
+  - [x] 改动文件都在允许范围内（`bridge.js` 的 `subscribeEvents` 是你在 Codex 那边授权追加的，见下），`web/m2-check.js` 已删除
+  - [x] `tokens.css` 与任务单代码块**逐字一致**（脚本比对）
+  - [x] 开发服务器 7 项 curl 检查全部符合预期；另外 `/.git/config`、`/media/avatars/`（目录）、错误的百分号编码都是 404，超出范围的 `Range` 是 416，只监听 `127.0.0.1`，带 `Cache-Control: no-store`
+  - [x] 内置浏览器（mock）：控制台没有错误；`mock`、`ready = true`、爱弥斯、问候 7 条、头像 30、背景 63、安全区域 25 / 0 / 80 / 0；非法请求前 6 条 ✓、第 7 条跳过；模拟暂停时 `<html data-paused>` 且律动条归零，取消后恢复；提醒事项勾选、新增后 6 条、未授权时 `denied · 0 条` 且新增返回 `failed`、恢复授权正常；切到"夜晚"后 `data-phase="night"`、强调色 `rgb(140 150 200)`；`mountWidgets` 加载不存在的组件只报一条"组件 no-such-widget 加载失败"、不留外壳、面板仍在；`--safe-top` / `--safe-bottom` 为 `25px` / `80px`
+  - [x] `scripts/bundle.sh` 打包、签名通过，`Resources/web/` 里 11 个文件齐全，没有 `m2-check.js` 和 `Tests/`
+- **需修改的两处**（已写进第 11 节和验收标准；根源在我写的任务单，不是实现失误：任务单要求 `MutationObserver` 监听 `style`，也没要求律动循环空闲时停下）：
+  1. **点击区域每帧重新计算**：mock 有声音时，实测 `collect()`（`querySelectorAll` + 每个区域元素的 `getComputedStyle` 和 `getBoundingClientRect`）每秒约 **28 次**，没声音时约 0.5 次。原因是律动条每帧改 `style.transform`，被全页面的 `MutationObserver` 捕获。M4 的律动组件会一直这样改样式，所以要在骨架这一层修掉。
+  2. **律动循环空转**：mock 关掉声音后，自检面板的 `requestAnimationFrame` 仍然每秒约 **60 次**。`.app` 里 M5.5 之前没有频谱数据，这个循环会一直空转。
+- **其他意见**：
+  - `bridge.subscribeEvents` 只回调事件名、不暴露内容、监听器出错互不影响，设计合适，接受。它是网页内部接口，不影响 Bridge 白名单。
+  - 日志改进（M3-01 审查意见）已按要求完成。
+  - 开发服务器的路径检查和 `SchemeResolver` 同一套规则（解码后逐段检查、`realpath` 后确认仍在根目录内、只返回普通文件），Range 用 `BigInt` 处理大数，读流在客户端断开时会关闭。
+  - 组件注册按顺序先建外壳、各自独立加载、等样式加载完再挂载，失败时移除外壳，符合要求。
+  - **写进 M4 的要求**：律动组件和其他有持续动画的组件，都要做到"没有东西要画时停止循环"，不能只在暂停时停。
