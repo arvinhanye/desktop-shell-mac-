@@ -6,7 +6,7 @@ const pad = n => String(n).padStart(2, '0');
 // —— 模拟数据（和 M3 的 mock / config 结构一致，内容是示例） ——
 const config = {
   user: { name: 'Arvin' },
-  character: { name: '爱弥斯', motto: '愿星光一直落在你走的路上', tags: ['鸣潮', '共鸣者', 'Waves'] },
+  character: { name: '爱弥斯', motto: '愿星光一直落在你走的路上' },
   greetings: [
     { from: 0, title: '深夜了', wish: '时辰已晚，且捻熄灯盏，良宵安枕' },
     { from: 6, title: '早上好', wish: '晨光熹微，愿您涤尽尘扰，理裳启新日' },
@@ -94,7 +94,6 @@ function renderAppearance() {
   for (const id of ['character-bg', 'launcher-bg']) $(id).style.backgroundImage = bg ? `url("${bg.url}")` : 'none';
   $('character-name').textContent = config.character.name;
   $('character-motto').textContent = config.character.motto ?? '';
-  $('character-tags').replaceChildren(...(config.character.tags ?? []).map(text => Object.assign(document.createElement('span'), { className: 'tag', textContent: text })));
   for (const [gridId, items, key] of [['avatar-grid', avatars, 'avatarId'], ['background-grid', backgrounds, 'backgroundId']]) {
     const grid = $(gridId);
     if (!grid.childElementCount) {

@@ -126,7 +126,8 @@
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
 }
 
-/* 候选：底板下面垫原生毛玻璃（NSVisualEffectView）时，网页底色只负责上色。数值等探针定。 */
+/* 在应用里（底板下面垫着原生毛玻璃 NSVisualEffectView，材质 .hudWindow）时，网页底色只负责上色。
+   2026-10-18 探针定稿：底色层 45%。在普通浏览器里开发时没有原生毛玻璃，不设 data-glass，底色按 100%。 */
 :root[data-glass="on"] {
   --plate-fill-opacity: 0.45;
   --color-panel-bg: rgb(22 26 46 / 0.6);

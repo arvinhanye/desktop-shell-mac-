@@ -22,12 +22,12 @@
 
 ```
 每块屏幕两个无边框、覆盖整屏的窗口，把访达的桌面图标夹在中间：
-  ├─ 上层 WidgetWindow（图标之上）：透明背景的 WKWebView，所有组件都在这一个网页里
+  ├─ 上层 WidgetWindow（图标和系统桌面小组件之上）：原生毛玻璃层 + 透明背景的 WKWebView，所有组件都在这一个网页里
   │     ├─ tokens.css：唯一的设计规范（配色/字体/圆角/阴影/动效）
   │     ├─ store.js：唯一的共享状态，组件之间通过它联动
   │     └─ bridge.js：与 Swift 通信的唯一入口
   │     鼠标在组件区域内才接收点击，其余区域点击穿透给访达（动态切换 ignoresMouseEvents）
-  ├─ 中间：访达的桌面图标（系统的，不归我们管）
+  ├─ 中间：访达的桌面图标、系统桌面小组件（系统的，不归我们管）
   └─ 下层 VideoWindow（图标之下）：AVPlayerLayer 循环播放背景视频（硬件解码，省电），不接收鼠标
 系统音频捕获（全局唯一）：Core Audio process tap → 频谱分析 → 推送 audioSpectrum 给每个网页
 菜单栏 NSStatusItem：暂停动画 / 隐藏桌面文件 / 语音开关 / 重新加载 / 打开配置文件夹 / 退出
@@ -46,7 +46,7 @@
 | 网页容器 | WKWebView | 背景透明 |
 | 网页资源加载 | 自定义 URL scheme（`WKURLSchemeHandler`，例如 `shell://`） | 不用 `file://`，避免 ES module 和跨域问题 |
 | 前端 | 原生 HTML / CSS / JS + ES modules，**无构建步骤** | 组件数量少，不需要框架；状态用一个小的发布订阅 store |
-| 背景 | AVPlayer + AVPlayerLooper | 视频型壁纸转成 H.264/HEVC，1080p 或 1440p |
+| 背景 | AVPlayer + AVPlayerLooper | 视频型壁纸转成 HEVC，**4K（3840×2160）**（2026-10-18 改定：屏幕按 3584×2240 渲染，1440p 要放大 1.56 倍、发虚；实测 4K 和 1440p 的耗电测不出差别） |
 | 系统音频 | Core Audio process tap（macOS 14.2+）+ Accelerate（vDSP FFT） | 只需要"系统录音"权限，不需要屏幕录制权限；必须是打包签名的 `.app`，`Info.plist` 写 `NSAudioCaptureUsageDescription`。可行性见下文"技术探针" |
 | 素材处理 | ffmpeg（视频转码）+ `sips`（图片缩放） | 由 `scripts/prepare-media.sh` 统一完成 |
 | 沙盒 | 关闭 App Sandbox | 自用 |
@@ -85,6 +85,7 @@
 | 保留访达图标时的点击穿透，2026-10-17 | WKWebView 窗口透明区域**不会**自动穿透（35 次空白点击全被网页接住）；改为"网页上报组件区域 + 全局鼠标监听动态切换 `ignoresMouseEvents`"后，空白点击全部交给访达（0 次被接住），组件点击全部收到，从其他应用直接点组件也能一次生效，拖动框选经过组件不会被打断。全局鼠标监听不需要系统权限，鼠标移动时每秒约 20–45 个事件 |
 | 系统提醒事项（EventKit），2026-10-17 | **可行**，详见下方 |
 | 键盘焦点，2026-10-18 | 组件窗口**改用不激活应用的面板**，详见下方 |
+| 原生毛玻璃（`NSVisualEffectView`），2026-10-18 | **可行**，开销测不出来，详见下方 |
 
 **系统音频捕获探针**（全局 tap `CATapDescription(stereoGlobalTapButExcludeProcesses: [])`，`muteBehavior = .unmuted`，加上"默认输出设备 + tap"的私有聚合设备，再加 IOProc）：
 
@@ -114,18 +115,29 @@
 - 面板成为 key window 时 `NSApp.isActive` 会变成 `true`，但前台应用其实没变，逻辑里不要依赖 `NSApp.isActive`。
 - 网页在页面失去焦点时，要主动让输入框真正失焦（`blur()`），否则应用以后被激活时，WebKit 会把焦点恢复到那个输入框。
 
+**原生毛玻璃探针**（照正式结构：VideoWindow 在图标层 −1 播放视频；WidgetWindow 是图标层 +1 的不激活 `NSPanel`，内容视图里先放一层 `NSVisualEffectView`，上面盖透明的 WKWebView，加载 M3.5 效果图；网页上报底板矩形，原生按矩形摆放毛玻璃）：
+
+- 桌面层窗口里的 `blendingMode = .behindWindow` 能正常取样下面的视频和访达图标。`state = .active`，`appearance = .darkAqua`。
+- 每块底板一个 `NSVisualEffectView`。圆角用 `maskImage`：一张可拉伸的圆角图，`capInsets` 等于半径。更新位置时 `CATransaction.setDisableActions(true)`，避免隐式动画。网页在 `requestAnimationFrame` 里读 `getBoundingClientRect` 上报；打开、关闭外观面板时重新上报。
+- 用户选定材质 `.hudWindow`，网页底色层不透明度 45%（`--plate-fill-opacity`）。
+- 耗电（i7-9750H，当时由独显 5300M 驱动屏幕；每种情况采样 20 秒，测两轮；后台开着 Claude、Chrome 等应用，数字只看相对差别）：
+  - 毛玻璃开和关，WindowServer CPU 的差别在误差以内（54–64% 对 55–65%），独显占用多 2–4 个百分点。
+  - 主要开销在视频本身：只放视频时，WindowServer 比不开多约 20%；全屏透明网页窗口再多 5–10%。
+  - 4K 和 1440p 测不出差别：WindowServer 53% 对 52%，解码进程 4.6% 对 4.3%。
+  - 律动条用 60 帧/秒的模拟动画时，网页进程约 13%，WindowServer 再多约 10%。正式实现只在收到 `audioSpectrum`（约 30 次/秒）时刷新，静音时停住。
+
 ## 窗口要求
 
 - 实测层级（本机）：系统壁纸和程序坞 ≤ -2147483624，**访达图标 = `CGWindowLevelForKey(.desktopIconWindow)`（-2147483603）**，系统桌面小组件 = 图标 +2。
 - **VideoWindow**：层级 = 图标层 **−1**；不透明；`ignoresMouseEvents = true`。
-- **WidgetWindow**：层级 = 图标层 **+1**；`isOpaque = false`、`backgroundColor = .clear`、无阴影；是**不激活应用的 `NSPanel`**（`styleMask` 含 `.nonactivatingPanel`，`hidesOnDeactivate = false`），点组件不会把本应用切到前台、不会抢走其他应用的键盘（2026-10-18 键盘焦点探针）。
+- **WidgetWindow**：层级 = 图标层 **+3**（2026-10-18 改定，原来是 +1：用户桌面上有系统小组件，层级 +2，会盖住组件和外观面板。改到 +3 后组件在最上面；系统小组件在没被组件挡住的地方照常显示，点击穿透到它们也正常。和组件重叠的系统小组件由用户自己挪开）；内容视图里先放毛玻璃层（见"设计规范"），上面是 WKWebView；`isOpaque = false`、`backgroundColor = .clear`、无阴影；是**不激活应用的 `NSPanel`**（`styleMask` 含 `.nonactivatingPanel`，`hidesOnDeactivate = false`），点组件不会把本应用切到前台、不会抢走其他应用的键盘（2026-10-18 键盘焦点探针）。
 - 两个窗口的 `collectionBehavior` 都是 `[.canJoinAllSpaces, .stationary, .ignoresCycle]`。
 - **点击穿透**（2026-10-17 探针实测，见"技术探针"）：WKWebView 窗口的透明区域**不会**自动让点击穿透，所以要动态切换：
   - 网页通过 bridge 动作 `setHitRegions` 上报所有可交互组件的矩形（CSS 像素，相对网页左上角，组件布局变化时重新上报）。
   - Swift 用 `NSEvent` 的全局和本地监听（鼠标移动、拖动、松开）跟踪光标：光标在某个区域内时 `WidgetWindow.ignoresMouseEvents = false`，否则为 `true`，点击落到访达图标上。不需要任何系统权限。
   - **按住鼠标期间不切换**（`NSEvent.pressedMouseButtons != 0`），松开后再重新判断，避免打断拖动和框选。
 - 点在组件之外的空白处：交给访达（选择图标、框选、右键菜单），我们不做任何事。**点击语音改为点击角色卡头像触发**。
-- **隐藏桌面文件**（菜单栏勾选项，用来单纯欣赏壁纸）：把 VideoWindow 升到图标层 **+1**（与 WidgetWindow 同层，排在它下面），VideoWindow **始终 `ignoresMouseEvents = true`**；同时关闭点击穿透，让最上面的 WidgetWindow **接住全部点击**，空白处的点击落在网页透明背景上，什么都不发生，不会点到看不见的图标。取消时恢复图标层 −1 并重新打开点击穿透。**不修改访达设置、不重启访达**。选择保存在 `ui.json` 的 `desktopIconsHidden`，重启后保持。（2026-10-17 实测教训：同层窗口被点击时 macOS 会把它提到同层最前面。让 VideoWindow 接收点击会盖住组件；点击后再重排又会闪烁。所以 VideoWindow 永远不接收点击。）网页要禁用右键菜单（`contextmenu` 事件 `preventDefault`），否则空白处右键会弹出 WKWebView 自带的菜单。
+- **隐藏桌面文件**（菜单栏勾选项，用来单纯欣赏壁纸）：把 VideoWindow 升到图标层 **+3**（与 WidgetWindow 同层，排在它下面，图标和系统小组件一起被盖住），VideoWindow **始终 `ignoresMouseEvents = true`**；同时关闭点击穿透，让最上面的 WidgetWindow **接住全部点击**，空白处的点击落在网页透明背景上，什么都不发生，不会点到看不见的图标。取消时恢复图标层 −1 并重新打开点击穿透。**不修改访达设置、不重启访达**。选择保存在 `ui.json` 的 `desktopIconsHidden`，重启后保持。（2026-10-17 实测教训：同层窗口被点击时 macOS 会把它提到同层最前面。让 VideoWindow 接收点击会盖住组件；点击后再重排又会闪烁。所以 VideoWindow 永远不接收点击。）网页要禁用右键菜单（`contextmenu` 事件 `preventDefault`），否则空白处右键会弹出 WKWebView 自带的菜单。
 - 需要输入文字的组件（待办输入框等）：WidgetWindow 的 `canBecomeKey` 只在网页文本输入框获得焦点期间为 `true`。网页在文本输入框获得焦点时发 `focusInput`，Swift 调用 `makeKey()` 并把网页设为第一响应者（不激活应用）；失去焦点或按 Esc 时发 `blurInput`，Swift 恢复为不能成为 key，如果仍是 key window 就调用 `NSApp.deactivate()`，键盘回到原来的应用。**不调用 `NSApp.activate`。**
 - 访达默认从屏幕**右上角**开始往下排列图标（用户桌面上约有 68 个项目），M3.5 设计布局时要给图标留出区域。
 - **安全区域**：读取 `NSScreen.visibleFrame`（排除 Dock 和菜单栏后的区域），换算成相对窗口的边距，通过 bridge 推送给网页，在网页里设成 CSS 变量 `--safe-top/right/bottom/left`。所有组件都布局在安全区域内。屏幕参数变化时（`NSApplication.didChangeScreenParametersNotification`）重新计算。（M1-02 已实测：Dock 位置、自动隐藏的变化都会触发这个通知，不需要轮询。计算函数为 `SafeAreaInsets.compute`。）
@@ -166,12 +178,13 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 | `openProject` | `projectId` | 在 Finder 中打开该项目文件夹 |
 | `openProjectWith` | `projectId`, `appId` | 用指定应用打开项目文件夹（例如 Cursor）。应用只要在 `config.apps` 里即可 |
 | `launchApp` | `appId` | 启动应用 |
-| `getConfig` | — | 回复 `{config, media, uiState}`：`config` 含 `user`（`name`）、`character`（`name`、`motto`、`tags`）、`greetings`、`projects`（`id`、`name`、`tags`、`apps`、`hasReminders`）、`apps`（`id`、`name`、`iconUrl`），**不含**项目路径、应用 bundle id、提醒事项列表名和背景视频；`media.avatars`、`media.backgrounds` 由 Swift 扫描 `media/` 目录生成，每项 `{id, url}`；`apps[].iconUrl` 是 `/media/app-icons/<appId>.png`，应用没装或图标导出失败时为 `null`；`uiState` 为 `{avatarId, backgroundId, voiceEnabled}`。待办不在这里，见推送事件 `todos` |
+| `getConfig` | — | 回复 `{config, media, uiState}`：`config` 含 `user`（`name`）、`character`（`name`、`motto`）、`greetings`、`projects`（`id`、`name`、`tags`、`apps`、`hasReminders`）、`apps`（`id`、`name`、`iconUrl`），**不含**项目路径、应用 bundle id、提醒事项列表名和背景视频；`media.avatars`、`media.backgrounds` 由 Swift 扫描 `media/` 目录生成，每项 `{id, url}`；`apps[].iconUrl` 是 `/media/app-icons/<appId>.png`，应用没装或图标导出失败时为 `null`；`uiState` 为 `{avatarId, backgroundId, voiceEnabled}`。待办不在这里，见推送事件 `todos` |
 | `addTodo` | `text`, `projectId?` | 在系统提醒事项里新增一条，只设标题。放进该项目对应的列表；没有 `projectId`、为 `null`，或者该项目没有配置列表时，放进系统默认列表。`text` 去掉首尾空白后不为空、不超过 500 字。回复新提醒（格式同 `todos` 事件里的一项） |
 | `setTodoDone` | `todoId`, `done` | 勾选或取消勾选一条提醒。`todoId` 查不到 → `not-found`。**不提供删除**（删除在 iPhone 或 Mac 的提醒事项里做） |
 | `saveUiState` | `avatarId?`, `backgroundId?`（`null` 表示恢复默认） | 写入 `ui.json`，回复新的 `uiState`，并向所有页面推送 `uiState`。Swift 先核对 id 确实存在于 `media/avatars`、`media/backgrounds`，不存在就回复 `not-found` |
 | `focusInput` / `blurInput` | — | 网页的文本输入框获得 / 失去焦点时发送。`focusInput`：该窗口允许成为 key window 并 `makeKey()`，不激活应用；`blurInput`：恢复为不能成为 key，如果仍是 key window 就 `NSApp.deactivate()`。做法见"窗口要求"和"技术探针" |
 | `setHitRegions` | `regions`：`[[x, y, w, h], …]`，CSS 像素，相对网页左上角 | 整体替换该窗口的可交互区域，用于点击穿透判断。只接受有限数值，最多 64 个，宽高必须为正，超出窗口的部分裁掉；格式不对就整条拒绝并记录日志 |
+| `setGlassRegions` | `regions`：`[[x, y, w, h, radius], …]`，CSS 像素，相对网页左上角 | 整体替换该窗口毛玻璃的位置（2026-10-18 增加）。校验同 `setHitRegions`，另外 `radius` 必须在 0 到宽高较小值的一半之间 |
 
 **安全要求**：
 
@@ -201,7 +214,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 {
   "background": { "video": "video/aemeath.mp4" },
   "user": { "name": "Arvin" },
-  "character": { "name": "爱弥斯", "motto": "愿星光一直落在你走的路上", "tags": ["鸣潮", "共鸣者", "Waves"] },
+  "character": { "name": "爱弥斯", "motto": "愿星光一直落在你走的路上" },
   "greetings": [
     { "from": 0,  "title": "深夜了", "wish": "时辰已晚，且捻熄灯盏，良宵安枕" },
     { "from": 6,  "title": "早上好", "wish": "晨光熹微，愿您涤尽尘扰，理裳启新日" },
@@ -228,7 +241,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 - `background.video` 是相对 `media/` 的路径。
 - 项目的 `remindersList`（可选）是系统提醒事项里一个列表的名字，按名字精确匹配；找不到时记录日志，当作没有配置。同名列表有多个时取第一个并记录日志。
 - `greetings` 按整点 `from` 升序排列，取不大于当前小时的最后一项；问候显示为 `"<title>，<user.name>"`，名字用强调色；没有 `user.name` 时只显示 `title`（2026-10-18 改定，原来是角色名）。默认文案取自美化包 `Skins/Ageo` 的配置。
-- `character.motto`（签名）和 `character.tags`（标签）显示在角色卡上，都是可选的，没有就不显示。
+- `character.motto`（签名）显示在角色卡上名字的右边，可选，没有就不显示。
 - 同目录下的其他数据文件：`ui.json`（当前头像、背景图、语音开关、是否隐藏桌面文件）。待办存在系统提醒事项里，不另存文件。`ui.json` 由应用自己管理，缺少的字段用默认值，损坏时记录日志并使用默认值。
 
 ### 运行时素材目录
@@ -237,7 +250,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 
 | 子目录 | 内容 | 处理方式 |
 |---|---|---|
-| `video/` | 背景视频 | ffmpeg 把 webm 转成 H.264 或 HEVC 的 mp4 |
+| `video/` | 背景视频 | ffmpeg 把 webm 转成 HEVC 的 mp4，保持原片的 3840×2160，不缩小 |
 | `voice/` | 点击语音（mp3） | 原样复制 |
 | `avatars/` | 头像（PNG） | 缩到 256px 以内 |
 | `backgrounds/` | 背景图库 | 长边超过 2400 才缩到 2400，**只缩不放**（`sips -Z` 会放大小图，必须先判断尺寸）；不透明的图转 JPEG（质量 90），带透明的角色立绘保持 PNG |
@@ -257,7 +270,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 4. **待办（系统提醒事项）**（2026-10-17 改定，原方案是自己存 `todos.json`）：直接读写系统"提醒事项"，和 iPhone 同步。显示所有列表的未完成提醒和今天完成的提醒，带到期时间的显示到期时间。可勾选完成、可新增（第一版只填文字，到期时间在 iPhone 上加），**不能删除**。项目通过配置里的 `remindersList` 对应一个列表。没有授权时显示提示，告诉用户去"系统设置 → 隐私与安全性 → 提醒事项"里允许。
 5. **系统状态**：电量、CPU、内存，外加一条 CPU 历史折线。
 6. **问候语**：按 `config.greetings` 显示当前整点对应的问候和祝福语，角色名用强调色。
-7. **角色卡**：圆形头像、签名、标签（签名和标签来自 `config.character`）。**点击头像播放语音**；卡片上另设一个入口（具体形式在 M3.5 定，例如签名区域或一个小按钮），点击后在**同一个网页里**弹出"外观"面板，可以换头像和背景图，选择结果通过 `saveUiState` 保存。
+7. **角色卡**：圆形头像、名字、签名（签名来自 `config.character.motto`；2026-10-18 去掉了标签）。**点击头像播放语音**；卡片上另设一个入口（具体形式在 M3.5 定，例如签名区域或一个小按钮），点击后在**同一个网页里**弹出"外观"面板，可以换头像和背景图，选择结果通过 `saveUiState` 保存。
 8. **音频律动**：冰晶心形装饰条，两侧各 12 根柱子跟随 `audioSpectrum` 跳动。
 
 两项功能：
@@ -289,7 +302,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 - 视觉参考：美化包里对应皮肤的配置（字体、字号、颜色、线宽、文案）。M3.5 开始时由 Claude Code 先整理成参数表，再在此基础上设计。已知的起点：正文白色、强调色 `rgb(250,192,207)`、问候语字体思源宋体。
 - 每个组件是一个"卡片"，共用同一个基础卡片样式（`.card`），只在内容上区分。
 - **桌面组件交互基线**（写在 `base.css` / 页面入口里，所有组件共用）：图片和装饰元素不能拖动（`-webkit-user-drag: none`、`draggable="false"`）；除输入框外文字不能选中（`user-select: none`）；禁用右键菜单（`contextmenu` 事件 `preventDefault`）；鼠标指针默认是箭头，只有可点击的元素才变化。M2 测试页没有做这些，那只是临时页面。
-- **毛玻璃效果待定**（2026-10-17 发现）：M2-05 把视频拆到单独的 VideoWindow 后，网页里的 CSS `backdrop-filter` 只能跨窗口取样，用户看到测试面板的透明度会跳动。**用户确认：只在点击、切换前后台的那一刻变化**，即 macOS 按应用是否在前台切换"透过窗口模糊"的渲染方式，CSS 无法控制。M3.5 设计时二选一：**不用毛玻璃**（半透明纯色面板，最省 Intel 核显、没有跳动），或者**原生 `NSVisualEffectView`**（`blendingMode = .behindWindow`、`state = .active`，始终保持前台效果）垫在组件区域下面，形状和圆角与网页对齐。选原生方案的话先做探针。保留 CSS `backdrop-filter` 已排除。
+- **毛玻璃用原生 `NSVisualEffectView`**（2026-10-18 定，探针见"技术探针"）：垫在 WidgetWindow 里 WKWebView 的下面，网页通过 `setGlassRegions` 上报每块底板（`.plate`）和打开着的弹层的矩形与圆角，Swift 按区域摆放，材质 `.hudWindow`。网页底板的底色单独放一层，不透明度用 `--plate-fill-opacity`（有原生毛玻璃时 45%）。在普通浏览器里开发时没有原生毛玻璃，底色按 100% 显示。不用 CSS `backdrop-filter`：M2-05 把视频拆到单独的 VideoWindow 后，它只能跨窗口取样，macOS 按应用是否在前台切换渲染方式，透明度会在点击、切换前后台的那一刻跳动，CSS 控制不了。
 - 具体的视觉设计（token 数值、卡片样式、组件版式、桌面布局）在 **M3.5 设计定稿**中确定，记录在 `docs/design/`。M4 及之后实现组件时以定稿为准，**Codex 不自行做视觉决定**；定稿没有覆盖到的视觉问题，在交付记录里提问。
 - 素材只用**图片、视频、音频和字体**。**不执行任何从壁纸包里解出来的代码**（包括 exe/dll/ps1/vbs/bat/ahk/lua 和网页 JS），需要的功能自己重写。皮肤配置文件只当作数据来读，用来提取参数。
 
@@ -328,6 +341,7 @@ desktop-shell/
 │   ├── DesktopWindow.swift        # VideoWindow / WidgetWindow：窗口层级、key window 处理
 │   ├── HitTesting.swift           # 组件区域解析 + 点击穿透判断（纯函数）
 │   ├── HitTestController.swift    # 全局鼠标监听，动态切换 ignoresMouseEvents
+│   ├── GlassLayer.swift           # 按网页上报的区域摆放 NSVisualEffectView
 │   ├── ScreenManager.swift        # 多屏、安全区域
 │   ├── BackgroundPlayer.swift     # 视频背景
 │   ├── WebContainer.swift         # WKWebView + URL scheme handler
@@ -353,6 +367,7 @@ desktop-shell/
 │   ├── js/mock.js                 # mock 数据和模拟事件（含 audioSpectrum）
 │   ├── js/widgets.js              # 组件注册与挂载
 │   ├── js/hit-regions.js          # 自动上报点击区域
+│   ├── js/glass-regions.js        # 自动上报毛玻璃区域（底板和弹层）
 │   ├── js/main.js                 # 页面入口
 │   └── widgets/
 │       ├── devpanel.js            # M3 骨架自检面板（调试用）

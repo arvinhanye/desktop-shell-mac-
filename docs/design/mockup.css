@@ -61,7 +61,7 @@ body { font: 13px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; 
 .w-date { left: 32px; top: 10px; width: var(--column-width); height: 278px; }
 .w-greeting { left: calc(32px + var(--column-width) + var(--column-gap)); top: 34px; width: var(--column-width); }
 .w-character { left: 32px; top: 300px; width: var(--column-width); }
-.w-stats { left: 32px; top: 548px; width: var(--column-width); }
+.w-stats { left: 32px; top: 528px; width: var(--column-width); }
 .w-projects { left: calc(32px + var(--column-width) + var(--column-gap)); top: 222px; width: var(--column-width); height: 252px; }
 .w-todos { left: calc(32px + var(--column-width) + var(--column-gap)); top: 490px; width: var(--column-width); height: 377px; display: flex; flex-direction: column; }
 .w-launcher { left: 32px; bottom: 12px; width: calc(var(--column-width) * 2 + var(--column-gap)); }
@@ -100,16 +100,14 @@ body { font: 13px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; 
 .greeting-wish { margin: var(--space-2) 0 0; font-size: var(--text-wish); line-height: var(--leading-tight); }
 
 /* —— 角色卡：头像组合图整张显示，压在卡片左上方（照 prototype / Profile） —— */
-.w-character .plate { height: 232px; padding-top: 0; }
+.w-character .plate { height: 212px; padding-top: 0; }
 .avatar-button { position: absolute; left: var(--space-1); top: var(--space-2); width: 240px; height: 150px; padding: 0; border: 0; background: none; border-radius: var(--radius-full); }
 .avatar-button img { width: 100%; height: 100%; display: block; -webkit-user-drag: none; filter: drop-shadow(0 2px 6px rgb(10 12 26 / 0.45)); }
 .avatar-button.playing img { animation: voice-pulse 1.2s var(--ease-standard) infinite; }
 @keyframes voice-pulse { 50% { filter: drop-shadow(0 0 14px var(--color-ice)); } }
 .character-info { position: absolute; left: var(--card-padding); right: var(--card-padding); bottom: var(--space-3); display: grid; grid-template-columns: auto 1fr; align-items: baseline; column-gap: var(--space-3); row-gap: var(--space-1); }
-.character-info .character-tags { grid-column: 1 / -1; }
 .character-name { font-family: var(--font-serif); font-size: var(--text-xl); letter-spacing: 2px; }
 .character-motto { font-family: var(--font-serif); font-size: var(--text-sm); color: var(--color-text-muted); }
-.character-tags { display: flex; gap: var(--space-2); margin-top: var(--space-1); }
 .tag { padding: 0 var(--space-2); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-sm); font-size: var(--text-xs); color: var(--color-text-muted); line-height: 1.7; }
 .appearance-button { position: absolute; top: var(--space-3); right: var(--space-3); display: flex; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-2); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-sm); background: var(--color-card-bg); font-size: var(--text-sm); z-index: 2; }
 .appearance-button:hover { background: var(--color-card-bg-hover); }
