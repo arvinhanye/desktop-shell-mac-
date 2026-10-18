@@ -42,6 +42,67 @@ final class Bridge: NSObject, WKScriptMessageHandlerWithReply {
             }
             window.setHitRegions(regions)
             replyHandler(nil, nil)
+        case .success(.openProject(let projectId)):
+            guard let directory = projectDirectory(projectId) else {
+                reject(.notFound, action: action, replyHandler: replyHandler)
+                return
+            }
+            completeOpen(action: action, ids: projectId, failed: !NSWorkspace.shared.open(directory), replyHandler: replyHandler)
+        case .success(.openProjectWith(let projectId, let appId)):
+            guard let directory = projectDirectory(projectId), let appURL = applicationURL(appId) else {
+                reject(.notFound, action: action, replyHandler: replyHandler)
+                return
+            }
+            // Project.apps controls highlighting only, not the configured-app allowlist.
+            NSWorkspace.shared.open([directory], withApplicationAt: appURL, configuration: NSWorkspace.OpenConfiguration()) { _, error in
+                let failed = error != nil
+                Task { @MainActor in
+                    self.completeOpen(action: action, ids: "\(projectId) \(appId)", failed: failed, replyHandler: replyHandler)
+                }
+            }
+        case .success(.launchApp(let appId)):
+            guard let appURL = applicationURL(appId) else {
+                reject(.notFound, action: action, replyHandler: replyHandler)
+                return
+            }
+            let configuration = NSWorkspace.OpenConfiguration()
+            configuration.activates = true
+            NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, error in
+                let failed = error != nil
+                Task { @MainActor in
+                    self.completeOpen(action: action, ids: appId, failed: failed, replyHandler: replyHandler)
+                }
+            }
+        case .success(.saveUiState(let avatar, let background)):
+            switch appState.updateAppearance(avatar: avatar, background: background) {
+            case .failure(let error):
+                reject(error, action: action, replyHandler: replyHandler)
+            case .success(let state):
+                Log.notice("DesktopShell bridge: saveUiState ok")
+                replyHandler(ConfigReply.makeUiState(state), nil)
+            }
+        }
+    }
+
+    private func projectDirectory(_ id: String) -> URL? {
+        guard let project = appState.config.projects.first(where: { $0.id == id }),
+              let url = ProjectPath.resolve(project.path, home: FileManager.default.homeDirectoryForCurrentUser) else { return nil }
+        var directory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &directory), directory.boolValue else { return nil }
+        return url
+    }
+
+    private func applicationURL(_ id: String) -> URL? {
+        guard let app = appState.config.apps.first(where: { $0.id == id }) else { return nil }
+        return NSWorkspace.shared.urlForApplication(withBundleIdentifier: app.bundleId)
+    }
+
+    private func completeOpen(action: String, ids: String, failed: Bool, replyHandler: @MainActor @Sendable (Any?, String?) -> Void) {
+        if failed {
+            reject(.failed, action: action, replyHandler: replyHandler)
+        } else {
+            Log.notice("DesktopShell bridge: \(action) \(ids) ok")
+            replyHandler(nil, nil)
         }
     }
 

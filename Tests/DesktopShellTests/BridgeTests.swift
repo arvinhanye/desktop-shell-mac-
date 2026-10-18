@@ -53,10 +53,57 @@ struct BridgeTests {
 
     @Test("未知与尚未实现的动作始终返回 unknown-action")
     func unimplementedActions() {
-        for action in ["deleteFile", "", "GETCONFIG", "openProject", "openProjectWith", "launchApp",
-                       "saveUiState", "addTodo", "setTodoDone", "focusInput", "blurInput"] {
+        for action in ["deleteFile", "", "GETCONFIG", "addTodo", "setTodoDone", "focusInput", "blurInput"] {
             #expect(BridgeRequest.parse(["action": action]) == .failure(.unknownAction))
             #expect(BridgeRequest.parse(["action": action, "path": "/private"]) == .failure(.unknownAction))
+        }
+    }
+
+    @Test("四个新动作识别合法请求，不再作为延期动作")
+    func actionRequestsRecognized() {
+        let bodies: [[String: Any]] = [
+            ["action": "openProject", "projectId": "p-1"],
+            ["action": "openProjectWith", "projectId": "p-1", "appId": "app_2"],
+            ["action": "launchApp", "appId": "app_2"],
+            ["action": "saveUiState", "avatarId": "1"],
+            ["action": "saveUiState", "backgroundId": "bg"],
+            ["action": "saveUiState", "avatarId": NSNull(), "backgroundId": NSNull()],
+        ]
+        for body in bodies {
+            if case .failure(let error) = BridgeRequest.parse(body) {
+                Issue.record("合法动作被拒绝：\(body["action"]!) / \(error)")
+            }
+        }
+    }
+
+    @Test("新动作拒绝缺失、错误类型、非法 id 和额外参数")
+    func actionRequestValidation() {
+        let required = [("openProject", ["projectId"]), ("openProjectWith", ["projectId", "appId"]), ("launchApp", ["appId"])]
+        let invalidIDs: [Any] = [NSNull(), 1, true, ["x"], ["id": "x"], "", "../etc", "a b", "a/b", "中文", "x.y"]
+        for (action, keys) in required {
+            var valid: [String: Any] = ["action": action]
+            for key in keys { valid[key] = "valid-id_1" }
+            for key in keys {
+                var missing = valid; missing.removeValue(forKey: key)
+                #expect(BridgeRequest.parse(missing) == .failure(.invalid))
+                for value in invalidIDs {
+                    var body = valid; body[key] = value
+                    #expect(BridgeRequest.parse(body) == .failure(.invalid))
+                }
+            }
+            for key in ["path", "bundleId", "url", "extra"] {
+                var body = valid; body[key] = NSNull()
+                #expect(BridgeRequest.parse(body) == .failure(.invalid))
+            }
+        }
+        #expect(BridgeRequest.parse(["action": "saveUiState"]) == .failure(.invalid))
+        for key in ["avatarId", "backgroundId"] {
+            for value in invalidIDs where !(value is NSNull) {
+                #expect(BridgeRequest.parse(["action": "saveUiState", key: value]) == .failure(.invalid))
+            }
+        }
+        for key in ["voiceEnabled", "desktopIconsHidden", "path", "url"] {
+            #expect(BridgeRequest.parse(["action": "saveUiState", "avatarId": "1", key: true]) == .failure(.invalid))
         }
     }
 
@@ -186,6 +233,87 @@ struct BridgeTests {
         state.uiState.desktopIconsHidden = true
         #expect(throws: (any Error).self) { try state.saveUiState() }
         #expect(state.uiState.desktopIconsHidden)
+    }
+
+    @Test("解析保留动作 id 与外观缺失、null、set 三种语义")
+    func actionPayloads() {
+        #expect(BridgeRequest.parse(["action": "openProject", "projectId": "p"]) == .success(.openProject("p")))
+        #expect(BridgeRequest.parse(["action": "openProjectWith", "projectId": "p", "appId": "a"]) == .success(.openProjectWith(projectId: "p", appId: "a")))
+        #expect(BridgeRequest.parse(["action": "launchApp", "appId": "a"]) == .success(.launchApp("a")))
+        #expect(BridgeRequest.parse(["action": "saveUiState", "avatarId": "1"]) == .success(.saveUiState(avatar: .set("1"), background: .unchanged)))
+        #expect(BridgeRequest.parse(["action": "saveUiState", "backgroundId": NSNull()]) == .success(.saveUiState(avatar: .unchanged, background: .clear)))
+        #expect(BridgeRequest.parse(["action": "saveUiState", "avatarId": NSNull(), "backgroundId": "bg"]) == .success(.saveUiState(avatar: .clear, background: .set("bg"))))
+        #expect(BridgeRequest.parse(["action": "saveUiState", "avatarId": "1", "backgroundId": NSNull()]) == .success(.saveUiState(avatar: .set("1"), background: .clear)))
+    }
+
+    @Test("外观更新只修改请求的字段并保留两个菜单开关")
+    func appearanceUpdates() {
+        let state = UiState(avatarId: "old", backgroundId: "old-bg", voiceEnabled: false, desktopIconsHidden: true)
+        let avatars = [MediaItem(id: "1", url: "/media/avatars/1.png")]
+        let backgrounds = [MediaItem(id: "bg", url: "/media/backgrounds/bg.jpg")]
+        let cases: [(UiPatch, UiPatch, String?, String?)] = [
+            (.set("1"), .unchanged, "1", "old-bg"),
+            (.unchanged, .set("bg"), "old", "bg"),
+            (.clear, .unchanged, nil, "old-bg"),
+            (.unchanged, .clear, "old", nil),
+            (.clear, .clear, nil, nil),
+            (.set("1"), .set("bg"), "1", "bg"),
+        ]
+        for (avatar, background, expectedAvatar, expectedBackground) in cases {
+            #expect(UiStateUpdate.apply(to: state, avatar: avatar, background: background, avatars: avatars, backgrounds: backgrounds)
+                == .success(UiState(avatarId: expectedAvatar, backgroundId: expectedBackground, voiceEnabled: false, desktopIconsHidden: true)))
+        }
+    }
+
+    @Test("外观更新拒绝空补丁、非法 id、错类别和缺失素材")
+    func appearanceValidation() {
+        let state = UiState()
+        let avatars = [MediaItem(id: "1", url: "/media/avatars/1.png")]
+        let backgrounds = [MediaItem(id: "bg", url: "/media/backgrounds/bg.jpg")]
+        let cases: [(UiPatch, UiPatch, BridgeError)] = [
+            (.unchanged, .unchanged, .invalid),
+            (.set(""), .unchanged, .invalid), (.unchanged, .set("../bg"), .invalid),
+            (.set("a b"), .set("bg"), .invalid), (.set("missing"), .set("bad/id"), .invalid),
+            (.set("missing"), .unchanged, .notFound), (.unchanged, .set("missing"), .notFound),
+            (.set("bg"), .unchanged, .notFound), (.unchanged, .set("1"), .notFound),
+        ]
+        for (avatar, background, expected) in cases {
+            #expect(UiStateUpdate.apply(to: state, avatar: avatar, background: background, avatars: avatars, backgrounds: backgrounds) == .failure(expected))
+        }
+    }
+
+    @MainActor @Test("外观保存实时扫描素材、持久化且返回值与内存一致")
+    func appearancePersistence() throws {
+        let fixture = try TemporaryTestDirectory(); defer { fixture.cleanup() }
+        let paths = AppPaths(supportDir: fixture.root, mediaDir: fixture.root.appendingPathComponent("media"), webDir: fixture.root)
+        let state = AppState(paths: paths)
+        state.uiState = UiState(voiceEnabled: false, desktopIconsHidden: true)
+        #expect(state.updateAppearance(avatar: .set("1"), background: .unchanged) == .failure(.notFound))
+        _ = try fixture.file("media/avatars/1.png")
+        _ = try fixture.file("media/backgrounds/bg.jpg")
+        let expected = UiState(avatarId: "1", backgroundId: "bg", voiceEnabled: false, desktopIconsHidden: true)
+        #expect(state.updateAppearance(avatar: .set("1"), background: .set("bg")) == .success(expected))
+        #expect(state.uiState == expected)
+        #expect(UiStateStore(supportDir: fixture.root).load() == expected)
+        let saved = try Data(contentsOf: fixture.root.appendingPathComponent("ui.json"))
+        #expect(state.updateAppearance(avatar: .clear, background: .set("missing")) == .failure(.notFound))
+        #expect(state.uiState == expected)
+        #expect(try Data(contentsOf: fixture.root.appendingPathComponent("ui.json")) == saved)
+        #expect(state.updateAppearance(avatar: .clear, background: .clear) == .success(UiState(voiceEnabled: false, desktopIconsHidden: true)))
+        #expect(AppState(paths: paths).uiState == UiState(voiceEnabled: false, desktopIconsHidden: true))
+    }
+
+    @MainActor @Test("写入失败时外观恢复修改前的全部状态，保留原有文件障碍")
+    func appearanceSaveRollback() throws {
+        let fixture = try TemporaryTestDirectory(); defer { fixture.cleanup() }
+        _ = try fixture.file("media/avatars/1.png")
+        let state = AppState(paths: AppPaths(supportDir: fixture.root, mediaDir: fixture.root.appendingPathComponent("media"), webDir: fixture.root))
+        let before = UiState(avatarId: "old", backgroundId: "old-bg", voiceEnabled: false, desktopIconsHidden: true)
+        state.uiState = before
+        let sentinel = try fixture.file("ui.json/sentinel", contents: "preserved")
+        #expect(state.updateAppearance(avatar: .set("1"), background: .clear) == .failure(.failed))
+        #expect(state.uiState == before)
+        #expect(try String(contentsOf: sentinel, encoding: .utf8) == "preserved")
     }
 
     private func allKeys(_ value: Any) -> Set<String> {
