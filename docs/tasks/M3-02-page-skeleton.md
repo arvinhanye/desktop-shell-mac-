@@ -1,6 +1,6 @@
 # M3-02: 页面骨架（tokens、交互基线、组件注册、点击区域上报、自检面板）
 
-- **状态**：review
+- **状态**：done
 - **里程碑**：M3
 - **依赖**：M3-01（必须已合并到 `main`）
 - **分支**：task/M3-02
@@ -405,7 +405,7 @@ export function installHitRegions({ send, root = document, win = window })
 
 ### 第二轮（Claude Code，2026-10-17）
 
-- **结论**：**代码复审通过，待用户手动验证**（Safari 目测和 `.app` 里的点击穿透，见"用户手动验证"）。用户确认后合并到 `main`。
+- **结论**：**通过**，已合并到 `main`。用户 2026-10-17 手动验证全部正常：Safari 里面板、时段切换、安全区域和点击区域虚线框、右键、文字选择、头像拖动、输入框；`.app` 里显示 `native` / "未获取到配置"、面板可点、空白处点击穿透（选中、框选、双击、访达右键菜单）、"隐藏桌面文件"时空白处无反应。
 - **复验结果**（在 `a128405` 的独立检出上执行）：
   - [x] `scripts/test-web.sh`：138 项全部通过（新增 `affectsHitRegions` 和空闲帧测试）
   - [x] 硬编码检查没有输出，`git diff --check` 通过；本轮只改了 `hit-regions.js`、`devpanel.js`、`hit-regions.test.mjs` 和交付记录
