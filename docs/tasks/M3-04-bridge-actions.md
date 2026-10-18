@@ -1,6 +1,6 @@
 # M3-04: Bridge 动作——打开项目、启动应用、保存外观
 
-- **状态**：review
+- **状态**：done
 - **里程碑**：M3
 - **依赖**：M3-03（必须已合并到 `main`）
 - **分支**：task/M3-04
@@ -125,7 +125,12 @@ enum UiStateUpdate {
 
 ## 审查记录
 
-- **结论**：**代码审查通过，待用户手动验证**（见"用户手动验证"）。用户确认、并核对对应的 `ok` 日志后合并到 `main`。
+- **结论**：**通过**，已合并到 `main`。用户 2026-10-18 手动验证全部正常，Claude Code 逐条核对了日志：
+  - "Finder"打开 `~/Desktop/desktop-shell`（`openProject desktop-shell ok`），"用 Cursor 打开"（`openProjectWith desktop-shell cursor ok`），"启动 Safari"（`launchApp safari ok`）
+  - 随机头像、随机背景、恢复默认外观（共 12 次 `saveUiState ok`）；恢复默认后 `ui.json` 里没有 `avatarId`、`backgroundId`，`voiceEnabled`、`desktopIconsHidden` 没变
+  - 非法请求：第 1–5 条和第 7 条 ✓，第 6 条（`setTodoDone`）`unknown-action`（M3-07 实现）
+  - 项目路径失效：Claude Code 备份 `config.json` 后把路径改成不存在的 `~/Desktop/desktop-shell-missing` 并重启应用，点"Finder"显示 `not-found`（日志 `openProject rejected: not-found`），没有打开任何东西；之后恢复原文件（与备份逐字节一致）并重启
+- **验证中的说明**（不是缺陷）：自检面板的头像看起来不是圆的——头像素材本身是 240×150 的"左侧手写签名 + 右侧圆形头像"组合图，面板只是从中间裁成 48×48 的圆。正式的显示方式（整张、或只取右侧圆形部分）在 M3.5 设计时决定。背景图在 M3 只显示 id，M4 才用在启动栏和卡片上。
 - **复验结果**（Claude Code，2026-10-18，在 `ef19d3e` 的独立检出上执行）：
   - [x] `swift build` 零警告零错误
   - [x] `scripts/test.sh`：102 项全部通过（12 个 suite）；`scripts/test-web.sh`：138 项全部通过
