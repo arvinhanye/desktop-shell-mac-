@@ -34,6 +34,7 @@
   --color-card-tint: rgb(230 138 161 / 0.20);   /* 新增：叠在底板上的玫瑰色，对应 prototype ColorBG */
   --color-card-bg-hover: rgb(230 138 161 / 0.30);
   --color-card-border: rgb(250 192 207 / 0.16);
+  --plate-fill-opacity: 1;                      /* 新增：底色层的不透明度，垫毛玻璃时调低 */
   --color-panel-bg: rgb(22 26 46 / 0.9);
   --color-overlay: rgb(10 12 26 / 0.45);
   --color-shadow: rgb(8 10 22 / 0.35);
@@ -87,6 +88,7 @@
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
   --shadow-card: none;
+  --shadow-icon: 0 2px 6px rgb(10 12 26 / 0.4);   /* 新增：启动栏图标 */
   --shadow-raised: 0 18px 48px var(--color-shadow);
 
   /* —— 布局（1792 × 1120 点屏幕，右侧 240 留给两列图标） —— */
@@ -96,6 +98,11 @@
   --column-width: 360px;      /* 新增：左侧两列的宽度 */
   --column-gap: 16px;         /* 新增 */
   --icon-area-width: 240px;   /* 新增：右侧留给访达图标 */
+  --app-icon-size: 48px;      /* 新增：启动栏图标（Swift 导出 128px PNG） */
+  --app-tile-width: 80px;     /* 新增 */
+  --scrollbar-width: 4px;     /* 新增 */
+  --scroll-fade: 28px;        /* 新增：列表上下还有内容时的淡出高度 */
+  --mask-solid: black;        /* 新增：遮罩只看透明度，颜色无意义 */
   --safe-top: 0px;
   --safe-right: 0px;
   --safe-bottom: 0px;
@@ -117,6 +124,12 @@
   --duration-normal: 200ms;
   --duration-slow: 400ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* 候选：底板下面垫原生毛玻璃（NSVisualEffectView）时，网页底色只负责上色。数值等探针定。 */
+:root[data-glass="on"] {
+  --plate-fill-opacity: 0.45;
+  --color-panel-bg: rgb(22 26 46 / 0.6);
 }
 
 /* 时段主题：只动底板和强调色的冷暖，保持克制。 */

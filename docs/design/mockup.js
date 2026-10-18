@@ -5,7 +5,8 @@ const pad = n => String(n).padStart(2, '0');
 
 // —— 模拟数据（和 M3 的 mock / config 结构一致，内容是示例） ——
 const config = {
-  character: { name: '爱弥斯' },
+  user: { name: 'Arvin' },
+  character: { name: '爱弥斯', motto: '愿星光一直落在你走的路上', tags: ['鸣潮', '共鸣者', 'Waves'] },
   greetings: [
     { from: 0, title: '深夜了', wish: '时辰已晚，且捻熄灯盏，良宵安枕' },
     { from: 6, title: '早上好', wish: '晨光熹微，愿您涤尽尘扰，理裳启新日' },
@@ -19,11 +20,15 @@ const config = {
     { id: 'desktop-shell', name: 'DesktopShell', tags: ['dev'], apps: ['cursor'], hasReminders: true },
     { id: 'thesis', name: '课程论文', tags: ['写作'], apps: ['safari', 'notes'], hasReminders: true },
     { id: 'photos', name: '旅行照片整理', tags: [], apps: [], hasReminders: false },
+    { id: 'website', name: '个人网站', tags: ['dev'], apps: ['cursor', 'safari'], hasReminders: true },
+    { id: 'reading', name: '读书笔记', tags: ['阅读'], apps: ['notes'], hasReminders: true },
+    { id: 'budget', name: '家庭账本', tags: [], apps: [], hasReminders: false },
   ],
   apps: [
-    { id: 'cursor', name: 'Cursor', mark: 'Cu' }, { id: 'safari', name: 'Safari', mark: 'Sa' },
-    { id: 'notes', name: '备忘录', mark: 'No' }, { id: 'music', name: '音乐', mark: 'Mu' },
-    { id: 'mail', name: '邮件', mark: 'Ma' }, { id: 'calendar', name: '日历', mark: 'Ca' },
+    // iconUrl 由 Swift 启动时导出到 media/app-icons/；应用没装或导出失败时为 null，显示名字首字母
+    ...[['cursor', 'Cursor'], ['safari', 'Safari'], ['notes', '备忘录'], ['music', '音乐'], ['mail', '邮件'], ['calendar', '日历']]
+      .map(([id, name]) => ({ id, name, iconUrl: `/media/app-icons/${id}.png` })),
+    { id: 'missing', name: 'Figma', iconUrl: null },
   ],
 };
 const avatars = Array.from({ length: 30 }, (_, i) => ({ id: String(i + 1), url: `/media/avatars/${i + 1}.png` }));
@@ -43,9 +48,16 @@ let todos = [
   { id: 't3', text: '论文第三章初稿', done: false, projectId: 'thesis', due: dayOffset(2) },
   { id: 't4', text: '预约下周的体检', done: false, projectId: null, due: dayOffset(-1, '18:00') },
   { id: 't5', text: '给阳台的植物浇水', done: false, projectId: null, due: null },
+  { id: 't7', text: '更新个人网站的作品集页面', done: false, projectId: 'website', due: dayOffset(3) },
+  { id: 't8', text: '交这个月的水电费', done: false, projectId: null, due: dayOffset(0, '20:00') },
+  { id: 't9', text: '读完《设计心理学》第五章', done: false, projectId: 'reading', due: null },
+  { id: 't10', text: '给妈妈打个电话', done: false, projectId: null, due: dayOffset(0, '21:30') },
+  { id: 't11', text: '把照片备份到移动硬盘', done: false, projectId: null, due: dayOffset(5) },
+  { id: 't12', text: '确认启动栏图标的显示尺寸', done: false, projectId: 'desktop-shell', due: dayOffset(4) },
   { id: 't6', text: '回复导师的邮件', done: true, projectId: 'thesis', due: null },
+  { id: 't13', text: '整理桌面，只留两列图标', done: true, projectId: 'desktop-shell', due: null },
 ];
-let nextTodo = 7;
+let nextTodo = 14;
 const ui = { avatarId: '1', backgroundId: 'folder-01' };
 const state = { selectedProject: null, lowBattery: false, paused: false, denied: false };
 
@@ -70,7 +82,7 @@ function renderClock() {
   const hour = phaseOverride ? PHASE_HOUR[phaseOverride] : now.getHours();
   const greeting = config.greetings.filter(g => g.from <= hour).at(-1);
   $('greeting-title').textContent = greeting.title;
-  $('greeting-name').textContent = config.character.name;
+  $('greeting-name').textContent = config.user.name;
   $('greeting-wish').textContent = greeting.wish;
   document.querySelectorAll('[data-phase]').forEach(b => { if (b.tagName === 'BUTTON') b.setAttribute('aria-pressed', String(b.dataset.phase === phase)); });
 }
@@ -81,6 +93,8 @@ function renderAppearance() {
   const bg = backgrounds.find(b => b.id === ui.backgroundId);
   for (const id of ['character-bg', 'launcher-bg']) $(id).style.backgroundImage = bg ? `url("${bg.url}")` : 'none';
   $('character-name').textContent = config.character.name;
+  $('character-motto').textContent = config.character.motto ?? '';
+  $('character-tags').replaceChildren(...(config.character.tags ?? []).map(text => Object.assign(document.createElement('span'), { className: 'tag', textContent: text })));
   for (const [gridId, items, key] of [['avatar-grid', avatars, 'avatarId'], ['background-grid', backgrounds, 'backgroundId']]) {
     const grid = $(gridId);
     if (!grid.childElementCount) {
@@ -105,6 +119,7 @@ $('avatar').addEventListener('click', () => {
 const setAppearanceOpen = open => {
   $('appearance').classList.toggle('open', open);
   $('toggle-appearance').setAttribute('aria-pressed', String(open));
+  reportGlass();
 };
 $('open-appearance').addEventListener('click', () => setAppearanceOpen(true));
 $('appearance-done').addEventListener('click', () => setAppearanceOpen(false));
@@ -149,6 +164,7 @@ function renderProjects() {
     row.addEventListener('click', () => selectProject(project.id));
     list.append(row);
   }
+  updateScrollHints(list);
 }
 function selectProject(id) {
   state.selectedProject = state.selectedProject === id ? null : id;
@@ -190,6 +206,7 @@ function renderTodos() {
   };
   open.forEach(add);
   if (done.length) { const s = document.createElement('li'); s.className = 'todo-section'; s.textContent = '今天完成'; list.append(s); done.forEach(add); }
+  updateScrollHints(list);
 }
 $('todo-input').addEventListener('keydown', event => {
   if (event.key === 'Escape') { event.target.blur(); return; }
@@ -204,8 +221,9 @@ function renderLauncher() {
   const row = $('app-row'); row.replaceChildren();
   for (const app of config.apps) {
     const b = document.createElement('button'); b.type = 'button'; b.className = `app${related.has(app.id) ? ' related' : ''}`; b.title = `启动 ${app.name}`;
-    b.innerHTML = '<span class="app-icon"></span><span class="app-name"></span>';
-    b.querySelector('.app-icon').textContent = app.mark; b.querySelector('.app-name').textContent = app.name;
+    if (app.iconUrl) b.innerHTML = `<img class="app-icon" alt="" draggable="false" src="${app.iconUrl}"><span class="app-name"></span>`;
+    else { b.innerHTML = '<span class="app-icon app-icon-fallback"></span><span class="app-name"></span>'; b.querySelector('.app-icon').textContent = [...app.name][0]; }
+    b.querySelector('.app-name').textContent = app.name;
     row.append(b);
   }
 }
@@ -246,7 +264,7 @@ $('toggle-lowbat').addEventListener('click', () => {
 });
 function setPaused(paused) {
   state.paused = paused; root.toggleAttribute('data-paused', paused);
-  const video = document.querySelector('.wallpaper'); if (paused) video.pause(); else video.play().catch(() => {});
+  const video = document.querySelector('.wallpaper'); if (video) { if (paused) video.pause(); else video.play().catch(() => {}); }
   startViz();
 }
 $('toggle-paused').addEventListener('click', () => { const on = $('toggle-paused').getAttribute('aria-pressed') !== 'true'; press('toggle-paused', on); setPaused(on || state.lowBattery); });
@@ -264,6 +282,40 @@ function fit() {
 }
 window.addEventListener('resize', fit);
 
+// —— 可滚动列表：上下还有内容时，在对应一侧淡出 ——
+function updateScrollHints(list) {
+  const more = list.scrollHeight - list.clientHeight > 1;
+  list.classList.toggle('more-above', more && list.scrollTop > 1);
+  list.classList.toggle('more-below', more && list.scrollTop + list.clientHeight < list.scrollHeight - 1);
+}
+for (const id of ['project-list', 'todo-list']) $(id).addEventListener('scroll', event => updateScrollHints(event.target), { passive: true });
+
+// —— 毛玻璃探针用：?embed=1 时只画组件（透明背景、1:1），把底板的位置报给原生窗口，原生在下面垫 NSVisualEffectView ——
+const params = new URLSearchParams(location.search);
+if (params.has('embed')) { root.toggleAttribute('data-embed', true); document.querySelector('.wallpaper')?.remove(); }
+if (params.get('glass') === '1') root.dataset.glass = 'on';
+function reportGlass() {
+  const handler = window.webkit?.messageHandlers?.glass;
+  if (!handler) return;
+  requestAnimationFrame(() => {
+    const plates = [...document.querySelectorAll('#desktop .plate, .appearance.open .appearance-panel')];
+    handler.postMessage(plates.map(el => {
+      const r = el.getBoundingClientRect();
+      return [r.x, r.y, r.width, r.height, parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0];
+    }).filter(r => r[2] > 0 && r[3] > 0));
+  });
+}
+new ResizeObserver(reportGlass).observe(document.body);
+window.probe = {
+  setGlass(on) { root.dataset.glass = on ? 'on' : 'off'; },
+  setFill(value) { root.style.setProperty('--plate-fill-opacity', String(value)); },
+  setPhase(phase) { phaseOverride = phase; renderClock(); },
+  toggleAppearance() { setAppearanceOpen(!$('appearance').classList.contains('open')); },
+  setPaused(on) { press('toggle-paused', on); setPaused(on); },
+};
+
 renderClock(); renderAppearance(); renderStats(); renderProjects(); renderTodos(); renderLauncher(); fit(); startViz();
+if (params.get('still') === '1') window.probe.setPaused(true);
+reportGlass();
 setInterval(renderClock, 30_000);
 setInterval(renderStats, 5_000);

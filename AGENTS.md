@@ -166,7 +166,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 | `openProject` | `projectId` | 在 Finder 中打开该项目文件夹 |
 | `openProjectWith` | `projectId`, `appId` | 用指定应用打开项目文件夹（例如 Cursor）。应用只要在 `config.apps` 里即可 |
 | `launchApp` | `appId` | 启动应用 |
-| `getConfig` | — | 回复 `{config, media, uiState}`：`config` 含 `character`、`greetings`、`projects`（`id`、`name`、`tags`、`apps`、`hasReminders`）、`apps`（`id`、`name`），**不含**项目路径、应用 bundle id、提醒事项列表名和背景视频；`media.avatars`、`media.backgrounds` 由 Swift 扫描 `media/` 目录生成，每项 `{id, url}`；`uiState` 为 `{avatarId, backgroundId, voiceEnabled}`。待办不在这里，见推送事件 `todos` |
+| `getConfig` | — | 回复 `{config, media, uiState}`：`config` 含 `user`（`name`）、`character`（`name`、`motto`、`tags`）、`greetings`、`projects`（`id`、`name`、`tags`、`apps`、`hasReminders`）、`apps`（`id`、`name`、`iconUrl`），**不含**项目路径、应用 bundle id、提醒事项列表名和背景视频；`media.avatars`、`media.backgrounds` 由 Swift 扫描 `media/` 目录生成，每项 `{id, url}`；`apps[].iconUrl` 是 `/media/app-icons/<appId>.png`，应用没装或图标导出失败时为 `null`；`uiState` 为 `{avatarId, backgroundId, voiceEnabled}`。待办不在这里，见推送事件 `todos` |
 | `addTodo` | `text`, `projectId?` | 在系统提醒事项里新增一条，只设标题。放进该项目对应的列表；没有 `projectId`、为 `null`，或者该项目没有配置列表时，放进系统默认列表。`text` 去掉首尾空白后不为空、不超过 500 字。回复新提醒（格式同 `todos` 事件里的一项） |
 | `setTodoDone` | `todoId`, `done` | 勾选或取消勾选一条提醒。`todoId` 查不到 → `not-found`。**不提供删除**（删除在 iPhone 或 Mac 的提醒事项里做） |
 | `saveUiState` | `avatarId?`, `backgroundId?`（`null` 表示恢复默认） | 写入 `ui.json`，回复新的 `uiState`，并向所有页面推送 `uiState`。Swift 先核对 id 确实存在于 `media/avatars`、`media/backgrounds`，不存在就回复 `not-found` |
@@ -200,7 +200,8 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 ```json
 {
   "background": { "video": "video/aemeath.mp4" },
-  "character": { "name": "爱弥斯" },
+  "user": { "name": "Arvin" },
+  "character": { "name": "爱弥斯", "motto": "愿星光一直落在你走的路上", "tags": ["鸣潮", "共鸣者", "Waves"] },
   "greetings": [
     { "from": 0,  "title": "深夜了", "wish": "时辰已晚，且捻熄灯盏，良宵安枕" },
     { "from": 6,  "title": "早上好", "wish": "晨光熹微，愿您涤尽尘扰，理裳启新日" },
@@ -226,7 +227,8 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 
 - `background.video` 是相对 `media/` 的路径。
 - 项目的 `remindersList`（可选）是系统提醒事项里一个列表的名字，按名字精确匹配；找不到时记录日志，当作没有配置。同名列表有多个时取第一个并记录日志。
-- `greetings` 按整点 `from` 升序排列，取不大于当前小时的最后一项；问候显示为 `"<title>，<character.name>"`，角色名用强调色。默认文案取自美化包 `Skins/Ageo` 的配置。
+- `greetings` 按整点 `from` 升序排列，取不大于当前小时的最后一项；问候显示为 `"<title>，<user.name>"`，名字用强调色；没有 `user.name` 时只显示 `title`（2026-10-18 改定，原来是角色名）。默认文案取自美化包 `Skins/Ageo` 的配置。
+- `character.motto`（签名）和 `character.tags`（标签）显示在角色卡上，都是可选的，没有就不显示。
 - 同目录下的其他数据文件：`ui.json`（当前头像、背景图、语音开关、是否隐藏桌面文件）。待办存在系统提醒事项里，不另存文件。`ui.json` 由应用自己管理，缺少的字段用默认值，损坏时记录日志并使用默认值。
 
 ### 运行时素材目录
@@ -241,6 +243,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 | `backgrounds/` | 背景图库 | 长边超过 2400 才缩到 2400，**只缩不放**（`sips -Z` 会放大小图，必须先判断尺寸）；不透明的图转 JPEG（质量 90），带透明的角色立绘保持 PNG |
 | `ornaments/` | 心形装饰条等装饰图 | 缩到实际显示尺寸的 2 倍 |
 | `fonts/` | 用到的字体文件 | 原样复制，只复制设计定稿里用到的 |
+| `app-icons/` | 启动栏的应用图标（128px PNG） | **由 Swift 生成，不归 `prepare-media.sh` 管**（2026-10-18 定）：启动时在后台线程用 `NSWorkspace.icon(forFile:)` 为 `config.apps` 里的每个应用导出 `<appId>.png`，覆盖同名文件，不删除其他文件。实测每个约 50 ms，第一次约 0.8 秒 |
 
 文件名就是 id（去掉扩展名），例如 `avatars/12.png` 的 id 是 `12`。
 
@@ -254,7 +257,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 4. **待办（系统提醒事项）**（2026-10-17 改定，原方案是自己存 `todos.json`）：直接读写系统"提醒事项"，和 iPhone 同步。显示所有列表的未完成提醒和今天完成的提醒，带到期时间的显示到期时间。可勾选完成、可新增（第一版只填文字，到期时间在 iPhone 上加），**不能删除**。项目通过配置里的 `remindersList` 对应一个列表。没有授权时显示提示，告诉用户去"系统设置 → 隐私与安全性 → 提醒事项"里允许。
 5. **系统状态**：电量、CPU、内存，外加一条 CPU 历史折线。
 6. **问候语**：按 `config.greetings` 显示当前整点对应的问候和祝福语，角色名用强调色。
-7. **角色卡**：圆形头像、签名、标签。**点击头像播放语音**；卡片上另设一个入口（具体形式在 M3.5 定，例如签名区域或一个小按钮），点击后在**同一个网页里**弹出"外观"面板，可以换头像和背景图，选择结果通过 `saveUiState` 保存。
+7. **角色卡**：圆形头像、签名、标签（签名和标签来自 `config.character`）。**点击头像播放语音**；卡片上另设一个入口（具体形式在 M3.5 定，例如签名区域或一个小按钮），点击后在**同一个网页里**弹出"外观"面板，可以换头像和背景图，选择结果通过 `saveUiState` 保存。
 8. **音频律动**：冰晶心形装饰条，两侧各 12 根柱子跟随 `audioSpectrum` 跳动。
 
 两项功能：

@@ -37,12 +37,17 @@ body { font: 13px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; 
 .widget { position: absolute; }
 .plate {
   position: relative; overflow: hidden;
-  background: linear-gradient(var(--color-card-tint), var(--color-card-tint)), var(--color-card-bg);
   border: var(--border-width) solid var(--color-card-border);
   border-radius: var(--radius-lg);
   padding: var(--card-padding);
   box-shadow: var(--shadow-card);
   text-shadow: var(--shadow-text);
+}
+/* 底色单独放一层，垫毛玻璃时只调这一层的不透明度，时段配色照常生效 */
+.plate::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(var(--color-card-tint), var(--color-card-tint)), var(--color-card-bg);
+  opacity: var(--plate-fill-opacity);
   transition: background-color var(--duration-slow) var(--ease-standard);
 }
 .plate-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
@@ -56,8 +61,8 @@ body { font: 13px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; 
 .w-date { left: 32px; top: 10px; width: var(--column-width); height: 278px; }
 .w-greeting { left: calc(32px + var(--column-width) + var(--column-gap)); top: 34px; width: var(--column-width); }
 .w-character { left: 32px; top: 300px; width: var(--column-width); }
-.w-stats { left: 32px; top: 530px; width: var(--column-width); }
-.w-projects { left: calc(32px + var(--column-width) + var(--column-gap)); top: 222px; width: var(--column-width); }
+.w-stats { left: 32px; top: 548px; width: var(--column-width); }
+.w-projects { left: calc(32px + var(--column-width) + var(--column-gap)); top: 222px; width: var(--column-width); height: 252px; }
 .w-todos { left: calc(32px + var(--column-width) + var(--column-gap)); top: 490px; width: var(--column-width); height: 377px; display: flex; flex-direction: column; }
 .w-launcher { left: 32px; bottom: 12px; width: calc(var(--column-width) * 2 + var(--column-gap)); }
 .w-visualizer { left: calc(50% + 264px - var(--viz-ornament-width) / 2); bottom: 2px; width: var(--viz-ornament-width); height: 178px; pointer-events: none; }
@@ -95,8 +100,8 @@ body { font: 13px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; 
 .greeting-wish { margin: var(--space-2) 0 0; font-size: var(--text-wish); line-height: var(--leading-tight); }
 
 /* —— 角色卡：头像组合图整张显示，压在卡片左上方（照 prototype / Profile） —— */
-.w-character .plate { height: 214px; padding-top: 0; }
-.avatar-button { position: absolute; left: -4px; top: -10px; width: 240px; height: 150px; padding: 0; border: 0; background: none; border-radius: var(--radius-full); }
+.w-character .plate { height: 232px; padding-top: 0; }
+.avatar-button { position: absolute; left: var(--space-1); top: var(--space-2); width: 240px; height: 150px; padding: 0; border: 0; background: none; border-radius: var(--radius-full); }
 .avatar-button img { width: 100%; height: 100%; display: block; -webkit-user-drag: none; filter: drop-shadow(0 2px 6px rgb(10 12 26 / 0.45)); }
 .avatar-button.playing img { animation: voice-pulse 1.2s var(--ease-standard) infinite; }
 @keyframes voice-pulse { 50% { filter: drop-shadow(0 0 14px var(--color-ice)); } }
@@ -126,7 +131,8 @@ body { font: 13px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; 
 :root[data-low-battery] .stat-battery .stat-bar > span { background: var(--color-warning); }
 
 /* —— 项目卡片 —— */
-.project-list { display: grid; gap: var(--space-2); }
+.w-projects .plate { display: flex; flex-direction: column; height: 100%; }
+.project-list { display: grid; align-content: start; gap: var(--space-2); flex: 1; min-height: 0; }
 .project {
   position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: var(--space-2);
   padding: var(--space-2) var(--space-3); border-radius: var(--radius-sm);
@@ -150,7 +156,17 @@ body { font: 13px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; 
 .todo-add:focus-within { border-color: var(--color-ice); }
 .todo-add[hidden] { display: none; }
 .todo-hint { margin: var(--space-2) 0 0; font-size: var(--text-sm); color: var(--color-text-faint); }
-.todo-list { list-style: none; margin: var(--space-3) 0 0; padding: 0; overflow: hidden; display: grid; gap: 2px; }
+.todo-list { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; align-content: start; gap: 2px; flex: 1; min-height: 0; }
+
+/* —— 可滚动列表（项目、待办）：细滚动条只在鼠标移上去时出现，上下还有内容时边缘淡出 —— */
+.scroll-list { overflow-y: auto; overscroll-behavior: contain; margin-right: calc(-1 * var(--space-2)); padding-right: var(--space-2); }
+.scroll-list::-webkit-scrollbar { width: var(--scrollbar-width); }
+.scroll-list::-webkit-scrollbar-track { background: none; }
+.scroll-list::-webkit-scrollbar-thumb { background: none; border-radius: var(--radius-full); }
+.scroll-list:hover::-webkit-scrollbar-thumb { background: var(--color-track); }
+.scroll-list.more-below { -webkit-mask-image: linear-gradient(to bottom, var(--mask-solid) calc(100% - var(--scroll-fade)), transparent); }
+.scroll-list.more-above { -webkit-mask-image: linear-gradient(to bottom, transparent, var(--mask-solid) var(--scroll-fade)); }
+.scroll-list.more-above.more-below { -webkit-mask-image: linear-gradient(to bottom, transparent, var(--mask-solid) var(--scroll-fade), var(--mask-solid) calc(100% - var(--scroll-fade)), transparent); }
 .todo { display: grid; grid-template-columns: 18px 1fr; gap: var(--space-3); align-items: start; padding: 7px var(--space-1); border-radius: var(--radius-sm); }
 .todo:hover { background: rgb(255 255 255 / 0.05); }
 .todo-check { width: 18px; height: 18px; margin-top: 2px; border-radius: var(--radius-full); border: 1.5px solid var(--color-text-muted); background: none; padding: 0; display: grid; place-items: center; }
@@ -169,14 +185,16 @@ body { font: 13px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; 
 .w-launcher .plate { padding: var(--space-3) var(--space-4); }
 .app-row { display: flex; gap: var(--space-2); }
 .app {
-  display: grid; justify-items: center; gap: var(--space-1); width: 76px; padding: var(--space-2) 0;
+  display: grid; justify-items: center; gap: var(--space-1); width: var(--app-tile-width); padding: var(--space-2) 0;
   border: var(--border-width) solid transparent; border-radius: var(--radius-sm); background: none;
 }
 .app:hover { background: var(--color-card-bg-hover); }
-.app-icon { width: 44px; height: 44px; display: grid; place-items: center; border-radius: var(--radius-md); background: rgb(255 255 255 / 0.12); border: var(--border-width) solid var(--color-card-border); font-family: var(--font-label); font-size: var(--text-xl); }
+.app-icon { width: var(--app-icon-size); height: var(--app-icon-size); display: block; -webkit-user-drag: none; filter: drop-shadow(var(--shadow-icon)); transition: filter var(--duration-fast) var(--ease-standard); }
+/* 应用没装、图标导出失败时：名字首字母 */
+.app-icon-fallback { display: grid; place-items: center; border-radius: var(--radius-md); background: var(--color-track); border: var(--border-width) solid var(--color-card-border); font-family: var(--font-serif); font-size: var(--text-xl); }
 .app-name { font-size: var(--text-sm); color: var(--color-text-muted); }
 .app.related { border-color: color-mix(in srgb, var(--color-highlight) 55%, transparent); background: color-mix(in srgb, var(--color-highlight) 12%, transparent); }
-.app.related .app-icon { border-color: var(--color-highlight); box-shadow: 0 0 12px color-mix(in srgb, var(--color-highlight) 45%, transparent); }
+.app.related .app-icon { filter: drop-shadow(0 0 10px color-mix(in srgb, var(--color-highlight) 70%, transparent)); }
 .app.related .app-name { color: var(--color-highlight); }
 
 /* —— 音频律动：冰晶心形装饰条 + 两侧各 12 根 —— */
@@ -216,6 +234,12 @@ body { font: 13px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; 
 .thumb.backgrounds-item img { object-fit: cover; }
 .thumb:hover { border-color: var(--color-text-muted); }
 .thumb[aria-checked="true"] { border-color: var(--color-accent); box-shadow: inset 0 0 0 2px var(--color-accent); }
+
+/* —— 毛玻璃探针：?embed=1 时只画组件，背景透明、1:1 —— */
+:root[data-embed], :root[data-embed] body { background: transparent; }
+:root[data-embed] .viewer { inset: 0; }
+:root[data-embed] .stage { left: 0; top: 0; transform: none !important; }
+:root[data-embed] .sys-menubar, :root[data-embed] .sys-dock, :root[data-embed] .sys-icons, :root[data-embed] .controls { display: none; }
 
 /* —— 暂停：所有动画停住 —— */
 :root[data-paused] #desktop *, :root[data-paused] #desktop *::before, :root[data-paused] #desktop *::after { animation-play-state: paused !important; }
