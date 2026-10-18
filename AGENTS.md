@@ -84,7 +84,7 @@
 | 系统音频捕获（process tap + vDSP），2026-10-17 | **可行**，详见下方 |
 | 保留访达图标时的点击穿透，2026-10-17 | WKWebView 窗口透明区域**不会**自动穿透（35 次空白点击全被网页接住）；改为"网页上报组件区域 + 全局鼠标监听动态切换 `ignoresMouseEvents`"后，空白点击全部交给访达（0 次被接住），组件点击全部收到，从其他应用直接点组件也能一次生效，拖动框选经过组件不会被打断。全局鼠标监听不需要系统权限，鼠标移动时每秒约 20–45 个事件 |
 | 系统提醒事项（EventKit），2026-10-17 | **可行**，详见下方 |
-| 键盘焦点（**待做**，M4 待办组件之前） | 要回答：点普通组件（按钮、勾选框）会不会抢走其他应用的键盘焦点；输入框获得焦点时，WidgetWindow 用普通 `NSWindow` 还是不激活应用的 `NSPanel`（`.nonactivatingPanel`）成为 key window；中文输入法是否正常；失去焦点后怎样把焦点还给原来的应用。结论出来后再定 `focusInput` / `blurInput` 的任务单 |
+| 键盘焦点，2026-10-18 | 组件窗口**改用不激活应用的面板**，详见下方 |
 
 **系统音频捕获探针**（全局 tap `CATapDescription(stereoGlobalTapButExcludeProcesses: [])`，`muteBehavior = .unmuted`，加上"默认输出设备 + tap"的私有聚合设备，再加 IOProc）：
 
@@ -105,11 +105,20 @@
 - `EKEventStoreChanged`：自己写入后立刻收到；**其他进程写入后立刻收到**；iPhone 上的改动同步到 Mac 后也会收到，实测约 1 分钟（当时 Mac 的"提醒事项"应用开着）。同步过来时常常连着来 2 次通知，第一次时数据可能还没变，所以收到通知后要稍等一下（防抖）再重新读取。通知的 `userInfo` 没有有用的细节，只能整体重新读取。
 - 一次例外：Mac 的"提醒事项"应用关闭时，iPhone 上的一次取消勾选 8 分钟内没有出现在 Mac 上（期间收到过 2 次通知，数据没变），原因没能确定。正式实现时，启动、唤醒和每隔几分钟调用一次 `refreshSourcesIfNecessary()` 请求同步，并在验收时实测 iPhone 改动多久出现在桌面。
 
+**键盘焦点探针**（两轮：在图标层 +1 放几个装着 WKWebView 的小窗口，和"文本编辑"对照）：
+
+- **现在的做法有问题**：组件窗口是普通的无边框 `NSWindow`，不能成为 key window。点一下组件里的按钮，系统就把本应用切到前台，原来的应用失去键盘，接着敲的字哪里都不去。更糟的是，应用被切到前台时，AppKit 会把键盘还给它上次的 key window，网页随之把焦点恢复到上次的输入框，字会打到用户没点的地方。
+- **改用 `NSPanel`**（`styleMask` 含 `.borderless` 和 `.nonactivatingPanel`，`hidesOnDeactivate = false`），并且 `canBecomeKey` 只在网页输入框获得焦点期间为 `true`：点按钮、勾选框都**不会**切换前台应用，也不会接管键盘（6 次都没有）。
+- 输入框获得焦点时调用 `makeKey()` 和 `makeFirstResponder(webView)`：英文、中文拼音都能正常输入，候选词窗口位置正常，前台应用保持不变。
+- 交还键盘：按 Esc 失去焦点时调用 `NSApp.deactivate()`，键盘立刻回到原来的应用。`orderOut` 再 `orderFrontRegardless` 也能交还，但会重新排列窗口，不采用。直接点别的应用的窗口时，系统会自动交还。
+- 面板成为 key window 时 `NSApp.isActive` 会变成 `true`，但前台应用其实没变，逻辑里不要依赖 `NSApp.isActive`。
+- 网页在页面失去焦点时，要主动让输入框真正失焦（`blur()`），否则应用以后被激活时，WebKit 会把焦点恢复到那个输入框。
+
 ## 窗口要求
 
 - 实测层级（本机）：系统壁纸和程序坞 ≤ -2147483624，**访达图标 = `CGWindowLevelForKey(.desktopIconWindow)`（-2147483603）**，系统桌面小组件 = 图标 +2。
 - **VideoWindow**：层级 = 图标层 **−1**；不透明；`ignoresMouseEvents = true`。
-- **WidgetWindow**：层级 = 图标层 **+1**；`isOpaque = false`、`backgroundColor = .clear`、无阴影。
+- **WidgetWindow**：层级 = 图标层 **+1**；`isOpaque = false`、`backgroundColor = .clear`、无阴影；是**不激活应用的 `NSPanel`**（`styleMask` 含 `.nonactivatingPanel`，`hidesOnDeactivate = false`），点组件不会把本应用切到前台、不会抢走其他应用的键盘（2026-10-18 键盘焦点探针）。
 - 两个窗口的 `collectionBehavior` 都是 `[.canJoinAllSpaces, .stationary, .ignoresCycle]`。
 - **点击穿透**（2026-10-17 探针实测，见"技术探针"）：WKWebView 窗口的透明区域**不会**自动让点击穿透，所以要动态切换：
   - 网页通过 bridge 动作 `setHitRegions` 上报所有可交互组件的矩形（CSS 像素，相对网页左上角，组件布局变化时重新上报）。
@@ -117,7 +126,7 @@
   - **按住鼠标期间不切换**（`NSEvent.pressedMouseButtons != 0`），松开后再重新判断，避免打断拖动和框选。
 - 点在组件之外的空白处：交给访达（选择图标、框选、右键菜单），我们不做任何事。**点击语音改为点击角色卡头像触发**。
 - **隐藏桌面文件**（菜单栏勾选项，用来单纯欣赏壁纸）：把 VideoWindow 升到图标层 **+1**（与 WidgetWindow 同层，排在它下面），VideoWindow **始终 `ignoresMouseEvents = true`**；同时关闭点击穿透，让最上面的 WidgetWindow **接住全部点击**，空白处的点击落在网页透明背景上，什么都不发生，不会点到看不见的图标。取消时恢复图标层 −1 并重新打开点击穿透。**不修改访达设置、不重启访达**。选择保存在 `ui.json` 的 `desktopIconsHidden`，重启后保持。（2026-10-17 实测教训：同层窗口被点击时 macOS 会把它提到同层最前面。让 VideoWindow 接收点击会盖住组件；点击后再重排又会闪烁。所以 VideoWindow 永远不接收点击。）网页要禁用右键菜单（`contextmenu` 事件 `preventDefault`），否则空白处右键会弹出 WKWebView 自带的菜单。
-- 需要输入文字的组件（待办输入框等）：WidgetWindow 子类重写 `canBecomeKey` 返回 `true`。点击输入框时让窗口临时成为 key window，失去焦点后归还。（具体做法以"键盘焦点"探针的结论为准。）
+- 需要输入文字的组件（待办输入框等）：WidgetWindow 的 `canBecomeKey` 只在网页文本输入框获得焦点期间为 `true`。网页在文本输入框获得焦点时发 `focusInput`，Swift 调用 `makeKey()` 并把网页设为第一响应者（不激活应用）；失去焦点或按 Esc 时发 `blurInput`，Swift 恢复为不能成为 key，如果仍是 key window 就调用 `NSApp.deactivate()`，键盘回到原来的应用。**不调用 `NSApp.activate`。**
 - 访达默认从屏幕**右上角**开始往下排列图标（用户桌面上约有 68 个项目），M3.5 设计布局时要给图标留出区域。
 - **安全区域**：读取 `NSScreen.visibleFrame`（排除 Dock 和菜单栏后的区域），换算成相对窗口的边距，通过 bridge 推送给网页，在网页里设成 CSS 变量 `--safe-top/right/bottom/left`。所有组件都布局在安全区域内。屏幕参数变化时（`NSApplication.didChangeScreenParametersNotification`）重新计算。（M1-02 已实测：Dock 位置、自动隐藏的变化都会触发这个通知，不需要轮询。计算函数为 `SafeAreaInsets.compute`。）
 - 多显示器：每块屏幕一对窗口（VideoWindow + WidgetWindow），屏幕接入或拔出时成对增删。
@@ -161,7 +170,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 | `addTodo` | `text`, `projectId?` | 在系统提醒事项里新增一条，只设标题。放进该项目对应的列表；没有 `projectId`、为 `null`，或者该项目没有配置列表时，放进系统默认列表。`text` 去掉首尾空白后不为空、不超过 500 字。回复新提醒（格式同 `todos` 事件里的一项） |
 | `setTodoDone` | `todoId`, `done` | 勾选或取消勾选一条提醒。`todoId` 查不到 → `not-found`。**不提供删除**（删除在 iPhone 或 Mac 的提醒事项里做） |
 | `saveUiState` | `avatarId?`, `backgroundId?`（`null` 表示恢复默认） | 写入 `ui.json`，回复新的 `uiState`，并向所有页面推送 `uiState`。Swift 先核对 id 确实存在于 `media/avatars`、`media/backgrounds`，不存在就回复 `not-found` |
-| `focusInput` / `blurInput` | — | 让窗口获得或交还键盘焦点（M3 之后先做探针，见"技术探针"） |
+| `focusInput` / `blurInput` | — | 网页的文本输入框获得 / 失去焦点时发送。`focusInput`：该窗口允许成为 key window 并 `makeKey()`，不激活应用；`blurInput`：恢复为不能成为 key，如果仍是 key window 就 `NSApp.deactivate()`。做法见"窗口要求"和"技术探针" |
 | `setHitRegions` | `regions`：`[[x, y, w, h], …]`，CSS 像素，相对网页左上角 | 整体替换该窗口的可交互区域，用于点击穿透判断。只接受有限数值，最多 64 个，宽高必须为正，超出窗口的部分裁掉；格式不对就整条拒绝并记录日志 |
 
 **安全要求**：
@@ -434,7 +443,7 @@ desktop-shell/
 - **M1 外壳**：每块屏幕一个桌面层窗口，显示纯色占位；菜单栏图标可以退出；安全区域正确（用一个半透明框把安全区域画出来验证，确认不会被 Dock 挡住）。
 - **M2 背景**：`prepare-media.sh` 生成运行时素材；视频循环播放，WKWebView 透明叠在上面；`shell://` scheme 处理器（含路径安全检查）；省电暂停规则生效。
 - **M2.5 打包与签名**（从 M6 提前，因为系统音频权限只能授予签名的 `.app`）：`bundle.sh` 产出可双击运行的 `.app`；`setup-signing.md` 和固定的自签名证书；`Info.plist` 含 `LSUIElement`、`NSAudioCaptureUsageDescription`。此后都用 `.app` 运行。
-- **M3 网页骨架**：`tokens.css`、`store.js`、`bridge.js`（含 mock，mock 里包括模拟的 `audioSpectrum`）、组件注册机制、点击区域自动上报、骨架自检面板；在浏览器里能打开。`tokens.css` 只搭好变量结构，填中性深色占位值。Swift 端同时完成 Bridge 的回复通道和来源校验、白名单动作（键盘焦点除外，先做探针）、`safeArea` / `paused` / `uiState` / `systemStats` 推送、遮挡防抖，菜单栏补上"点击语音""重新加载""打开配置文件夹"；接入系统提醒事项（权限、读取、勾选、新增、变化推送 `todos`）。
+- **M3 网页骨架**：`tokens.css`、`store.js`、`bridge.js`（含 mock，mock 里包括模拟的 `audioSpectrum`）、组件注册机制、点击区域自动上报、骨架自检面板；在浏览器里能打开。`tokens.css` 只搭好变量结构，填中性深色占位值。Swift 端同时完成 Bridge 的回复通道和来源校验、白名单动作（含键盘焦点 `focusInput` / `blurInput`，组件窗口改为不激活应用的面板）、`safeArea` / `paused` / `uiState` / `systemStats` 推送、遮挡防抖，菜单栏补上"点击语音""重新加载""打开配置文件夹"；接入系统提醒事项（权限、读取、勾选、新增、变化推送 `todos`）。
 - **M3.5 设计定稿**（由 Claude Code 负责，不交给 Codex）：先从美化包皮肤配置整理参数表，再从壁纸素材提取配色，确定字体、卡片样式（圆角、阴影、透明度、毛玻璃）、八个组件的版式、外观面板、桌面布局，以及四个时段主题和选中、高亮、省电等状态样式。布局要给访达桌面图标留出区域（访达默认从右上角往下排列，用户桌面上约有 68 个项目），与用户商定图标区和组件区的划分。还要根据定下的显示尺寸，决定原图偏小的立绘（726×660）和头像（240×150）是否需要 AI 超分放大（Real-ESRGAN 动漫模型；需要下载时先征得用户同意）。产出放在 `docs/design/`：一个能在浏览器里直接打开的效果图页面（叠在壁纸上、用 mock 数据），一份定稿的 `tokens.css` 数值，以及截图。用户确认后才进入 M4。
 - **M4 组件**：八个组件和两项功能全部完成，**照 M3.5 定稿实现**，样式统一。音频律动此时用 mock 数据。
 - **M5 联动**：按"联动规则"表实现并逐条验证。
@@ -450,7 +459,7 @@ desktop-shell/
 在桌面上做一个可以直接输入命令的终端组件。
 
 - **与现有规则的冲突**：违反"不做终端"和"不开放执行 shell 命令的 bridge 动作"两条。做之前必须由用户明确修改这两条规则，并接受安全模型的变化：目前网页只能传 id，即使页面被注入恶意代码也只能打开配置里列出的东西；有了终端，网页就等于能执行任意命令。前提是只加载我们自己的页面（"不加载外部网站"这条必须保留）。
-- **已具备的基础**：WidgetWindow 在图标之上并且可以点击（M2-05）；M4 的待办输入框会实现"组件窗口临时获得键盘焦点"，终端可以复用；Bridge 是双向通道。
+- **已具备的基础**：WidgetWindow 在图标之上并且可以点击（M2-05）；M3-08 实现了"组件窗口临时获得键盘焦点"（不激活应用的面板），终端可以复用；Bridge 是双向通道。
 - **还需要做的**：Swift 端用伪终端（PTY）启动用户的 shell，通过 Bridge 双向传递输入输出，窗口尺寸变化时同步行列数；处理快捷键冲突（⌘C/⌘V/⌘W 等）和中文输入法。
 - **前端两个方案**：
   - xterm.js 放在同一个网页里，样式直接用 tokens，风格最统一；需要引入一个前端库（单个 JS 文件，不需要构建工具，按规范要先征得用户同意）；中文输入法在网页终端里可能有小问题。
