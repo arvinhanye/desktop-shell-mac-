@@ -1,6 +1,6 @@
 # M4-01: 配置新字段、语音列表、应用图标和素材升级
 
-- **状态**：review
+- **状态**：done
 - **里程碑**：M4
 - **依赖**：M3 完成；M3.5 设计定稿已合并到 `main`
 - **分支**：task/M4-01
@@ -162,7 +162,7 @@
 
 ## 审查记录
 
-- **结论**：**代码审查通过，自动验收全部通过，待用户手动验证**（见"用户手动验证"的三项）。用户确认后合并到 `main`。
+- **结论**：**通过**，已合并到 `main`。代码审查和自动验收见下；三项手动验证 2026-10-18 完成（见最后）。
 - **复验结果**（Claude Code，2026-10-18，在 `fe542e8` 的独立检出上执行；素材脚本和打包需要 `assets/`，在主目录的同一提交上执行）：
   - [x] `swift build` 零警告零错误
   - [x] `scripts/test.sh`：161 项全部通过（18 个 suite）；`scripts/test-web.sh`：158 项全部通过
@@ -176,7 +176,8 @@
   - `bridge.js` 的 `voices` 和头像、背景分开规范化，`voices` 有问题不会连累另外两类。素材脚本改动很小，没有带上旧版的"配方标记"。
   - 媒体扫描的日志从 `image id rejected` 改成 `id rejected`（语音也走这里），合理。
   - 审查记录由 Claude Code 在 `fe542e8` 之上提交并推送到 `origin/task/M4-01`；主目录里本地的 `task/M4-01` 比远端少这一个提交，合并时以远端为准。
-- **待用户手动验证**（目前正式目录里的视频还是 2560 × 1440，`config.json` 里还没有 `user`、`motto`）：
-  1. 在 `config.json` 里加上 `"user": { "name": "Arvin" }` 和 `character.motto`，点菜单栏"重新加载"
-  2. 运行 `scripts/prepare-media.sh --force`（约 2 分钟），退出再打开 DesktopShell，看视频是否更清楚、循环处不卡、颜色不变
-  3. 在 `apps` 里临时加 `{ "id": "figma", "name": "Figma", "bundleId": "com.figma.Desktop" }`，"重新加载"，告诉 Claude Code 去查日志；查完删掉
+- **手动验证**（2026-10-18；按用户的要求，`config.json` 的修改和 `--force` 由 Claude Code 操作，菜单栏"重新加载"由用户点，视频由用户目测）：
+  - [x] **新字段和重新加载**：`config.json` 加上 `user.name`、`character.motto`（改之前已备份）；用户点"重新加载"后，日志 `20:27:59.581 DesktopShell: reloaded config and pages`，没有 `configuration reload failed`
+  - [x] **没装的应用**：同一次重新加载时 `apps` 里临时有 `figma`，日志依次是 `icons: app=figma not-installed`、`icons: exported=2/3`、`getConfig avatars=30 backgrounds=63 voices=54 icons=2`。验证后删掉 `figma`，`config.json` 和备份相比只多了 `user`、`motto`
+  - [x] **4K 视频**：正式目录跑 `scripts/prepare-media.sh --force`，退出 0，用时 106 秒；`media/video/aemeath.mp4` 是 `hevc` / `hvc1` 3840 × 2160，心形 1280 × 213，头像 480 × 300。重启应用后日志 `icons: exported=2/2`、`getConfig … voices=54 icons=2`。用户确认：视频更清楚，循环处不卡，颜色没变
+  - 备注：`media/fonts/` 里还有 M3.5 时手工放进去的 `Emilea.otf`；脚本按设计不删除它不管的文件，不影响使用
