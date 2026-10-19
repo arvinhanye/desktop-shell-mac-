@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.notice("DesktopShell webDir: \(paths.webDir.path)")
         let appState = AppState(paths: paths)
         self.appState = appState
+        appState.exportAppIcons()
         let config = appState.config
         let videoURL = SchemeResolver(webRoot: paths.webDir, mediaRoot: paths.mediaDir)
             .fileURL(forPath: "/media/" + config.background.video)
@@ -155,6 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func reloadPages() {
         appState?.reloadConfig()
+        appState?.exportAppIcons()
         screenManager?.reloadPages()
         Log.notice("DesktopShell: reloaded config and pages; background.video changes require an app restart")
     }

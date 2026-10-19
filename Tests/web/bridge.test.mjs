@@ -69,7 +69,7 @@ test('bridge: startup sanitizes optional media/UI/project fields in one atomic s
     notifications++;
     assert.equal(s.get('ready'), true);
     assert.deepEqual(s.get('ui'), { avatarId: null, backgroundId: 'b', voiceEnabled: true });
-    assert.deepEqual(s.get('media'), { avatars: [{ id: '1', url: '/a.png' }], backgrounds: [] });
+    assert.deepEqual(s.get('media'), { avatars: [{ id: '1', url: '/a.png' }], backgrounds: [], voices: [] });
   });
   await bridge.start();
   assert.equal(notifications, 1);
@@ -83,7 +83,7 @@ test('bridge: optional malformed media/UI defaults; valid fields survive normali
   r.media = { avatars: [{ id: 'a', url: '/a' }], backgrounds: null };
   r.uiState = { avatarId: 'a', backgroundId: null, voiceEnabled: false };
   await createBridge(s, { target: {}, native: { postMessage: () => r } }).start();
-  assert.deepEqual(s.get('media'), { avatars: [], backgrounds: [] });
+  assert.deepEqual(s.get('media'), { avatars: [], backgrounds: [], voices: [] });
   assert.deepEqual(s.get('ui'), { avatarId: 'a', backgroundId: null, voiceEnabled: false });
   assert.deepEqual(s.get('config').projects, r.config.projects);
 });
@@ -318,4 +318,45 @@ test('bridge: event observers also cover mock closure delivery and are independe
     second(); jobs.get(33)();
     assert.equal(names.length, 2);
   } finally { mock.stop(); }
+});
+
+for (const value of [undefined, null, 42, false, [], {}]) {
+  test(`bridge: M4 optional fields default independently for ${JSON.stringify(value)}`, async () => {
+    const s = fresh();
+    const r = reply();
+    r.config.user = value;
+    r.config.character.motto = value;
+    r.config.apps = [{ id: 'a', name: 'App', iconUrl: value }];
+    r.media = { avatars: [{ id: '1', url: '/a' }], backgrounds: [{ id: 'b', url: '/b' }], voices: value };
+    await createBridge(s, { target: {}, native: { postMessage: () => r } }).start();
+    assert.deepEqual(s.get('config').user, { name: null });
+    assert.equal(s.get('config').character.motto, null);
+    assert.equal(s.get('config').apps[0].iconUrl, null);
+    assert.deepEqual(s.get('media'), { avatars: [{ id: '1', url: '/a' }], backgrounds: [{ id: 'b', url: '/b' }], voices: [] });
+  });
+}
+
+test('bridge: M4 strings survive and voices expose only id/url', async () => {
+  const s = fresh();
+  assert.deepEqual(s.get('media').voices, []);
+  const r = reply();
+  r.config.user = { name: 'Arvin' };
+  r.config.character.motto = '签名';
+  r.config.apps = [{ id: 'a', name: 'App', iconUrl: '/media/app-icons/a.png' }];
+  r.media.voices = [null, { id: 1, url: '/v' }, { id: '1', url: 8 }, { id: '2', url: '/media/voice/2.mp3', extra: 'omit' }];
+  await createBridge(s, { target: {}, native: { postMessage: () => r } }).start();
+  assert.deepEqual(s.get('config').user, { name: 'Arvin' });
+  assert.equal(s.get('config').character.motto, '签名');
+  assert.equal(s.get('config').apps[0].iconUrl, '/media/app-icons/a.png');
+  assert.deepEqual(s.get('media').voices, [{ id: '2', url: '/media/voice/2.mp3' }]);
+});
+
+test('bridge: malformed user.name becomes null', async () => {
+  for (const name of [undefined, 7, false, [], {}]) {
+    const s = fresh();
+    const r = reply();
+    r.config.user = { name };
+    await createBridge(s, { target: {}, native: { postMessage: () => r } }).start();
+    assert.deepEqual(s.get('config').user, { name: null });
+  }
 });

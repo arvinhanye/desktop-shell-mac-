@@ -23,7 +23,7 @@ test('mock: getConfig returns display-only configuration and all 30/63 real medi
   assert.deepEqual(reply.config.greetings.map(item => item.from), [0, 6, 12, 18, 20, 21, 23]);
   assert.equal(reply.config.greetings[0].wish, '时辰已晚，且捻熄灯盏，良宵安枕');
   assert.equal(reply.config.projects.length, 3);
-  assert.equal(reply.config.apps.length, 3);
+  assert.equal(reply.config.apps.length, 4);
   assert.deepEqual(reply.config.projects[0].apps, ['cursor']);
   assert.equal(reply.config.projects[0].hasReminders, true);
   assert.ok(reply.config.projects.some(project => !('apps' in project) && !project.hasReminders));
@@ -261,4 +261,19 @@ test('mock: stop/restart inside startup callback interrupts the obsolete initial
   assert.equal(jobs.size, 2);
   mock.stop();
   assert.equal(jobs.size, 0);
+});
+
+test('mock: M4 display fields, installed/missing icons and all 54 voice URLs', async () => {
+  const { mock } = fixture();
+  const { config, media } = await mock.handle({ action: 'getConfig' });
+  assert.deepEqual(config.user, { name: 'Arvin' });
+  assert.equal(config.character.motto, '愿星光一直落在你走的路上');
+  assert.deepEqual(config.apps.map(({ id, iconUrl }) => ({ id, iconUrl })), [
+    { id: 'cursor', iconUrl: '/media/app-icons/cursor.png' },
+    { id: 'safari', iconUrl: '/media/app-icons/safari.png' },
+    { id: 'notes', iconUrl: '/media/app-icons/notes.png' },
+    { id: 'figma', iconUrl: null },
+  ]);
+  assert.equal(media.voices.length, 54);
+  for (let i = 1; i <= 54; i++) assert.deepEqual(media.voices[i - 1], { id: String(i), url: `/media/voice/${i}.mp3` });
 });

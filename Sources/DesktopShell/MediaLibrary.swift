@@ -8,7 +8,7 @@ struct MediaItem: Codable, Equatable {
 enum MediaLibrary {
     static let imageExtensions: Set<String> = ["png", "jpg", "jpeg", "webp"]
 
-    static func scan(mediaDir: URL, subdirectory: String) -> [MediaItem] {
+    static func scan(mediaDir: URL, subdirectory: String, extensions: Set<String> = imageExtensions) -> [MediaItem] {
         guard isValidID(subdirectory) else { return [] }
         let directory = mediaDir.appendingPathComponent(subdirectory, isDirectory: true)
         let keys: Set<URLResourceKey> = [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey]
@@ -21,12 +21,12 @@ enum MediaLibrary {
             var items: [MediaItem] = []
             for file in files {
                 let name = file.lastPathComponent
-                guard !name.hasPrefix("."), imageExtensions.contains(file.pathExtension.lowercased()) else { continue }
+                guard !name.hasPrefix("."), extensions.contains(file.pathExtension.lowercased()) else { continue }
                 guard let values = try? file.resourceValues(forKeys: keys),
                       values.isRegularFile == true, values.isSymbolicLink != true else { continue }
                 let id = file.deletingPathExtension().lastPathComponent
                 guard isValidID(id) else {
-                    Log.error("DesktopShell media: image id rejected: invalid")
+                    Log.error("DesktopShell media: id rejected: invalid")
                     continue
                 }
                 guard seen.insert(id).inserted else {

@@ -118,8 +118,12 @@ enum ConfigReply {
          "voiceEnabled": state.voiceEnabled]
     }
 
-    static func make(config: AppConfig, avatars: [MediaItem], backgrounds: [MediaItem], uiState: UiState) -> [String: Any] {
+    static func make(config: AppConfig, avatars: [MediaItem], backgrounds: [MediaItem], voices: [MediaItem] = [], iconIDs: Set<String> = [], uiState: UiState) -> [String: Any] {
         // Build an explicit public projection instead of serializing the private config.
+        func trimmedOrNull(_ value: String?) -> Any {
+            guard let text = value?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return NSNull() }
+            return text
+        }
         let projects: [[String: Any]] = config.projects.map {
             ["id": $0.id, "name": $0.name, "tags": $0.tags ?? [], "apps": $0.apps ?? [],
              "hasReminders": !($0.remindersList?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)]
@@ -129,12 +133,18 @@ enum ConfigReply {
         }
         return [
             "config": [
-                "character": ["name": config.character.name], "greetings": greetings,
-                "projects": projects, "apps": config.apps.map { ["id": $0.id, "name": $0.name] },
+                "user": ["name": trimmedOrNull(config.user?.name)],
+                "character": ["name": config.character.name, "motto": trimmedOrNull(config.character.motto)],
+                "greetings": greetings, "projects": projects,
+                "apps": config.apps.map { app -> [String: Any] in
+                    ["id": app.id, "name": app.name,
+                     "iconUrl": iconIDs.contains(app.id) ? "/media/app-icons/\(app.id).png" as Any : NSNull()]
+                },
             ],
             "media": [
                 "avatars": avatars.map { ["id": $0.id, "url": $0.url] },
                 "backgrounds": backgrounds.map { ["id": $0.id, "url": $0.url] },
+                "voices": voices.map { ["id": $0.id, "url": $0.url] },
             ],
             "uiState": makeUiState(uiState),
         ]

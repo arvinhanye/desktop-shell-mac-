@@ -1,6 +1,6 @@
 # M4-01: 配置新字段、语音列表、应用图标和素材升级
 
-- **状态**：todo
+- **状态**：review
 - **里程碑**：M4
 - **依赖**：M3 完成；M3.5 设计定稿已合并到 `main`
 - **分支**：task/M4-01
@@ -140,8 +140,23 @@
 ## 交付记录
 
 - **改动摘要**：
-- **自测结果**：
-- **疑问 / 偏离**：
+  - 从最新 `main`（`495d066`）新建 `task/M4-01`，按本任务单重新实现。旧尝试 `attempt/M4-01-codex1` 原样保留。
+  - 配置增加可选 `user.name`、`character.motto`；读取已有配置保持字节原样。公开回复包含去空白后的字符串或显式 null，继续排除路径、bundle id、列表名和视频配置。
+  - 素材扫描支持扩展名参数，`voice/` 仅收 mp3；网页 store、回复规范化和 mock 同步新增字段及 54 条语音。
+  - 新增 `AppIcons`：可替换的图标读取函数、128×128 PNG、同目录临时文件与原子 rename、目录类型校验、失败日志和逐轮成功表。串行后台队列在创建窗口前启动；重载配置后再次导出；等待中的 `getConfig` 在最近一轮结束后由主线程逐个回复，旧一轮结果不提前释放等待者。
+  - 素材脚本保留原片 4K、使用 medium、复制 2 倍头像、心形输出 1280×213、复制指定的 5 个字体。沿用原有增量规则，未加入配方标记、额外测试目录或交接文档。
+- **自测结果**（2026-10-18）：
+  - 基线 PASS：Swift 152/152，网页 149/149。
+  - RED→GREEN：配置字段保留/示例、语音扫描、公开回复、网页规范化和 mock、实际图标文件导出、异步等待及重载竞态均先观察到预期失败，再实现并通过。素材临时夹具在旧脚本下 4K/头像/心形/字体四项均 FAIL，新脚本下四项均 PASS。
+  - 最终 PASS：`scripts/test.sh` 161/161（18 suites）；`scripts/test-web.sh` 158/158；`swift build` 退出 0，日志无 warning/error；`bash -n scripts/prepare-media.sh`、`git diff --check` 均通过。
+  - 实际素材 PASS：`MEDIA_DIR=/tmp/desktopshell-m4-01-check/real-media scripts/prepare-media.sh` 退出 0；HEVC/hvc1、3840×2160、30fps、30秒、BT.709、无音轨；心形 1280×213；30 张头像和指定 5 个字体逐一与源文件字节一致；54 条语音、56 JPEG + 7 PNG 背景、63 行 CREDITS；脚本未创建 app-icons。
+  - 耗时：完整素材脚本由 `/usr/bin/time -p` 测得 133.88 秒；视频转码约 98.3 秒（日志创建到视频产物最后写入的时间差估算，未单独包装 ffmpeg 计时）。相同目录第二次执行，六类全部“生成 0”，跳过数依次 1/54/30/64/1/5。
+  - 原生图标探针 PASS：直接运行当前 `AppIcons`，后台读取本机 Cursor、Safari 和一个不存在的测试 bundle id；成功 2/3，约 0.291 秒，两张 PNG 均 128×128，缺失应用不进入成功表。输出仅在 `/tmp/desktopshell-m4-01-check/native-icons/`。
+  - 独立只读检查：18 个改动文件均在白名单内，未发现可操作缺陷。正式 Claude Code 审查记录保持待填写。
+  - 证据：`/tmp/desktopshell-m4-01-check/` 中的 `red-*.log`、`final-swift.log`、`full-web.log`、`build.log`、`real-media.log`、`incremental-media.log`、`verify-media.log`、`native-icons.log`；临时材料不进 git。
+  - 推送状态：自动审查要求对具体 GitHub 目的地明确确认，首次包含推送的命令在执行前被拦截；先保留本地提交，`origin` 的 `task/M4-01` 上传待用户确认。
+  - SKIP / 待复验：任务单指定的打包 `.app` 启动日志顺序与启动到导出耗时、菜单重载、真实桌面视频清晰度/循环/颜色仍由 Claude Code 和用户按上方步骤验证。临时探针不等同于这些验收。
+- **疑问 / 偏离**：无需求偏离。真实运行时的 config.json、ui.json 和 media 保持原样。正式目录升级仍需用户运行一次 `scripts/prepare-media.sh --force`，否则比源文件新的旧版视频和心形会按原有增量规则跳过。提交任务分支供审查，尚未合并 main。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 

@@ -3,6 +3,34 @@ import Testing
 @testable import DesktopShell
 
 struct ConfigStoreTests {
+    @Test("新增称呼和签名读取后保留，旧文件不补字段也不重写")
+    func userAndMottoCompatibility() throws {
+        let fixture = try TemporaryTestDirectory()
+        defer { fixture.cleanup() }
+        for value: String? in [nil, "", " \n", "  测试文本  "] {
+            var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(AppConfig.example)) as? [String: Any])
+            json["user"] = value.map { ["name": $0] }
+            json["character"] = ["name": "爱弥斯", "motto": value].compactMapValues { $0 }
+            let data = try JSONSerialization.data(withJSONObject: json)
+            let file = fixture.root.appendingPathComponent("config.json")
+            try data.write(to: file)
+            let loaded = try ConfigStore(supportDir: fixture.root).load()
+            let encoded = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(loaded)) as? [String: Any])
+            #expect((encoded["user"] as? [String: String])?["name"] == value)
+            #expect((encoded["character"] as? [String: String])?["motto"] == value)
+            #expect(try Data(contentsOf: file) == data)
+        }
+    }
+
+    @Test("首次示例包含称呼和签名且编码往返不变")
+    func exampleNewFields() throws {
+        let data = try JSONEncoder().encode(AppConfig.example)
+        let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect((json["user"] as? [String: String])?["name"] == "Arvin")
+        #expect((json["character"] as? [String: String])?["motto"] == "愿星光一直落在你走的路上")
+        #expect(try JSONDecoder().decode(AppConfig.self, from: data) == AppConfig.example)
+    }
+
     @Test("首次加载创建完整示例配置，中文直接可读")
     func createsExample() throws {
         let fixture = try TemporaryTestDirectory()

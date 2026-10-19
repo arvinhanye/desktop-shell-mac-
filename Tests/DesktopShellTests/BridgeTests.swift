@@ -3,6 +3,36 @@ import Testing
 @testable import DesktopShell
 
 struct BridgeTests {
+    @Test("getConfig 新字段去空白且保留 null 键，仅使用最近成功的图标 id")
+    func newPublicFields() throws {
+        for value: String? in [nil, "", " \t\n", " Arvin \n"] {
+            var config = AppConfig.example
+            config.user = value.map { .init(name: $0) }
+            config.character.motto = value
+            let reply = ConfigReply.make(config: config, avatars: [], backgrounds: [],
+                voices: [MediaItem(id: "1", url: "/media/voice/1.mp3")],
+                iconIDs: ["cursor", "not-configured"], uiState: UiState())
+            #expect(JSONSerialization.isValidJSONObject(reply))
+            let publicConfig = try #require(reply["config"] as? [String: Any])
+            let user = try #require(publicConfig["user"] as? [String: Any])
+            let character = try #require(publicConfig["character"] as? [String: Any])
+            if value == " Arvin \n" {
+                #expect(user["name"] as? String == "Arvin")
+                #expect(character["motto"] as? String == "Arvin")
+            } else {
+                #expect(user["name"] is NSNull)
+                #expect(character["motto"] is NSNull)
+            }
+            let apps = try #require(publicConfig["apps"] as? [[String: Any]])
+            #expect(apps.count == 2)
+            #expect(apps[0]["iconUrl"] as? String == "/media/app-icons/cursor.png")
+            #expect(apps[1]["iconUrl"] is NSNull)
+            let media = try #require(reply["media"] as? [String: [[String: String]]])
+            #expect(media["voices"] == [["id": "1", "url": "/media/voice/1.mp3"]])
+            #expect(allKeys(reply).isDisjoint(with: ["path", "bundleId", "remindersList", "background"]))
+        }
+    }
+
     @Test("导航仅新增 shell://app 发起的精确 srcdoc 子框架例外")
     func srcdocNavigation() {
         let url = URL(string: "about:srcdoc")!
@@ -166,8 +196,8 @@ struct BridgeTests {
         let decoded = try #require(JSONSerialization.jsonObject(with: JSONSerialization.data(withJSONObject: reply)) as? [String: Any])
         #expect(Set(decoded.keys) == ["config", "media", "uiState"])
         let publicConfig = try #require(decoded["config"] as? [String: Any])
-        #expect(Set(publicConfig.keys) == ["character", "greetings", "projects", "apps"])
-        #expect((publicConfig["character"] as? [String: String]) == ["name": "爱弥斯"])
+        #expect(Set(publicConfig.keys) == ["user", "character", "greetings", "projects", "apps"])
+        #expect((publicConfig["character"] as? [String: String]) == ["name": "爱弥斯", "motto": "愿星光一直落在你走的路上"])
         let greetings = try #require(publicConfig["greetings"] as? [[String: Any]])
         #expect(greetings.count == 7)
         #expect(greetings[0]["from"] as? Int == 0)
@@ -179,7 +209,10 @@ struct BridgeTests {
         #expect(projects[0]["tags"] as? [String] == ["dev"])
         #expect(projects[0]["apps"] as? [String] == ["cursor"])
         #expect(projects[0]["hasReminders"] as? Bool == true)
-        #expect(publicConfig["apps"] as? [[String: String]] == [["id": "cursor", "name": "Cursor"], ["id": "safari", "name": "Safari"]])
+        let apps = try #require(publicConfig["apps"] as? [[String: Any]])
+        #expect(apps.map { $0["id"] as? String } == ["cursor", "safari"])
+        #expect(apps.map { $0["name"] as? String } == ["Cursor", "Safari"])
+        #expect(apps.allSatisfy { $0["iconUrl"] is NSNull })
         let media = try #require(decoded["media"] as? [String: [[String: String]]])
         #expect(media["avatars"] == [["id": "2", "url": "/media/avatars/2.PNG"]])
         #expect(media["backgrounds"] == [["id": "bg-1", "url": "/media/backgrounds/bg-1.jpg"]])

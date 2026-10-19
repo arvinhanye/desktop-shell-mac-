@@ -28,9 +28,19 @@ function normalizeReply(reply) {
   const media = isObject(reply.media) && Array.isArray(reply.media.avatars) && Array.isArray(reply.media.backgrounds)
     ? { avatars: mediaItems(reply.media.avatars), backgrounds: mediaItems(reply.media.backgrounds) }
     : { avatars: [], backgrounds: [] };
+  media.voices = Array.isArray(reply.media?.voices) ? mediaItems(reply.media.voices) : [];
+  const stringOrNull = value => typeof value === 'string' ? value : null;
+  const apps = config.apps.map(app => {
+    requireValue(isObject(app));
+    return { ...app, iconUrl: stringOrNull(app.iconUrl) };
+  });
   const ui = isObject(reply.uiState) ? reply.uiState : {};
   return {
-    config: { ...config, projects },
+    config: {
+      ...config, projects, apps,
+      user: { name: stringOrNull(config.user?.name) },
+      character: { ...config.character, motto: stringOrNull(config.character.motto) },
+    },
     media,
     ui: {
       avatarId: typeof ui.avatarId === 'string' ? ui.avatarId : null,
