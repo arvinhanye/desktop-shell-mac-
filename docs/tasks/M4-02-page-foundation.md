@@ -1,6 +1,6 @@
 # M4-02: 页面基础：定稿 token、字体、底板样式和滚动淡出
 
-- **状态**：review
+- **状态**：done
 - **里程碑**：M4
 - **依赖**：M4-01（必须已合并到 `main`：`store.js`、`mock.js` 两个任务都改）
 - **分支**：task/M4-02
@@ -110,7 +110,7 @@ export function installScrollHints(list, { win = window } = {})              // 
 
 ## 审查记录
 
-- **结论**：**代码审查通过，自动验收全部通过，待用户手动验证**（见最后一项）。用户确认后合并到 `main`。
+- **结论**：**通过**，已合并到 `main`。代码审查和自动验收见下；用户手动验证 2026-10-18 完成（见最后）。
 - **复验结果**（Claude Code，2026-10-18，在 `5474cbe` 的独立检出上执行；打包在主目录的同一提交上执行）：
   - [x] `cmp` 两个文件都没有输出；`design.css` 里 `base.css` 那一节的每一行都在 `base.css` 里
   - [x] `backdrop-filter`、`devpanel`（`web/ Sources/ Tests/`）、`srcdoc`（`web/ Sources/`）三个 `grep` 都没有输出
@@ -125,5 +125,5 @@ export function installScrollHints(list, { win = window } = {})              // 
   - `scroll-hints.js` 的 `MutationObserver` 多观察了 `subtree`（任务单只要求 `childList`），只会多触发几次判断，无害。注意它只观察列表本身的尺寸：列表里的内容因为字体加载而变高时不会重新判断，要等下一次滚动或增删节点。目前影响很小，M4-04、M4-05 的浏览器检查里留意一下。
   - mock 数据和效果图 `mockup.js` 完全一致（没装的应用沿用效果图的 id `missing`，任务单写的是"没装的 Figma"，接受）。
   - **范围例外**：`Tests/web/bridge.test.mjs` 的提醒条数从 5 改成 13。这是任务单漏列的文件（mock 换数据必然影响它），用户已同意，只改了这一行，接受。
-- **待用户手动验证**：
-  - [ ] 现在桌面上运行的就是这一版：桌面只剩视频（组件从 M4-03 起加回来）；访达图标能点、能框选、能双击打开；菜单栏各项照常
+- **手动验证**（2026-10-18，用户在 Claude Code 打包启动的 `5474cbe` 上验证）：
+  - [x] 桌面只剩视频；访达图标能点、能框选、能双击打开；菜单栏各项正常
