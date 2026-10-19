@@ -1,0 +1,15 @@
+[data-widget="launcher"] { left: var(--column-1); bottom: var(--launcher-bottom); width: calc(var(--column-width) * 2 + var(--column-gap)); height: var(--launcher-height); }
+.launcher-card { height: 100%; padding: var(--space-3) var(--space-4); }
+.app-row { display: flex; gap: var(--space-2); }
+.app {
+  display: grid; justify-items: center; gap: var(--space-1); width: var(--app-tile-width); padding: var(--space-2) 0;
+  border: var(--border-width) solid transparent; border-radius: var(--radius-sm); background: none;
+}
+.app:hover { background: var(--color-card-bg-hover); }
+.app-icon { width: var(--app-icon-size); height: var(--app-icon-size); display: block; filter: drop-shadow(var(--shadow-icon)); transition: filter var(--duration-fast) var(--ease-standard); }
+/* iconUrl 为 null（应用没装、导出失败）时：名字的第一个字 */
+.app-icon-fallback { display: grid; place-items: center; border-radius: var(--radius-md); background: var(--color-track); border: var(--border-width) solid var(--color-card-border); font-family: var(--font-serif); font-size: var(--text-xl); filter: none; }
+.app-name { font-size: var(--text-sm); color: var(--color-text-muted); }
+.app.related { border-color: color-mix(in srgb, var(--color-highlight) 55%, transparent); background: color-mix(in srgb, var(--color-highlight) 12%, transparent); }
+.app.related .app-icon { filter: drop-shadow(var(--glow-related)); }
+.app.related .app-name { color: var(--color-highlight); }
