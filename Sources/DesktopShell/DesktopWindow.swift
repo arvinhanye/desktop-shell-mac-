@@ -16,7 +16,10 @@ final class VideoWindow: NSWindow {
     }
 
     func setDesktopIconsHidden(_ hidden: Bool) {
-        level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + (hidden ? 1 : -1))
+        level = NSWindow.Level(rawValue: WindowLevels.video(
+            iconLevel: Int(CGWindowLevelForKey(.desktopIconWindow)),
+            iconsHidden: hidden
+        ))
     }
 }
 
@@ -51,20 +54,25 @@ final class WidgetWindow: NSPanel {
             defer: false
         )
 
-        level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.desktopIconWindow)) + 1)
-        hidesOnDeactivate = false
-        isFloatingPanel = false
-        collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-        ignoresMouseEvents = true
-        hasShadow = false
-        isReleasedWhenClosed = false
-        backgroundColor = .clear
-        isOpaque = false
+        Self.configure(self, iconLevel: Int(CGWindowLevelForKey(.desktopIconWindow)))
 
         contentView = webContainer.webView
 
         update(screen: screen)
         webContainer.bind(to: self)
+    }
+
+    static func configure(_ panel: NSPanel, iconLevel: Int) {
+        panel.hidesOnDeactivate = false
+        panel.isFloatingPanel = false
+        panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+        panel.ignoresMouseEvents = true
+        panel.hasShadow = false
+        panel.isReleasedWhenClosed = false
+        panel.backgroundColor = .clear
+        panel.isOpaque = false
+        // isFloatingPanel's setter resets the level, so assign the desktop level last.
+        panel.level = NSWindow.Level(rawValue: WindowLevels.widget(iconLevel: iconLevel))
     }
 
     func update(screen: NSScreen) {
