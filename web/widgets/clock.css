@@ -1,0 +1,19 @@
+[data-widget="clock"] { left: var(--column-1); top: var(--clock-top); width: var(--column-width); height: var(--clock-height); text-shadow: var(--shadow-text-wallpaper); }
+.clock-day {
+  position: absolute; left: var(--clock-day-x); top: var(--clock-day-y);
+  font-family: var(--font-display); font-weight: var(--weight-bold);
+  font-size: var(--text-display); line-height: var(--leading-none); letter-spacing: var(--tracking-display);
+  font-variant-numeric: tabular-nums;
+  color: transparent; text-shadow: none;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--color-accent) 0%, transparent) 14%, color-mix(in srgb, var(--color-accent) 88%, transparent) 56%);
+  -webkit-background-clip: text; background-clip: text;
+}
+.clock-month { position: absolute; left: var(--clock-month-x); top: var(--clock-month-y); font-family: var(--font-label); font-size: var(--text-month); line-height: var(--leading-none); }
+.clock-weekday {
+  position: absolute; left: var(--clock-weekday-x); top: var(--clock-weekday-y);
+  writing-mode: vertical-rl; transform: rotate(180deg);
+  font-family: var(--font-label); font-size: var(--text-weekday); letter-spacing: var(--tracking-weekday); text-transform: uppercase;
+}
+.clock-time { position: absolute; left: var(--clock-time-x); top: var(--clock-time-y); font-family: var(--font-label); font-size: var(--text-time); letter-spacing: var(--tracking-title); }
+.clock-rule { position: absolute; left: var(--clock-rule-x); top: var(--clock-rule-y); width: var(--clock-rule-width); height: var(--rule-width); background: var(--color-text); box-shadow: var(--shadow-text-wallpaper); }
+.clock-date { position: absolute; left: var(--clock-date-x); top: var(--clock-date-y); white-space: nowrap; font-family: var(--font-serif); font-size: var(--text-lg); color: var(--color-text-muted); }
