@@ -162,5 +162,21 @@
 
 ## 审查记录
 
-- **结论**：
+- **结论**：**代码审查通过，自动验收全部通过，待用户手动验证**（见"用户手动验证"的三项）。用户确认后合并到 `main`。
+- **复验结果**（Claude Code，2026-10-18，在 `fe542e8` 的独立检出上执行；素材脚本和打包需要 `assets/`，在主目录的同一提交上执行）：
+  - [x] `swift build` 零警告零错误
+  - [x] `scripts/test.sh`：161 项全部通过（18 个 suite）；`scripts/test-web.sh`：158 项全部通过
+  - [x] 只改了允许的 18 个文件；`git diff --check`、`bash -n scripts/prepare-media.sh` 通过
+  - [x] `MEDIA_DIR=<临时目录> scripts/prepare-media.sh` 退出 0，用时 98 秒：视频 `hevc` / `hvc1`、3840 × 2160、30/1、30 秒，没有音轨；心形 1280 × 213；30 张头像和 `assets/avatars-2x/` 逐字节相同；`fonts/` 正好 5 个文件、逐字节相同、没有 `Emilea.otf`；语音 54、背景图 63 加 `CREDITS.txt`；没有创建 `app-icons/`。同一目录再跑一次，六类都是"生成 0"
+  - [x] `scripts/bundle.sh`（release，固定证书）后打开应用：`20:23:14.025` 启动，`20:23:14.061` 记录 `DesktopShell icons: exported=2/2`（36 毫秒），随后 `DesktopShell bridge: getConfig avatars=30 backgrounds=63 voices=54 icons=2`。`media/app-icons/` 里 `cursor.png`、`safari.png` 被重写为 128 × 128，目录里另外 4 个旧图标没动，没有残留临时文件
 - **意见**：
+  - `AppIcons`：取图标的函数可以替换；写同目录临时文件再 `rename`；`app-icons` 是符号链接或普通文件时整次不导出；非法 id 跳过；日志只写 app id 和原因。符合任务单。
+  - `AppState` 用代号加串行队列，只有最近一次导出的结果生效；导出期间的 `getConfig` 排队等待，不阻塞主线程。"重新加载"按"读配置 → 导出 → 重载页面"的顺序，新页面的 `getConfig` 会等到新一轮结果。
+  - `ConfigReply`：`user` 对象总在；`name`、`motto` 去掉首尾空白，空就是 `NSNull`；`iconUrl` 只给成功表里的应用；回复里仍然没有路径、bundle id、列表名和背景视频。
+  - `bridge.js` 的 `voices` 和头像、背景分开规范化，`voices` 有问题不会连累另外两类。素材脚本改动很小，没有带上旧版的"配方标记"。
+  - 媒体扫描的日志从 `image id rejected` 改成 `id rejected`（语音也走这里），合理。
+  - 审查记录由 Claude Code 在 `fe542e8` 之上提交并推送到 `origin/task/M4-01`；主目录里本地的 `task/M4-01` 比远端少这一个提交，合并时以远端为准。
+- **待用户手动验证**（目前正式目录里的视频还是 2560 × 1440，`config.json` 里还没有 `user`、`motto`）：
+  1. 在 `config.json` 里加上 `"user": { "name": "Arvin" }` 和 `character.motto`，点菜单栏"重新加载"
+  2. 运行 `scripts/prepare-media.sh --force`（约 2 分钟），退出再打开 DesktopShell，看视频是否更清楚、循环处不卡、颜色不变
+  3. 在 `apps` 里临时加 `{ "id": "figma", "name": "Figma", "bundleId": "com.figma.Desktop" }`，"重新加载"，告诉 Claude Code 去查日志；查完删掉
