@@ -1,6 +1,6 @@
 # M5-01: 联动规则的整页回归测试
 
-- **状态**：review
+- **状态**：done
 - **里程碑**：M5
 - **依赖**：M4 完成（已合并到 `main`）
 - **分支**：task/M5-01
@@ -109,5 +109,31 @@
 
 ## 审查记录
 
-- **结论**：
+- **结论**：通过（2026-10-19，Claude Code），合并到 `main`。
+- **复验**（在 `167823f` 的临时检出里实际运行）：
+  - `scripts/test-web.sh`：**421/421 通过**，fail / skip / todo 都是 0。
+  - `node --test Tests/web/linkage.test.mjs`：**9/9 通过**，"联动 1"到"联动 8"每条都有测试（联动 1 有 07:00 和 21:00 两条）；`TZ=UTC` 下同样 9/9。
+  - `git diff --name-only main...task/M5-01` 只有 `Tests/web/linkage.test.mjs`、`Tests/web/helpers/linkage-browser.mjs` 和本任务单；`git diff --check` 通过。`helpers/` 下的文件不匹配 `*.test.mjs`，不会被当成测试运行。
+  - **故意破坏 13 处**（自己选的，和交付记录里的不完全一样），每处都只让预期的测试失败、没有语法错误，试完逐个恢复：
+
+    | 破坏 | 失败的测试 |
+    |---|---|
+    | `todos.js` 按 `selectedProject` 筛选恒为 `true`（验收标准指定的那一处） | 联动 2、3 |
+    | `todos.js` 新增时 `projectId` 恒为 `null` | 联动 2 |
+    | `launcher.js` 关联高亮改订阅 `config` | 联动 3 |
+    | `greeting.js` 整点比较 `<=` 改成 `<` | 联动 4 |
+    | `clock.js` 21 点仍算傍晚 | 联动 1、4 |
+    | `stats.js` 低电量阈值改成 15 | 联动 5 |
+    | `bridge.js` 暂停时不清 `audioSpectrum` | 联动 5、6 |
+    | `bridge.js` 暂停时不丢弃新频谱 | 联动 6 |
+    | `voice.js` 播放前不检查 `voiceEnabled` | 联动 8 |
+    | `voice.js` 关闭开关时不停止当前播放 | 联动 8 |
+    | `character.js` 头像和背景改订阅 `config` | 联动 7 |
+    | `launcher.js` 背景改订阅 `config` | 联动 7 |
+    | `main.js` 不设 `data-phase` | 联动 1 |
+
 - **意见**：
+  - 测试按任务要求把 10 个真实组件挂在同一个 store 上，走真实的 `bridge.js` 和 mock；点击、回车都从 DOM 事件触发，没有直接写 store 代替组件。外观那条把 mock 的 `uiState` 推送扣住，证明了组件不会在推送前先改界面，这是单个组件测试覆盖不到的。
+  - 清理做得扎实：每条测试结束后检查没有残留的定时器、动画帧、观察器和事件监听，并推进一分钟确认状态不再变化；`console.error` / `console.warn` 有输出也算失败。
+  - 小意见（不阻塞）：`main.js` 的 `phase` / `paused` 订阅用比较严格的正则匹配源码，以后只是改了 `main.js` 的写法（换行、改变量名）也会让联动 1、6 失败。到时按新的写法调整正则即可，不算回归。
+  - 和 M5-02 合起来，M5 的 8 条联动规则都有了证据：桌面上逐条验证过（第 4 条除外），整页测试全部覆盖。暂停时停止系统音频捕获留到 M5.5。
