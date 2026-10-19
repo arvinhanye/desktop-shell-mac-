@@ -1,0 +1,12 @@
+[data-widget="visualizer"] { left: calc(var(--visualizer-center) - var(--viz-ornament-width) / 2); bottom: var(--visualizer-bottom); width: var(--viz-ornament-width); height: var(--visualizer-height); pointer-events: none; }
+.viz-ornament { position: absolute; left: 0; bottom: 0; width: 100%; height: auto; }
+.viz-bars { position: absolute; bottom: var(--viz-bars-bottom); height: var(--viz-bar-max); display: flex; align-items: flex-end; gap: var(--viz-bar-gap); }
+.viz-bars.left { right: calc(50% + var(--viz-bars-center-gap)); flex-direction: row-reverse; }
+.viz-bars.right { left: calc(50% + var(--viz-bars-center-gap)); }
+.viz-bars span {
+  width: var(--viz-bar-width); height: 100%;
+  background: linear-gradient(to top, var(--color-ice), color-mix(in srgb, var(--color-ice) 0%, transparent));
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  transform-origin: bottom; transform: scaleY(var(--viz-bar-rest));
+  filter: drop-shadow(var(--glow-viz));
+}
