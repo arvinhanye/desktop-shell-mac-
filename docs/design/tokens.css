@@ -110,7 +110,8 @@
   --shadow-raised: 0 18px 48px var(--color-shadow);
   --shadow-icon: 0 2px 6px rgb(10 12 26 / 0.4);          /* 启动栏图标 */
   --shadow-avatar: 0 2px 6px rgb(10 12 26 / 0.45);       /* 头像组合图 */
-  --glow-voice: 0 0 14px var(--color-ice);               /* 播放语音时头像发光 */
+  /* 播放语音时圆形头像外圈的光环（box-shadow，只画在圆外面）：一道细亮边加一圈柔光。2026-10-19 改，原来是整张组合图的 drop-shadow */
+  --glow-voice: 0 0 0 1.5px color-mix(in srgb, var(--color-ice) 85%, transparent), 0 0 18px 3px color-mix(in srgb, var(--color-ice) 65%, transparent);
   --glow-related: 0 0 10px color-mix(in srgb, var(--color-highlight) 70%, transparent);  /* 相关应用 */
   --glow-viz: 0 0 6px color-mix(in srgb, var(--color-ice) 55%, transparent);            /* 律动条 */
 
@@ -166,6 +167,9 @@
   /* —— 组件内部尺寸 —— */
   --avatar-width: 240px;      /* 头像组合图整张显示，图片本身 480 × 300（2 倍） */
   --avatar-height: 150px;
+  --avatar-ring-x: 91px;      /* 圆形头像在组合图里的位置和直径（2 倍图里 x 182–471、y 2–291），30 张头像的圆都在这里 */
+  --avatar-ring-y: 1px;
+  --avatar-ring-size: 145px;
   --stat-label-width: 48px;
   --spark-height: 26px;       /* CPU 历史折线 */
   --spark-stroke: 1.5;        /* 折线粗细（SVG 单位） */
@@ -193,8 +197,10 @@
   --duration-fast: 120ms;
   --duration-normal: 200ms;
   --duration-slow: 400ms;
-  --duration-voice-pulse: 1200ms;
+  --duration-voice-pulse: 1600ms;  /* 光环一呼一吸 */
+  --voice-ring-dim: 0.35;          /* 光环呼吸到最暗时的不透明度 */
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-breathe: cubic-bezier(0.45, 0, 0.55, 1);
 }
 
 /* 在应用里（底板下面垫着原生毛玻璃 NSVisualEffectView，材质 .hudWindow）时，网页底色只负责上色。

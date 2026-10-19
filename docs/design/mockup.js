@@ -115,7 +115,13 @@ $('avatar').addEventListener('click', () => {
   const button = $('avatar');
   if (button.classList.contains('playing')) return;   // 播放期间不重复触发
   button.classList.add('playing');
-  setTimeout(() => button.classList.remove('playing'), 2400);
+  setTimeout(() => { if ($('toggle-voice').getAttribute('aria-pressed') !== 'true') button.classList.remove('playing'); }, 3200);
+});
+// 控制栏"播放语音"：一直保持播放中的样子，方便看光环
+$('toggle-voice').addEventListener('click', () => {
+  const on = $('toggle-voice').getAttribute('aria-pressed') !== 'true';
+  $('toggle-voice').setAttribute('aria-pressed', String(on));
+  $('avatar').classList.toggle('playing', on);
 });
 const setAppearanceOpen = open => {
   $('appearance').hidden = !open;
