@@ -1,6 +1,6 @@
 # M5-01: 联动规则的整页回归测试
 
-- **状态**：todo
+- **状态**：done
 - **里程碑**：M5
 - **依赖**：M4 完成（已合并到 `main`）
 - **分支**：task/M5-01
@@ -69,12 +69,71 @@
 ## 交付记录
 
 - **改动摘要**：
-- **自测结果**：
+  - 从已同步远端的 `main`（`fbfc9d9`）创建 `task/M5-01`。新增 `Tests/web/linkage.test.mjs`，用 9 条测试覆盖联动表第 1–8 行（第 1 行分别覆盖 07:00 和 21:00）。
+  - 十个真实组件按 `main.js` 的 `WIDGETS` 顺序挂在同一个假 `#desktop` 下，共用真实 `createStore(initialState)`、`createBridge` 和 `createMock`；所有挂载完成后才调用 `bridge.start()`。项目筛选、启动栏关联、待办回车新增、外观按钮和语音均由 DOM 事件触发，不通过直接写入共享状态代替组件联动。
+  - 新增 `Tests/web/helpers/linkage-browser.mjs`：提供最小 DOM/事件冒泡、固定日期、手动推进的 timeout/interval/RAF、观察器和无 I/O 的 Audio。随机源固定；不引入 npm 包，也不修改既有测试。
+  - 外观场景保留真实 mock 校验与回复，只延迟其 `uiState` 推送；验证请求与回复已结束、推送尚未送达时，共享状态、头像、两张背景和选择标记仍保持原值，再经 `target.shell.receive` 投递真实事件验证一起生效。
+  - 每条测试预先注册清理钩子：逆序调用全部组件清理函数、退订事件观察、停止 mock、还原全局 Audio，并检查无残留定时器/帧/观察器/DOM 或 Audio 监听；清理后再推进一分钟，状态仍不变化。store/bridge 捕获的告警和异常也会使测试失败。
+- **自测结果**（2026-10-19）：
+  - 修改前基线：`scripts/test-web.sh` **PASS 412/412**，fail/skip/todo 均为 0。
+  - 新增测试：`node --test Tests/web/linkage.test.mjs` **PASS 9/9**，输出覆盖“联动 1”到“联动 8”，fail/skip/todo 均为 0。
+  - 全量回归：`scripts/test-web.sh` **PASS 421/421**，fail/skip/todo 均为 0。
+  - 时区隔离复验：`TZ=UTC node --test Tests/web/linkage.test.mjs` **PASS 9/9**。
+  - 变异验证：复制 `web/`、本次测试和 helper 到系统临时目录，逐项改动下表中的一处代码，运行 `node --test --test-reporter=tap Tests/web/linkage.test.mjs`。**12/12** 均退出 1，且失败的是预期联动断言而非语法/导入错误；每次恢复该文件后才继续下一项。最后恢复副本全部源文件，重新运行 **PASS 9/9**。原工作区产品文件全过程保持原样。
+
+    | 临时破坏的位置 / 行为 | 被触发的失败测试 |
+    |---|---|
+    | `clock.js`：时段恒写 `day` | 联动 1 两条、联动 4 |
+    | `todos.js`：`visibleTodos` 的项目筛选谓词恒为 `true` | 联动 2、联动 3 |
+    | `launcher.js`：关联应用改为订阅 `ready` 而非 `selectedProject` | 联动 3 |
+    | `greeting.js`：问候改为订阅 `ready` 而非 `now` | 联动 4 |
+    | `stats.js`：低电量边界由 `< 20` 改为 `<= 20` | 联动 5 |
+    | `bridge.js`：暂停只写 `paused`，遗漏 `audioSpectrum: null` | 联动 5、联动 6 |
+    | `bridge.js`：删除暂停期间丢弃频谱的判断 | 联动 6 |
+    | `voice.js`：增加“暂停时不播放语音”的错误限制 | 联动 6 |
+    | `character.js`：头像/背景改为订阅 `ready` 而非 `ui` | 联动 7 |
+    | `appearance.js`：保存前直接写 `store.ui` 乐观更新 | 联动 7 |
+    | `voice.js`：关闭开关时遗漏停止正在播放的语音 | 联动 8 |
+    | `voice.js`：播放入口遗漏 `voiceEnabled` 校验 | 联动 8 |
+
+  - `git diff --check` **PASS**；与 `main` 比较，`web/`、`Sources/`、`AGENTS.md`、`CLAUDE.md` 均无差异。
+  - 独立子代理交付前复核：未发现 Critical / Important / Minor 实质问题；独立实跑联动 **9/9**、全量网页 **421/421**、两文件语法检查和 diff 检查均 **PASS**。此自查不替代 Claude Code 的正式审查，审查记录保持空白。
+  - 实现提交：`f617301`。提交后执行 `git diff --name-only main...task/M5-01`，结果仅为 `Tests/web/linkage.test.mjs`、`Tests/web/helpers/linkage-browser.mjs` 和本任务单，范围检查 **PASS**。
+  - 本次未运行 Swift 构建/测试、未打包应用，也未操作真实提醒事项或运行时配置：本任务只增加 Node 测试，以上不属于任务验收要求。
 - **疑问 / 偏离**：
+  - 无新增产品问题，无 TODO 测试，无需求或文件范围扩展。变异验证在临时副本执行而非原地改动，避免其他协作者或正在运行的应用读到故意破坏的产品代码。
+  - 推送授权已确认：首次尝试执行 `git push -u origin task/M5-01` 时，权限自动审核以“向尚未确认的远端发送仓库内容”为由拦截了含推送的命令，命令未执行。2026-10-19 用户明确回复“允许推送该任务分支”，授权向现有 `origin`（`https://github.com/arvinhanye/desktop-shell-mac-.git`）发送 M5-01 的新增测试及交付记录。推送范围仅为 `task/M5-01`，不合并 `main`。
+  - 假 DOM 检查组件状态与样式开关，不声称验证了实际 CSS 渲染；`main.js` 的 phase/paused 订阅按任务要求做源码检查。真实桌面逐条验证仍属 M5-02；Swift 音频捕获停止/恢复仍属 M5.5。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 
 ## 审查记录
 
-- **结论**：
+- **结论**：通过（2026-10-19，Claude Code），合并到 `main`。
+- **复验**（在 `167823f` 的临时检出里实际运行）：
+  - `scripts/test-web.sh`：**421/421 通过**，fail / skip / todo 都是 0。
+  - `node --test Tests/web/linkage.test.mjs`：**9/9 通过**，"联动 1"到"联动 8"每条都有测试（联动 1 有 07:00 和 21:00 两条）；`TZ=UTC` 下同样 9/9。
+  - `git diff --name-only main...task/M5-01` 只有 `Tests/web/linkage.test.mjs`、`Tests/web/helpers/linkage-browser.mjs` 和本任务单；`git diff --check` 通过。`helpers/` 下的文件不匹配 `*.test.mjs`，不会被当成测试运行。
+  - **故意破坏 13 处**（自己选的，和交付记录里的不完全一样），每处都只让预期的测试失败、没有语法错误，试完逐个恢复：
+
+    | 破坏 | 失败的测试 |
+    |---|---|
+    | `todos.js` 按 `selectedProject` 筛选恒为 `true`（验收标准指定的那一处） | 联动 2、3 |
+    | `todos.js` 新增时 `projectId` 恒为 `null` | 联动 2 |
+    | `launcher.js` 关联高亮改订阅 `config` | 联动 3 |
+    | `greeting.js` 整点比较 `<=` 改成 `<` | 联动 4 |
+    | `clock.js` 21 点仍算傍晚 | 联动 1、4 |
+    | `stats.js` 低电量阈值改成 15 | 联动 5 |
+    | `bridge.js` 暂停时不清 `audioSpectrum` | 联动 5、6 |
+    | `bridge.js` 暂停时不丢弃新频谱 | 联动 6 |
+    | `voice.js` 播放前不检查 `voiceEnabled` | 联动 8 |
+    | `voice.js` 关闭开关时不停止当前播放 | 联动 8 |
+    | `character.js` 头像和背景改订阅 `config` | 联动 7 |
+    | `launcher.js` 背景改订阅 `config` | 联动 7 |
+    | `main.js` 不设 `data-phase` | 联动 1 |
+
 - **意见**：
+  - 测试按任务要求把 10 个真实组件挂在同一个 store 上，走真实的 `bridge.js` 和 mock；点击、回车都从 DOM 事件触发，没有直接写 store 代替组件。外观那条把 mock 的 `uiState` 推送扣住，证明了组件不会在推送前先改界面，这是单个组件测试覆盖不到的。
+  - 清理做得扎实：每条测试结束后检查没有残留的定时器、动画帧、观察器和事件监听，并推进一分钟确认状态不再变化；`console.error` / `console.warn` 有输出也算失败。
+  - 小意见（不阻塞）：`main.js` 的 `phase` / `paused` 订阅用比较严格的正则匹配源码，以后只是改了 `main.js` 的写法（换行、改变量名）也会让联动 1、6 失败。到时按新的写法调整正则即可，不算回归。
+  - 和 M5-02 合起来，M5 的 8 条联动规则都有了证据：桌面上逐条验证过（第 4 条除外），整页测试全部覆盖。暂停时停止系统音频捕获留到 M5.5。
