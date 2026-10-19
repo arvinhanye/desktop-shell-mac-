@@ -130,7 +130,7 @@
 
 - 实测层级（本机）：系统壁纸和程序坞 ≤ -2147483624，**访达图标 = `CGWindowLevelForKey(.desktopIconWindow)`（-2147483603）**，系统桌面小组件 = 图标 +2。
 - **VideoWindow**：层级 = 图标层 **−1**；不透明；`ignoresMouseEvents = true`。
-- **WidgetWindow**：层级 = 图标层 **+3**（2026-10-18 改定，原来是 +1：用户桌面上有系统小组件，层级 +2，会盖住组件和外观面板。改到 +3 后组件在最上面；系统小组件在没被组件挡住的地方照常显示，点击穿透到它们也正常。和组件重叠的系统小组件由用户自己挪开）；内容视图里先放毛玻璃层（见"设计规范"），上面是 WKWebView；`isOpaque = false`、`backgroundColor = .clear`、无阴影；是**不激活应用的 `NSPanel`**（`styleMask` 含 `.nonactivatingPanel`，`hidesOnDeactivate = false`），点组件不会把本应用切到前台、不会抢走其他应用的键盘（2026-10-18 键盘焦点探针）。
+- **WidgetWindow**：层级 = 图标层 **+3**（2026-10-18 改定，原来是 +1：用户桌面上有系统小组件，层级 +2，会盖住组件和外观面板。改到 +3 后组件在最上面；系统小组件在没被组件挡住的地方照常显示，点击穿透到它们也正常。和组件重叠的系统小组件由用户自己挪开）；内容视图里先放毛玻璃层（见"设计规范"），上面是 WKWebView；`isOpaque = false`、`backgroundColor = .clear`、无阴影；是**不激活应用的 `NSPanel`**（`styleMask` 含 `.nonactivatingPanel`，`hidesOnDeactivate = false`），点组件不会把本应用切到前台、不会抢走其他应用的键盘（2026-10-18 键盘焦点探针）。**`NSPanel.isFloatingPanel` 的 setter 会顺带改层级**（`false` 改成普通窗口层级 0），所以先设面板属性、最后设 `level`（2026-10-18 发现：M3-08 起组件窗口因此一直在层级 0，点过组件或应用全屏时会盖住其他应用，见 M4-10）。启动日志 `DesktopShell windows: …` 记录实际层级，`swift scripts/window-levels.swift` 可以随时查看。
 - 两个窗口的 `collectionBehavior` 都是 `[.canJoinAllSpaces, .stationary, .ignoresCycle]`。
 - **点击穿透**（2026-10-17 探针实测，见"技术探针"）：WKWebView 窗口的透明区域**不会**自动让点击穿透，所以要动态切换：
   - 网页通过 bridge 动作 `setHitRegions` 上报所有可交互组件的矩形（CSS 像素，相对网页左上角，组件布局变化时重新上报）。

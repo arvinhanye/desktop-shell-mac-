@@ -1,15 +1,15 @@
-# M4-09: 原生毛玻璃、组件窗口层级和 M4 整体验收
+# M4-09: 原生毛玻璃和 M4 整体验收
 
 - **状态**：todo
 - **里程碑**：M4
-- **依赖**：M4-08（必须已合并到 `main`；所有组件都已就位，才能对着真实的卡片验证毛玻璃）
+- **依赖**：M4-08、M4-10（都必须已合并到 `main`；所有组件都已就位，才能对着真实的卡片验证毛玻璃；窗口层级在 M4-10 已经改好）
 - **分支**：task/M4-09
 
 <!-- ===== 以下需求部分由 Claude Code 编写，Codex 不修改 ===== -->
 
 ## 目标
 
-每块底板（`.card`）和打开着的外观面板下面垫上原生毛玻璃，透出被模糊的视频；切换前后台、点击组件时透明度不跳动。组件窗口升到图标层 +3，压在系统桌面小组件上面。做完后整个 M4 对着设计截图验收一遍。
+每块底板（`.card`）和打开着的外观面板下面垫上原生毛玻璃，透出被模糊的视频；切换前后台、点击组件时透明度不跳动。做完后整个 M4 对着设计截图验收一遍。
 
 ## 背景与约束
 
@@ -17,11 +17,9 @@
 - `docs/design/tokens.css` 末尾的 `:root[data-glass="on"]`：页面在应用里、毛玻璃就位后设 `<html data-glass="on">`，底板底色降到 45%，外观面板底色降到 0.6。浏览器里没有毛玻璃，不设这个属性。
 - 探针源码在 Claude Code 的临时目录里，不在仓库中；需要的做法都写在下面。
 
-### 1. 窗口层级（`DesktopWindow.swift`、`ScreenManager.swift`）
+### 1. 窗口层级
 
-- WidgetWindow 的层级从图标层 +1 改成 **+3**。
-- "隐藏桌面文件"时 VideoWindow 升到图标层 **+3**（和 WidgetWindow 同层，排在它下面），取消时回到 −1。现在 `applyDesktopIconsHidden` 先把视频窗口、再把组件窗口提到前面的顺序保留。
-- 把"图标层 + 偏移"的计算写成纯函数（例如 `WindowLevels.widget(iconLevel:)`、`WindowLevels.video(iconLevel:hidden:)`），方便测试。
+- 已在 M4-10 改好（组件窗口图标层 +3，`WindowLevels`，启动日志 `DesktopShell windows: …`）。本任务改 `DesktopWindow.swift` 的内容视图时，**不要动设置面板属性和 `level` 的顺序**（`isFloatingPanel` 的 setter 会改层级，见 M4-10），做完后用 `swift scripts/window-levels.swift` 确认组件窗口仍是 `icon+3`。
 
 ### 2. `setGlassRegions`（`BridgeProtocol.swift`、`Bridge.swift`）
 
@@ -55,14 +53,13 @@
 
 - `Tests/DesktopShellTests/GlassLayerTests.swift`：`GlassRegions.parse`（合法；65 项；布尔值；`NaN`；`w` 为 0；`radius` 为负、超过一半；4 个数字的项；多出参数；空数组）；`clip`（部分超出时裁剪并收小 `radius`；完全在外面的去掉）。
 - `Tests/DesktopShellTests/BridgeTests.swift`：`setGlassRegions` 的请求解析和错误码。
-- 窗口层级的纯函数：组件 +3；视频平时 −1、隐藏桌面文件时 +3。
 - `Tests/web/glass-regions.test.mjs`：`toGlassRegions`（不取整；零尺寸、完全在视口外的去掉；超过 64 截断）；安装后用假的观察器验证同一帧只发一次、结果不变不重发。
 - `Tests/web/mock.test.mjs`：mock 接受 `setGlassRegions`，多出参数时 `invalid`。
 
 ## 允许修改的文件
 
 - `Sources/DesktopShell/GlassLayer.swift`（新建）
-- `Sources/DesktopShell/DesktopWindow.swift`、`ScreenManager.swift`、`WebContainer.swift`、`BridgeProtocol.swift`、`Bridge.swift`（修改）
+- `Sources/DesktopShell/DesktopWindow.swift`、`WebContainer.swift`、`BridgeProtocol.swift`、`Bridge.swift`（修改）
 - `web/js/glass-regions.js`（新建）；`web/js/main.js`、`web/js/mock.js`、`web/js/hit-regions.js`（修改；`hit-regions.js` 只在提取共用代码时动）
 - `Tests/DesktopShellTests/GlassLayerTests.swift`（新建），`BridgeTests.swift`（修改）
 - `Tests/web/glass-regions.test.mjs`（新建），`Tests/web/mock.test.mjs`、`Tests/web/hit-regions.test.mjs`（修改）
@@ -72,7 +69,7 @@
 
 - 遵守 AGENTS.md "不要做的事"。
 - 不用 CSS `backdrop-filter`；不改 `tokens.css`、`base.css` 和各组件的样式。
-- 不改变点击穿透、键盘焦点（M3-08）和"隐藏桌面文件"的行为，除了层级数字。
+- 不改变窗口层级、点击穿透、键盘焦点（M3-08）和"隐藏桌面文件"的行为。
 - 毛玻璃视图不接收鼠标，不让 VideoWindow 接收鼠标。
 
 ## 验收标准
@@ -83,15 +80,15 @@
 - [ ] `scripts/test.sh`、`scripts/test-web.sh` 全部通过，包含上面列出的新测试
 - [ ] `grep -rn "backdrop-filter" web/` 没有输出
 - [ ] `git diff --name-only main...task/M4-09` 只包含"允许修改的文件"
+- [ ] `scripts/bundle.sh --open` 后 `swift scripts/window-levels.swift`：组件窗口仍是 `icon+3`、视频窗口 `icon-1`，都排在普通应用窗口后面
 - [ ] （Claude Code 复验）`scripts/bundle.sh --open` 后，日志里有 `DesktopShell bridge: setGlassRegions regions=5`（角色卡、系统状态、项目、待办、启动栏五块底板）；打开外观面板后变成 `regions=6`，关上回到 5；没有 `setGlassRegions` 被拒的日志。（Swift 只在某个窗口的区域**数量**变化时记这一行，避免刷屏）
 
-**用户手动验证**（`scripts/bundle.sh --open`）——毛玻璃和层级：
+**用户手动验证**（`scripts/bundle.sh --open`）——毛玻璃：
 
 - [ ] 每块卡片后面是模糊的视频，卡片边缘和模糊区域对齐，没有露出直角或错位
 - [ ] 点卡片里的按钮、切换到别的应用再切回来、点桌面空白处：卡片的透明度都**不跳动**
 - [ ] 打开外观面板：面板后面也是毛玻璃；关上后那块毛玻璃消失
-- [ ] 系统桌面小组件和我们的组件重叠的地方，我们的组件在上面；没重叠的系统小组件照常显示、能点
-- [ ] 菜单栏"隐藏桌面文件"：访达图标和系统小组件一起被视频盖住，组件仍在最上面、能点；取消后恢复
+- [ ] 菜单栏"隐藏桌面文件"：卡片后面的毛玻璃照常（这时模糊的是盖住图标的视频）；取消后恢复
 - [ ] "活动监视器"里 WindowServer 的 CPU 和装毛玻璃之前相比没有明显变化（探针结论：差别在误差以内）
 
 **用户手动验证**——M4 整体（对照 `assets/design-screenshots/` 的截图）：
@@ -101,6 +98,7 @@
 - [ ] 菜单栏"暂停动画"：视频停住，律动条静止；系统状态卡照常更新
 - [ ] 右侧两列访达图标能正常选中、框选、拖动、双击打开；拖动框选经过组件时不会被打断
 - [ ] 在待办输入框打字（含中文拼音），Esc 退出后键盘回到原来的应用
+- [ ] 应用全屏时看不到组件；点过组件之后，其他应用的窗口仍然盖在组件上面（M4-10 的回归检查）
 - [ ] 有外接显示器时：每块屏幕都有一套组件和毛玻璃，插拔显示器后正常
 
 <!-- ===== 以下由 Codex 填写 ===== -->
