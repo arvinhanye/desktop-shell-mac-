@@ -20,6 +20,6 @@ store.subscribe('phase', phase => {
   else console.warn('忽略不合法的时段');
 }, { immediate: true });
 store.subscribe('paused', paused => document.documentElement.toggleAttribute('data-paused', paused), { immediate: true });
-const WIDGETS = ['clock', 'greeting'];
+const WIDGETS = ['clock', 'greeting', 'projects', 'launcher'];
 await mountWidgets(document.getElementById('desktop'), WIDGETS, { store, bridge, hitRegions });
 await bridge.start();
