@@ -119,7 +119,7 @@
 
 - 桌面层窗口里的 `blendingMode = .behindWindow` 能正常取样下面的视频和访达图标。`state = .active`，`appearance = .darkAqua`。
 - 每块底板一个 `NSVisualEffectView`。圆角用 `maskImage`：一张可拉伸的圆角图，`capInsets` 等于半径。更新位置时 `CATransaction.setDisableActions(true)`，避免隐式动画。网页在 `requestAnimationFrame` 里读 `getBoundingClientRect` 上报；打开、关闭外观面板时重新上报。
-- 用户选定材质 `.hudWindow`，网页底色层不透明度 45%（`--plate-fill-opacity`）。
+- 用户选定材质 `.hudWindow`，网页底色层不透明度 45%（`--card-fill-opacity`）。
 - 耗电（i7-9750H，当时由独显 5300M 驱动屏幕；每种情况采样 20 秒，测两轮；后台开着 Claude、Chrome 等应用，数字只看相对差别）：
   - 毛玻璃开和关，WindowServer CPU 的差别在误差以内（54–64% 对 55–65%），独显占用多 2–4 个百分点。
   - 主要开销在视频本身：只放视频时，WindowServer 比不开多约 20%；全屏透明网页窗口再多 5–10%。
@@ -178,7 +178,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 | `openProject` | `projectId` | 在 Finder 中打开该项目文件夹 |
 | `openProjectWith` | `projectId`, `appId` | 用指定应用打开项目文件夹（例如 Cursor）。应用只要在 `config.apps` 里即可 |
 | `launchApp` | `appId` | 启动应用 |
-| `getConfig` | — | 回复 `{config, media, uiState}`：`config` 含 `user`（`name`）、`character`（`name`、`motto`）、`greetings`、`projects`（`id`、`name`、`tags`、`apps`、`hasReminders`）、`apps`（`id`、`name`、`iconUrl`），**不含**项目路径、应用 bundle id、提醒事项列表名和背景视频；`media.avatars`、`media.backgrounds`、`media.voices`（`media/voice/` 里的 mp3，2026-10-18 增加，点击语音用）由 Swift 扫描 `media/` 目录生成，每项 `{id, url}`；`apps[].iconUrl` 是 `/media/app-icons/<appId>.png`，应用没装或图标导出失败时为 `null`；`uiState` 为 `{avatarId, backgroundId, voiceEnabled}`。待办不在这里，见推送事件 `todos` |
+| `getConfig` | — | 回复 `{config, media, uiState}`：`config` 含 `user`（`name`）、`character`（`name`、`motto`）、`greetings`、`projects`（`id`、`name`、`tags`、`apps`、`hasReminders`）、`apps`（`id`、`name`、`iconUrl`），**不含**项目路径、应用 bundle id、提醒事项列表名和背景视频；`media.avatars`、`media.backgrounds`、`media.voices`（`media/voice/` 里的 mp3，2026-10-18 增加，点击语音用）由 Swift 扫描 `media/` 目录生成，每项 `{id, url}`；`apps[].iconUrl` 是 `/media/app-icons/<appId>.png`，应用没装或图标导出失败时为 `null`；`user.name`、`character.motto` 没有配置（或只有空白）时为 `null`；`uiState` 为 `{avatarId, backgroundId, voiceEnabled}`。待办不在这里，见推送事件 `todos` |
 | `addTodo` | `text`, `projectId?` | 在系统提醒事项里新增一条，只设标题。放进该项目对应的列表；没有 `projectId`、为 `null`，或者该项目没有配置列表时，放进系统默认列表。`text` 去掉首尾空白后不为空、不超过 500 字。回复新提醒（格式同 `todos` 事件里的一项） |
 | `setTodoDone` | `todoId`, `done` | 勾选或取消勾选一条提醒。`todoId` 查不到 → `not-found`。**不提供删除**（删除在 iPhone 或 Mac 的提醒事项里做） |
 | `saveUiState` | `avatarId?`, `backgroundId?`（`null` 表示恢复默认） | 写入 `ui.json`，回复新的 `uiState`，并向所有页面推送 `uiState`。Swift 先核对 id 确实存在于 `media/avatars`、`media/backgrounds`，不存在就回复 `not-found` |
@@ -265,12 +265,12 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 视觉主题复刻《鸣潮》爱弥斯美化包（作者 Dr_Black），按 Mac 的实际情况调整。第一版共八个组件和两项功能：
 
 1. **时钟**：以大号衬线体的星期和日期为主（Mac 菜单栏已经显示时间）。同时负责计算当前时段，写入 `store.phase`：早晨 6–12 点、白天 12–18 点、傍晚 18–21 点、夜晚 21–6 点。
-2. **项目卡片**：列出 `config.projects`。点击卡片会选中它（写入 `store.selectedProject`）；卡片上有"Finder 打开"和"用 Cursor 打开"两个按钮。
+2. **项目卡片**：列出 `config.projects`。点击卡片会选中它（写入 `store.selectedProject`）；每个项目有"访达"和"用 <应用> 打开"两个按钮（应用取项目 `apps` 里的第一个，例如 Cursor；没有就只有"访达"，M3.5 定）。
 3. **应用启动栏**：列出 `config.apps`，点击启动。
 4. **待办（系统提醒事项）**（2026-10-17 改定，原方案是自己存 `todos.json`）：直接读写系统"提醒事项"，和 iPhone 同步。显示所有列表的未完成提醒和今天完成的提醒，带到期时间的显示到期时间。可勾选完成、可新增（第一版只填文字，到期时间在 iPhone 上加），**不能删除**。项目通过配置里的 `remindersList` 对应一个列表。没有授权时显示提示，告诉用户去"系统设置 → 隐私与安全性 → 提醒事项"里允许。
 5. **系统状态**：电量、CPU、内存，外加一条 CPU 历史折线。
-6. **问候语**：按 `config.greetings` 显示当前整点对应的问候和祝福语，角色名用强调色。
-7. **角色卡**：圆形头像、名字、签名（签名来自 `config.character.motto`；2026-10-18 去掉了标签）。**点击头像播放语音**；卡片上另设一个入口（具体形式在 M3.5 定，例如签名区域或一个小按钮），点击后在**同一个网页里**弹出"外观"面板，可以换头像和背景图，选择结果通过 `saveUiState` 保存。
+6. **问候语**：按 `config.greetings` 显示当前整点对应的问候和祝福语，称呼（`user.name`）用强调色，没有配置就只显示问候。
+7. **角色卡**：圆形头像、名字、签名（签名来自 `config.character.motto`；2026-10-18 去掉了标签）。**点击头像播放语音**；卡片右上角的"外观"按钮（M3.5 定）点击后在**同一个网页里**弹出"外观"面板，可以换头像和背景图，选择结果通过 `saveUiState` 保存。
 8. **音频律动**：冰晶心形装饰条，两侧各 12 根柱子跟随 `audioSpectrum` 跳动。
 
 两项功能：
@@ -292,7 +292,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 | 时钟每分钟更新 | 问候语组件按当前整点切换问候和祝福语 |
 | `systemStats` 显示使用电池且电量低 | 写入 `paused`，背景和所有动画暂停；系统状态组件显示省电提示 |
 | `paused` 变化 | 所有组件停止或恢复动画；律动条归零静止；Swift 端停止或恢复系统音频捕获 |
-| 外观面板里换头像或背景图 | 写入 `store.ui`，角色卡、启动栏、卡片立即生效，并通过 `saveUiState` 保存 |
+| 外观面板里换头像或背景图 | 通过 `saveUiState` 保存；Swift 推送 `uiState` 写入 `store.ui`，角色卡、启动栏立即生效 |
 | 菜单栏切换语音开关 | Swift 推送 `uiState`，写入 `store.ui.voiceEnabled`；关闭时点击头像不再播放语音 |
 
 ## 设计规范
@@ -302,7 +302,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 - 视觉参考：美化包里对应皮肤的配置（字体、字号、颜色、线宽、文案）。M3.5 开始时由 Claude Code 先整理成参数表，再在此基础上设计。已知的起点：正文白色、强调色 `rgb(250,192,207)`、问候语字体思源宋体。
 - 每个组件是一个"卡片"，共用同一个基础卡片样式（`.card`），只在内容上区分。
 - **桌面组件交互基线**（写在 `base.css` / 页面入口里，所有组件共用）：图片和装饰元素不能拖动（`-webkit-user-drag: none`、`draggable="false"`）；除输入框外文字不能选中（`user-select: none`）；禁用右键菜单（`contextmenu` 事件 `preventDefault`）；鼠标指针默认是箭头，只有可点击的元素才变化。M2 测试页没有做这些，那只是临时页面。
-- **毛玻璃用原生 `NSVisualEffectView`**（2026-10-18 定，探针见"技术探针"）：垫在 WidgetWindow 里 WKWebView 的下面，网页通过 `setGlassRegions` 上报每块底板（`.plate`）和打开着的弹层的矩形与圆角，Swift 按区域摆放，材质 `.hudWindow`。网页底板的底色单独放一层，不透明度用 `--plate-fill-opacity`（有原生毛玻璃时 45%）。在普通浏览器里开发时没有原生毛玻璃，底色按 100% 显示。不用 CSS `backdrop-filter`：M2-05 把视频拆到单独的 VideoWindow 后，它只能跨窗口取样，macOS 按应用是否在前台切换渲染方式，透明度会在点击、切换前后台的那一刻跳动，CSS 控制不了。
+- **毛玻璃用原生 `NSVisualEffectView`**（2026-10-18 定，探针见"技术探针"）：垫在 WidgetWindow 里 WKWebView 的下面，网页通过 `setGlassRegions` 上报每块底板（`.card`）和打开着的弹层（`[data-glass]`）的矩形与圆角，Swift 按区域摆放，材质 `.hudWindow`。网页底板的底色单独放一层（`.card::before`），不透明度用 `--card-fill-opacity`（有原生毛玻璃时 45%，由 `<html data-glass="on">` 切换）。在普通浏览器里开发时没有原生毛玻璃，底色按 100% 显示。不用 CSS `backdrop-filter`：M2-05 把视频拆到单独的 VideoWindow 后，它只能跨窗口取样，macOS 按应用是否在前台切换渲染方式，透明度会在点击、切换前后台的那一刻跳动，CSS 控制不了。
 - 具体的视觉设计（token 数值、卡片样式、组件版式、桌面布局）在 **M3.5 设计定稿**中确定，记录在 `docs/design/`（2026-10-18 定稿：`tokens.css` 是 token 数值，`design.css` 按目标文件分节写好了每个组件的样式，`index.html` 里每个 `data-widget` 区块就是组件要生成的 DOM，说明见 `docs/design/README.md`）。M4 及之后实现组件时以定稿为准，**Codex 不自行做视觉决定**；定稿没有覆盖到的视觉问题，在交付记录里提问。
 - 素材只用**图片、视频、音频和字体**。**不执行任何从壁纸包里解出来的代码**（包括 exe/dll/ps1/vbs/bat/ahk/lua 和网页 JS），需要的功能自己重写。皮肤配置文件只当作数据来读，用来提取参数。
 
@@ -371,9 +371,9 @@ desktop-shell/
 │   ├── js/hit-regions.js          # 自动上报点击区域
 │   ├── js/glass-regions.js        # 自动上报毛玻璃区域（底板和弹层）
 │   ├── js/scroll-hints.js         # 可滚动列表上下边缘的淡出提示
+│   ├── js/media.js                # 按 store.ui 选出头像、背景图的地址（角色卡、启动栏、外观面板共用）
 │   ├── js/main.js                 # 页面入口
-│   └── widgets/
-│       ├── devpanel.js            # M3 骨架自检面板（调试用）
+│   └── widgets/                   # 每个组件一个 <名字>.js，样式在同名 .css（照 docs/design/design.css 对应的一节）
 │       ├── clock.js
 │       ├── projects.js
 │       ├── launcher.js
