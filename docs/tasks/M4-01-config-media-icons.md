@@ -154,7 +154,7 @@
   - 原生图标探针 PASS：直接运行当前 `AppIcons`，后台读取本机 Cursor、Safari 和一个不存在的测试 bundle id；成功 2/3，约 0.291 秒，两张 PNG 均 128×128，缺失应用不进入成功表。输出仅在 `/tmp/desktopshell-m4-01-check/native-icons/`。
   - 独立只读检查：18 个改动文件均在白名单内，未发现可操作缺陷。正式 Claude Code 审查记录保持待填写。
   - 证据：`/tmp/desktopshell-m4-01-check/` 中的 `red-*.log`、`final-swift.log`、`full-web.log`、`build.log`、`real-media.log`、`incremental-media.log`、`verify-media.log`、`native-icons.log`；临时材料不进 git。
-  - 推送状态：自动审查要求对具体 GitHub 目的地明确确认，首次包含推送的命令在执行前被拦截；先保留本地提交，`origin` 的 `task/M4-01` 上传待用户确认。
+  - 推送状态：用户已明确确认目标仓库和任务分支；实现提交 `93323ac` 已推送至 `https://github.com/arvinhanye/desktop-shell-mac-` 的 `task/M4-01`，`git ls-remote` 核对远端提交一致。状态保持 review，等待正式审查，尚未合并 main。
   - SKIP / 待复验：任务单指定的打包 `.app` 启动日志顺序与启动到导出耗时、菜单重载、真实桌面视频清晰度/循环/颜色仍由 Claude Code 和用户按上方步骤验证。临时探针不等同于这些验收。
 - **疑问 / 偏离**：无需求偏离。真实运行时的 config.json、ui.json 和 media 保持原样。正式目录升级仍需用户运行一次 `scripts/prepare-media.sh --force`，否则比源文件新的旧版视频和心形会按原有增量规则跳过。提交任务分支供审查，尚未合并 main。
 
