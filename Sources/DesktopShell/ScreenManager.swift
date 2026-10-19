@@ -6,11 +6,16 @@ final class ScreenManager: NSObject {
         let video: VideoWindow
         let widget: WidgetWindow
 
-        func applyDesktopIconsHidden(_ hidden: Bool) {
+        func applyDesktopIconsHidden(_ hidden: Bool, displayID: CGDirectDisplayID) {
             video.setDesktopIconsHidden(hidden)
             // The two windows share a level when icons are hidden; widgets must stay in front.
             video.orderFront(nil)
             widget.orderFront(nil)
+
+            let iconLevel = Int(CGWindowLevelForKey(.desktopIconWindow))
+            let widgetLevel = WindowLevels.describe(widget.level.rawValue, iconLevel: iconLevel)
+            let videoLevel = WindowLevels.describe(video.level.rawValue, iconLevel: iconLevel)
+            Log.notice("DesktopShell windows: display=\(displayID) widget=\(widgetLevel) video=\(videoLevel)")
         }
 
         func close() {
@@ -79,7 +84,9 @@ final class ScreenManager: NSObject {
 
     func setDesktopIconsHidden(_ hidden: Bool) {
         desktopIconsHidden = hidden
-        for pair in windows.values { pair.applyDesktopIconsHidden(hidden) }
+        for (displayID, pair) in windows {
+            pair.applyDesktopIconsHidden(hidden, displayID: displayID)
+        }
     }
 
     @objc private func screenParametersDidChange(_ notification: Notification) {
@@ -121,7 +128,7 @@ final class ScreenManager: NSObject {
                     guard let widget else { return }
                     self?.replayEvents(to: widget)
                 }
-                pair.applyDesktopIconsHidden(desktopIconsHidden)
+                pair.applyDesktopIconsHidden(desktopIconsHidden, displayID: displayID)
             }
         }
 
