@@ -1,6 +1,6 @@
 # M4-04: 项目卡片和应用启动栏
 
-- **状态**：review
+- **状态**：done
 - **里程碑**：M4
 - **依赖**：M4-03（必须已合并到 `main`）
 - **分支**：task/M4-04
@@ -119,7 +119,7 @@ export function backgroundUrl(media, ui)   // ui.backgroundId 对应的 url；nu
 
 ## 审查记录
 
-- **结论**：**代码审查通过，自动验收全部通过，待用户手动验证**（见最后）。用户确认后合并到 `main`。
+- **结论**：**通过**，已合并到 `main`。代码审查和自动验收见下；手动验证 2026-10-18 完成（见最后）。
 - **复验结果**（Claude Code，2026-10-18，在 `d79198d` 的独立检出上执行；打包在主目录的同一提交上执行）：
   - [x] `projects.css`、`launcher.css` 和 `design.css` 对应的一节逐行一致（两条 `awk | diff -B` 都没有输出）
   - [x] 只改了允许的 10 个文件；`git diff --check` 通过；没有 `innerHTML`、`setInterval`、`requestAnimationFrame`
@@ -131,9 +131,10 @@ export function backgroundUrl(media, ui)   // ui.backgroundId 对应的 url；nu
 - **意见**：
   - 项目卡片：按钮 `stopPropagation`、每个按钮单独防重复；失败提示 3 秒，用代号挡住旧配置的迟到回复；配置里选中的项目没了会清掉选中；回车、空格只在行本身有焦点时生效。启动栏：图标加载失败换首字，`Intl.Segmenter` 取首字；高亮和背景图各自订阅，不重建按钮。`media.js` 和任务单一致。
   - **定稿冲突（Codex 发现，用户已定）**：`docs/design/mockup.css` 的 `#desktop button { font: inherit; color: inherit }` 带了 id 优先级，在效果图里盖过了 `design.css` 的 `.ghost-button`（12 像素、淡色），所以效果图和截图里项目按钮是 14 像素白字；正式页面的 `base.css` 用的是不带 id 的 `button`，会被按钮自己的 class 覆盖。用户选择**按 `design.css` 交付（12 像素淡色）**，实现正确。这是效果图外壳的错误，由 Claude Code 在合并后修正 `mockup.css`（同一条规则也让效果图里的"外观"按钮和"完成"按钮的字号、颜色与 `design.css` 不同，M4-07 会用到），截图里这几个按钮的字会比实际略大、略白。
-- **待用户手动验证**（现在桌面上运行的就是这一版；你的 `config.json` 里只有一个项目，滚动那一项可以跳过）：
-  - [ ] 项目卡片列出 DesktopShell；点"访达"→ 访达打开项目文件夹；点"Cursor"→ 用 Cursor 打开项目
-  - [ ] 把项目的 `path` 临时改成不存在的路径并"重新加载"，点"访达"→ 卡片标题右边出现"没能打开"，3 秒后消失；验证完改回来（要我改 `config.json` 也可以）
-  - [ ] 点项目行 → 选中样式出现，启动栏里 Cursor 高亮；再点 → 取消
-  - [ ] 启动栏显示 Cursor、Safari 的真实图标，点一下启动对应应用
-  - [ ] 点启动栏、项目卡片时，前台应用不变（别的应用里接着打字不受影响）
+- **手动验证**（2026-10-18，在 Claude Code 打包启动的 `d79198d` 上；按用户要求，`config.json` 的路径由 Claude Code 临时修改并改回，点击由用户完成，Claude Code 对照日志）：
+  - [x] 点"访达""Cursor"：日志 `21:29:30 openProject desktop-shell ok`（两次）、`21:29:35 openProjectWith desktop-shell cursor ok`（两次）
+  - [x] 项目路径临时改成不存在的 `~/Desktop/desktop-shell-missing-m4-04`，用户点"重新加载"（`21:29:59 reloaded config and pages`）后点"访达""Cursor"：日志 `openProject rejected: not-found`、`openProjectWith rejected: not-found`，卡片显示"没能打开"。之后改回 `~/Desktop/desktop-shell`，重启应用，`getConfig` 正常
+  - [x] 点项目行出现选中样式、Cursor 高亮，再点取消（用户目测）
+  - [x] 启动栏显示 Cursor、Safari 的真实图标，点击启动（日志 `launchApp cursor ok`、`launchApp safari ok`）
+  - [x] 点启动栏和项目卡片时前台应用不变（用户目测）
+  - 备注：第一次回复"五项都通过"时，日志里只有 `launchApp`，没有项目卡片的打开记录，所以先没合并，补做了前两项。`mockup.css` 的按钮规则已在 `main` 上修正（`7cfcc6d`）。
