@@ -122,5 +122,22 @@ DesktopShell #316 1792x1120 level=icon-1 behind app windows
 
 ## 审查记录
 
-- **结论**：
+- **结论**：**代码审查通过，自动验收全部通过，待用户手动验证**（见最后）。用户确认、Claude Code 对照日志后合并到 `main`。
+- **复验结果**（Claude Code，2026-10-19，在 `e9352b6` 的独立检出上执行；打包在主目录的同一提交上执行）：
+  - [x] `swift build` 零警告零错误；`scripts/test.sh` 167 项全部通过（19 个 suite，含 `WindowLevelsTests` 里用真实 `NSPanel` 验证配置后层级的测试）；`scripts/test-web.sh` 345 项全部通过
+  - [x] 只改了允许的 6 个文件；`git diff --check` 通过
+  - [x] `DesktopWindow.swift` 里 `isFloatingPanel = false` 在第 67 行，设 `level` 在第 75 行，并有注释说明原因
+  - [x] `scripts/bundle.sh --open`（`03:43:58` 启动）：日志 `03:44:03 DesktopShell windows: display=2077748985 widget=icon+3 video=icon-1`；`swift scripts/window-levels.swift` 输出组件窗口 `level=icon+3 behind app windows`、视频窗口 `level=icon-1 behind app windows`
+  - [x] 另用 `CGWindowListCopyWindowInfo` 列出全部窗口（从前到后）：普通应用窗口（层级 0）→ DesktopShell 组件窗口（icon+3）→ 系统桌面小组件（icon+2）→ 访达图标（icon+0）→ DesktopShell 视频窗口（icon−1）。修复前组件窗口在层级 0、和普通应用窗口混在一起
 - **意见**：
+  - 修正方式和任务单一致：面板属性先设、层级最后设；`configure` 正式初始化和测试共用。`WindowLevels.describe` 在图标层 ±16 以内显示相对值，否则写原始数值，层级 0 这类错误一眼能看出来。
+  - 层级日志在每对窗口建好时、每次切换"隐藏桌面文件"后各记一行，读的是窗口实际的 `level`。视频先、组件后提到前面的顺序保留。
+  - 检查脚本只读窗口的拥有者、层级、尺寸和编号，不读标题，不需要"屏幕录制"权限。
+  - 交付记录说明 Codex 所在环境的 SwiftPM 沙盒报错，原生命令由用户代跑；这次 Claude Code 自己重跑了构建、全部测试和打包，结果一致。
+- **待用户手动验证**（现在桌面上运行的就是这一版；带"日志"的 Claude Code 会对照）：
+  - [ ] 点一下待办、项目卡片等组件，再点一个应用的窗口并把它拖到组件上面 → 应用窗口盖在组件上面，组件不会跑到前面来
+  - [ ] 把一个应用全屏（例如 Safari 按 ⌃⌘F）→ 全屏里看不到任何组件；退出全屏回到桌面，组件照常显示
+  - [ ] 桌面上的组件照常能点（例如勾选一条待办再取消，日志：`setTodoDone ok`）；点空白处穿透给访达，能框选
+  - [ ] 待办输入框能输入中文，Esc 后键盘回到原来的应用（日志：`focusInput ok`、`blurInput ok`）
+  - [ ] 系统桌面小组件和我们的组件重叠的地方，我们的组件在上面
+  - [ ] 菜单栏勾上"隐藏桌面文件"→ 访达图标和系统小组件被视频盖住，组件仍在最上面、能点；再取消 → 恢复（日志：`widget=icon+3 video=icon+3`，然后回到 `video=icon-1`）
