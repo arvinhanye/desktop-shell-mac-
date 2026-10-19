@@ -98,9 +98,11 @@
 
   - `git diff --check` **PASS**；与 `main` 比较，`web/`、`Sources/`、`AGENTS.md`、`CLAUDE.md` 均无差异。
   - 独立子代理交付前复核：未发现 Critical / Important / Minor 实质问题；独立实跑联动 **9/9**、全量网页 **421/421**、两文件语法检查和 diff 检查均 **PASS**。此自查不替代 Claude Code 的正式审查，审查记录保持空白。
+  - 实现提交：`f617301`。提交后执行 `git diff --name-only main...task/M5-01`，结果仅为 `Tests/web/linkage.test.mjs`、`Tests/web/helpers/linkage-browser.mjs` 和本任务单，范围检查 **PASS**。
   - 本次未运行 Swift 构建/测试、未打包应用，也未操作真实提醒事项或运行时配置：本任务只增加 Node 测试，以上不属于任务验收要求。
 - **疑问 / 偏离**：
   - 无新增产品问题，无 TODO 测试，无需求或文件范围扩展。变异验证在临时副本执行而非原地改动，避免其他协作者或正在运行的应用读到故意破坏的产品代码。
+  - 推送尚待用户确认：尝试执行 `git push -u origin task/M5-01` 时，权限自动审核以“向尚未确认的远端发送仓库内容”为由拦截了含推送的命令，命令未执行。已请求用户明确允许向现有 `origin`（`https://github.com/arvinhanye/desktop-shell-mac-.git`）发送此任务分支；目前保留本地提交，不合并 `main`。
   - 假 DOM 检查组件状态与样式开关，不声称验证了实际 CSS 渲染；`main.js` 的 phase/paused 订阅按任务要求做源码检查。真实桌面逐条验证仍属 M5-02；Swift 音频捕获停止/恢复仍属 M5.5。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
