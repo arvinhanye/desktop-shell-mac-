@@ -32,11 +32,14 @@ body { font: 13px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; 
   font-family: var(--font-sans); font-size: var(--text-md); line-height: var(--leading-normal); color: var(--color-text);
   -webkit-font-smoothing: antialiased; -webkit-user-select: none; user-select: none; cursor: default;
 }
-/* 以下几条照 M3 的 web/styles/base.css，应用里已经有了 */
-#desktop input { -webkit-user-select: text; user-select: text; cursor: text; }
-#desktop img, #desktop svg { -webkit-user-drag: none; }
-#desktop button, #desktop [role="button"] { font: inherit; color: inherit; cursor: pointer; }
-#desktop :focus-visible { outline: var(--focus-ring-width) solid var(--color-focus-ring); outline-offset: var(--focus-ring-offset); }
+/* 以下几条照 web/styles/base.css，应用里已经有了。用 :where(#desktop) 把 id 的优先级去掉，
+   和 base.css 一样能被 design.css 里按钮自己的 class 覆盖（2026-10-18 修正：原来写成 #desktop button，
+   盖过了 .ghost-button、.primary-button、.appearance-button 的字号和颜色，效果图和截图里这几个按钮的字偏大、偏白） */
+:where(#desktop) input { -webkit-user-select: text; user-select: text; cursor: text; }
+:where(#desktop) :is(img, svg) { -webkit-user-drag: none; }
+:where(#desktop) :is(button, [role="button"]) { cursor: pointer; }
+:where(#desktop) button { font: inherit; color: inherit; }
+:where(#desktop) :focus-visible { outline: var(--focus-ring-width) solid var(--color-focus-ring); outline-offset: var(--focus-ring-offset); }
 .widget { position: absolute; z-index: var(--z-widgets); }
 [hidden] { display: none !important; }
 :root[data-paused] #desktop *, :root[data-paused] #desktop *::before, :root[data-paused] #desktop *::after { animation-play-state: paused !important; }
