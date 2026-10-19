@@ -1,0 +1,4 @@
+[data-widget="greeting"] { left: var(--column-2); top: var(--greeting-top); width: var(--column-width); text-align: right; font-family: var(--font-serif); text-shadow: var(--shadow-text-wallpaper); }
+.greeting-title { margin: 0; font-size: var(--text-greeting); font-weight: var(--weight-regular); line-height: var(--leading-tight); letter-spacing: var(--tracking-title); }
+.greeting-name { color: var(--color-accent); }
+.greeting-wish { margin: var(--space-2) 0 0; font-size: var(--text-wish); line-height: var(--leading-tight); }
