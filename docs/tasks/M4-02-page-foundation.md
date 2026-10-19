@@ -110,5 +110,20 @@ export function installScrollHints(list, { win = window } = {})              // 
 
 ## 审查记录
 
-- **结论**：
+- **结论**：**代码审查通过，自动验收全部通过，待用户手动验证**（见最后一项）。用户确认后合并到 `main`。
+- **复验结果**（Claude Code，2026-10-18，在 `5474cbe` 的独立检出上执行；打包在主目录的同一提交上执行）：
+  - [x] `cmp` 两个文件都没有输出；`design.css` 里 `base.css` 那一节的每一行都在 `base.css` 里
+  - [x] `backdrop-filter`、`devpanel`（`web/ Sources/ Tests/`）、`srcdoc`（`web/ Sources/`）三个 `grep` 都没有输出
+  - [x] `swift build` 零警告零错误；`scripts/test.sh` 161 项、`scripts/test-web.sh` 177 项全部通过；`git diff --check` 通过
+  - [x] 改动 17 个文件，除 `Tests/web/bridge.test.mjs` 外都在"允许修改的文件"里（见下）
+  - [x] 内置浏览器打开 `http://127.0.0.1:8765/`：控制台没有任何输出；样式表顺序 `fonts.css → tokens.css → base.css`；`--column-width` 是 `360px`，`--card-fill-opacity` 是 `1`，没有 `data-glass`；`#desktop` 里没有组件。空白页本身不会请求字体，所以用 `document.fonts.load` 逐个触发：5 个字体都是 `loaded`，网络请求 5 个都是 200
+  - [x] 在同一个页面里对真实 DOM 试了 `installScrollHints`：空列表没有 class；内容超出后 `more-below`；滚到中间两个都有；到底只剩 `more-above`；`-webkit-mask-image` 生效；清理后再滚动，class 不再变化
+  - [x] `scripts/bundle.sh --open`：日志正常（`icons: exported=2/2`、`reminders: access=granted`、`getConfig … voices=54 icons=2`），没有导航被拦的记录
 - **意见**：
+  - 样式、token、字体原样复制；`base.css` 只删了旧 `.card`、追加定稿那一节，其他规则没动。
+  - `WebNavigationPolicy` 只剩"scheme 是 `shell` 就放行"，srcdoc 测试改成在所有来源、目标框架组合下都拒绝。`allows` 的另外三个参数现在用不到，按任务单不动调用方，保留无妨。
+  - `scroll-hints.js` 的 `MutationObserver` 多观察了 `subtree`（任务单只要求 `childList`），只会多触发几次判断，无害。注意它只观察列表本身的尺寸：列表里的内容因为字体加载而变高时不会重新判断，要等下一次滚动或增删节点。目前影响很小，M4-04、M4-05 的浏览器检查里留意一下。
+  - mock 数据和效果图 `mockup.js` 完全一致（没装的应用沿用效果图的 id `missing`，任务单写的是"没装的 Figma"，接受）。
+  - **范围例外**：`Tests/web/bridge.test.mjs` 的提醒条数从 5 改成 13。这是任务单漏列的文件（mock 换数据必然影响它），用户已同意，只改了这一行，接受。
+- **待用户手动验证**：
+  - [ ] 现在桌面上运行的就是这一版：桌面只剩视频（组件从 M4-03 起加回来）；访达图标能点、能框选、能双击打开；菜单栏各项照常
