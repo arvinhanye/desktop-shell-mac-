@@ -33,18 +33,16 @@ struct BridgeTests {
         }
     }
 
-    @Test("导航仅新增 shell://app 发起的精确 srcdoc 子框架例外")
+    @Test("about:srcdoc 无论来源和目标框架都拒绝")
     func srcdocNavigation() {
         let url = URL(string: "about:srcdoc")!
-        #expect(WebNavigationPolicy.allows(url: url, targetIsMainFrame: false, sourceScheme: "shell", sourceHost: "app"))
-        for mainFrame: Bool? in [true, nil] {
-            #expect(!WebNavigationPolicy.allows(url: url, targetIsMainFrame: mainFrame, sourceScheme: "shell", sourceHost: "app"))
-        }
-        for scheme in ["http", "https", "file", "about", "SHELL", ""] {
-            #expect(!WebNavigationPolicy.allows(url: url, targetIsMainFrame: false, sourceScheme: scheme, sourceHost: "app"))
-        }
-        for host in ["evil", "", "APP", "app.evil"] {
-            #expect(!WebNavigationPolicy.allows(url: url, targetIsMainFrame: false, sourceScheme: "shell", sourceHost: host))
+        for mainFrame: Bool? in [true, false, nil] {
+            for scheme in ["shell", "http", "https", "file", "about", "SHELL", ""] {
+                for host in ["app", "evil", "", "APP", "app.evil"] {
+                    #expect(!WebNavigationPolicy.allows(url: url, targetIsMainFrame: mainFrame,
+                        sourceScheme: scheme, sourceHost: host))
+                }
+            }
         }
     }
 

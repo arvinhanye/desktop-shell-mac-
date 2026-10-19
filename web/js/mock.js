@@ -29,14 +29,20 @@ export function createMock({ timers = globalThis, now = () => Date.now(), random
     ],
     projects: [
       { id: 'desktop-shell', name: 'DesktopShell', tags: ['dev'], apps: ['cursor'], hasReminders: true },
-      { id: 'reading', name: '阅读笔记', tags: ['notes'], apps: ['safari'], hasReminders: true },
-      { id: 'sketches', name: '草图', tags: [], hasReminders: false },
+      { id: 'thesis', name: '课程论文', tags: ['写作'], apps: ['safari', 'notes'], hasReminders: true },
+      { id: 'photos', name: '旅行照片整理', tags: [], apps: [], hasReminders: false },
+      { id: 'website', name: '个人网站', tags: ['dev'], apps: ['cursor', 'safari'], hasReminders: true },
+      { id: 'reading', name: '读书笔记', tags: ['阅读'], apps: ['notes'], hasReminders: true },
+      { id: 'budget', name: '家庭账本', tags: [], apps: [], hasReminders: false },
     ],
     apps: [
       { id: 'cursor', name: 'Cursor', iconUrl: '/media/app-icons/cursor.png' },
       { id: 'safari', name: 'Safari', iconUrl: '/media/app-icons/safari.png' },
       { id: 'notes', name: '备忘录', iconUrl: '/media/app-icons/notes.png' },
-      { id: 'figma', name: 'Figma', iconUrl: null },
+      { id: 'music', name: '音乐', iconUrl: '/media/app-icons/music.png' },
+      { id: 'mail', name: '邮件', iconUrl: '/media/app-icons/mail.png' },
+      { id: 'calendar', name: '日历', iconUrl: '/media/app-icons/calendar.png' },
+      { id: 'missing', name: 'Figma', iconUrl: null },
     ],
   };
   const sequence = (count, make) => Array.from({ length: count }, (_, index) => make(index + 1));
@@ -52,20 +58,28 @@ export function createMock({ timers = globalThis, now = () => Date.now(), random
     ],
   };
   const today = new Date(now());
-  const dateAt = offset => {
+  const dateAt = (offset, time = null) => {
     const date = new Date(today);
     date.setDate(date.getDate() + offset);
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+    return { date: `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`, time };
   };
   let todos = [
-    { id: 'mock-1', text: '检查桌面组件', done: false, projectId: 'desktop-shell', due: { date: dateAt(1), time: '09:00' } },
-    { id: 'mock-2', text: '整理阅读笔记', done: false, projectId: 'reading', due: null },
-    { id: 'mock-3', text: '今天的提醒', done: false, projectId: null, due: { date: dateAt(0), time: null } },
-    { id: 'mock-4', text: '过期待办示例', done: false, projectId: null, due: { date: dateAt(-1), time: '18:00' } },
-    { id: 'mock-5', text: '已完成示例', done: true, projectId: null, due: null },
+    { id: 't1', text: '检查桌面组件的点击区域', done: false, projectId: 'desktop-shell', due: dateAt(1, '09:00') },
+    { id: 't2', text: '整理设计稿的修改意见', done: false, projectId: 'desktop-shell', due: dateAt(0) },
+    { id: 't3', text: '论文第三章初稿', done: false, projectId: 'thesis', due: dateAt(2) },
+    { id: 't4', text: '预约下周的体检', done: false, projectId: null, due: dateAt(-1, '18:00') },
+    { id: 't5', text: '给阳台的植物浇水', done: false, projectId: null, due: null },
+    { id: 't7', text: '更新个人网站的作品集页面', done: false, projectId: 'website', due: dateAt(3) },
+    { id: 't8', text: '交这个月的水电费', done: false, projectId: null, due: dateAt(0, '20:00') },
+    { id: 't9', text: '读完《设计心理学》第五章', done: false, projectId: 'reading', due: null },
+    { id: 't10', text: '给妈妈打个电话', done: false, projectId: null, due: dateAt(0, '21:30') },
+    { id: 't11', text: '把照片备份到移动硬盘', done: false, projectId: null, due: dateAt(5) },
+    { id: 't12', text: '确认启动栏图标的显示尺寸', done: false, projectId: 'desktop-shell', due: dateAt(4) },
+    { id: 't6', text: '回复导师的邮件', done: true, projectId: 'thesis', due: null },
+    { id: 't13', text: '整理桌面，只留两列图标', done: true, projectId: 'desktop-shell', due: null },
   ];
-  let nextTodo = 6;
-  let ui = { avatarId: null, backgroundId: null, voiceEnabled: true };
+  let nextTodo = 14;
+  let ui = { avatarId: '1', backgroundId: 'folder-01', voiceEnabled: true };
   let sound = true;
   let paused = false;
   let todosAccess = 'granted';

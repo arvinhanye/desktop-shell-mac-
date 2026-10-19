@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createStore, initialState, store } from '../../web/js/store.js';
 
 test('store: singleton has the initial keys; getState is a shallow copy', () => {
-  assert.deepEqual(Object.keys(store.getState()), ['ready', 'config', 'media', 'ui', 'todos', 'todosAccess', 'safeArea', 'paused', 'systemStats', 'audioSpectrum', 'phase', 'selectedProject']);
+  assert.deepEqual(Object.keys(store.getState()), ['ready', 'config', 'media', 'ui', 'todos', 'todosAccess', 'safeArea', 'paused', 'systemStats', 'audioSpectrum', 'phase', 'selectedProject', 'now', 'appearanceOpen', 'voiceRequest', 'voicePlaying']);
   assert.equal(store.get('ready'), false);
   assert.equal(store.get('todosAccess'), 'unknown');
   const snapshot = store.getState();
@@ -110,4 +110,23 @@ test('store: initial and written objects/arrays are shallow frozen; replacement 
   assert.throws(() => { obj.a = 2; }, TypeError);
   s.set({ obj: { a: 2 }, array: [2] });
   assert.deepEqual(s.get('obj'), { a: 2 });
+});
+
+test('store: M4 shared keys start empty/idle and publish component updates', () => {
+  const s = createStore(initialState);
+  const defaults = { now: null, appearanceOpen: false, voiceRequest: 0, voicePlaying: false };
+  const values = { now: 123000, appearanceOpen: true, voiceRequest: 1, voicePlaying: true };
+  const calls = [];
+  const cleanups = Object.keys(defaults).map(key => {
+    assert.equal(s.get(key), defaults[key]);
+    return s.subscribe(key, (value, previous) => calls.push([key, value, previous]));
+  });
+  s.set(values);
+  assert.deepEqual(calls, [
+    ['now', 123000, null], ['appearanceOpen', true, false],
+    ['voiceRequest', 1, 0], ['voicePlaying', true, false],
+  ]);
+  cleanups.forEach(off => off());
+  s.set(defaults);
+  assert.equal(calls.length, 4);
 });

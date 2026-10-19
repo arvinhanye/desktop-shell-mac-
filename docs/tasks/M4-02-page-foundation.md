@@ -1,6 +1,6 @@
 # M4-02: 页面基础：定稿 token、字体、底板样式和滚动淡出
 
-- **状态**：todo
+- **状态**：review
 - **里程碑**：M4
 - **依赖**：M4-01（必须已合并到 `main`：`store.js`、`mock.js` 两个任务都改）
 - **分支**：task/M4-02
@@ -97,13 +97,33 @@ export function installScrollHints(list, { win = window } = {})              // 
 
 ## 交付记录
 
-- **改动摘要**：
-- **自测结果**：
-- **疑问 / 偏离**：
+- **改动摘要**：基于已合并 M4-01 的 `main`（`ec42673`）在 `task/M4-02` 实现。原样同步定稿 token、5 个字体声明和基础卡片/滚动淡出样式；保留其余基础规则及 CSP。新增 4 个共享状态键与可清理的 `scroll-hints`；移除自检面板，组件列表留空；导航仅允许 `shell` scheme。mock 对齐效果图的 6 个项目、7 个应用（含无图标 Figma）、13 条提醒及初始外观，保留用户/角色/问候/素材和动作、事件行为。
+- **RED → GREEN**：修改前网页 158/158、Swift 161/161 通过。先补测试，确认网页 21 个预期失败（新状态、滚动提示、mock 数据），原 srcdoc 例外导致导航专项 1 个预期失败；定稿 token 比对失败、字体文件尚不存在。完成实现后网页 177/177、Swift 161/161（18 suites）通过，0 跳过。覆盖 1px 容差、上下越界滚动、被动监听、尺寸/子节点变化、重复清理及已排队回调、日期跨年和新增提醒 id 唯一性。
+- **自动检查**：`scripts/test-web.sh`、`scripts/test.sh`、`swift build` 成功；构建日志无 warning/error。两个 `cmp` 无输出；任务单 `awk | grep` 无遗漏行；禁止项 `backdrop-filter` / `devpanel` / `srcdoc` 的三个 grep 均无匹配；`git diff --check` 通过。共 17 个改动文件，均在任务范围及下述单行例外内；额外检查确认原 base.css 非 card 规则、Swift 非导航代码、任务需求部分不变。
+- **浏览器自测**：使用隔离端口 `127.0.0.1:18765`，正式首页空白、`#desktop` 无子组件；控制台 error/warn 均为 0；样式加载顺序 fonts → tokens → base，`--column-width` 为 `360px`。5 个字体 URL 逐个 HTTP GET 均返回 200 且非空。空白页面没有使用字体的文本，浏览器会按需请求字体；这里验证的是正式页声明/资源可访问性，不将 HTTP 检查冒充该页自动发起了 5 个字体请求，实际使用字体后的浏览器网络复验留给审查。
+- **待人工验收**：运行 `scripts/bundle.sh --open`，确认桌面只剩视频；访达图标可点选、框选、双击；菜单栏各项正常。此轮未启动正式 `.app`，未操作提醒事项权限或真实数据，浏览器/单元测试不替代桌面验收。
+- **疑问 / 偏离**：任务单漏列 `Tests/web/bridge.test.mjs`；用户已明确批准仅把第 147 行的提醒数量断言从 5 更新为 13，已精确按此执行，其他内容不变。任务需求及审查记录保持原样。
+- **独立复核**：只读复核覆盖全部 17 个改动文件，未发现高/中严重性问题；复核者独立重跑网页 177/177，并核对样式精确同步、单行范围例外、清理生命周期及 RED/GREEN 证据。此记录为实现侧自查，不代替 Claude Code 的正式审查。
+- **验证日志**：`/tmp/desktopshell-m4-02-check/` 保存 baseline、red、green、build 和字体 HTTP 结果（临时本机证据，不入 git）。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 
 ## 审查记录
 
-- **结论**：
+- **结论**：**代码审查通过，自动验收全部通过，待用户手动验证**（见最后一项）。用户确认后合并到 `main`。
+- **复验结果**（Claude Code，2026-10-18，在 `5474cbe` 的独立检出上执行；打包在主目录的同一提交上执行）：
+  - [x] `cmp` 两个文件都没有输出；`design.css` 里 `base.css` 那一节的每一行都在 `base.css` 里
+  - [x] `backdrop-filter`、`devpanel`（`web/ Sources/ Tests/`）、`srcdoc`（`web/ Sources/`）三个 `grep` 都没有输出
+  - [x] `swift build` 零警告零错误；`scripts/test.sh` 161 项、`scripts/test-web.sh` 177 项全部通过；`git diff --check` 通过
+  - [x] 改动 17 个文件，除 `Tests/web/bridge.test.mjs` 外都在"允许修改的文件"里（见下）
+  - [x] 内置浏览器打开 `http://127.0.0.1:8765/`：控制台没有任何输出；样式表顺序 `fonts.css → tokens.css → base.css`；`--column-width` 是 `360px`，`--card-fill-opacity` 是 `1`，没有 `data-glass`；`#desktop` 里没有组件。空白页本身不会请求字体，所以用 `document.fonts.load` 逐个触发：5 个字体都是 `loaded`，网络请求 5 个都是 200
+  - [x] 在同一个页面里对真实 DOM 试了 `installScrollHints`：空列表没有 class；内容超出后 `more-below`；滚到中间两个都有；到底只剩 `more-above`；`-webkit-mask-image` 生效；清理后再滚动，class 不再变化
+  - [x] `scripts/bundle.sh --open`：日志正常（`icons: exported=2/2`、`reminders: access=granted`、`getConfig … voices=54 icons=2`），没有导航被拦的记录
 - **意见**：
+  - 样式、token、字体原样复制；`base.css` 只删了旧 `.card`、追加定稿那一节，其他规则没动。
+  - `WebNavigationPolicy` 只剩"scheme 是 `shell` 就放行"，srcdoc 测试改成在所有来源、目标框架组合下都拒绝。`allows` 的另外三个参数现在用不到，按任务单不动调用方，保留无妨。
+  - `scroll-hints.js` 的 `MutationObserver` 多观察了 `subtree`（任务单只要求 `childList`），只会多触发几次判断，无害。注意它只观察列表本身的尺寸：列表里的内容因为字体加载而变高时不会重新判断，要等下一次滚动或增删节点。目前影响很小，M4-04、M4-05 的浏览器检查里留意一下。
+  - mock 数据和效果图 `mockup.js` 完全一致（没装的应用沿用效果图的 id `missing`，任务单写的是"没装的 Figma"，接受）。
+  - **范围例外**：`Tests/web/bridge.test.mjs` 的提醒条数从 5 改成 13。这是任务单漏列的文件（mock 换数据必然影响它），用户已同意，只改了这一行，接受。
+- **待用户手动验证**：
+  - [ ] 现在桌面上运行的就是这一版：桌面只剩视频（组件从 M4-03 起加回来）；访达图标能点、能框选、能双击打开；菜单栏各项照常

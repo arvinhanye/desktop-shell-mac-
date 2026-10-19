@@ -144,7 +144,7 @@ test('bridge: real mock startup, replies and timer events all update store throu
     assert.equal(s.get('ready'), true);
     assert.equal(s.get('media').backgrounds.length, 63);
     assert.equal(s.get('todosAccess'), 'granted');
-    assert.equal(s.get('todos').length, 5);
+    assert.equal(s.get('todos').length, 13);
     assert.deepEqual(s.get('safeArea'), { top: 25, right: 0, bottom: 80, left: 0 });
     jobs.get(33)();
     assert.equal(s.get('audioSpectrum').at, 1234);

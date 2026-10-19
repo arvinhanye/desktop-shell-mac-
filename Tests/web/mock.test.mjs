@@ -22,11 +22,11 @@ test('mock: getConfig returns display-only configuration and all 30/63 real medi
   assert.equal(reply.config.character.name, '爱弥斯');
   assert.deepEqual(reply.config.greetings.map(item => item.from), [0, 6, 12, 18, 20, 21, 23]);
   assert.equal(reply.config.greetings[0].wish, '时辰已晚，且捻熄灯盏，良宵安枕');
-  assert.equal(reply.config.projects.length, 3);
-  assert.equal(reply.config.apps.length, 4);
+  assert.equal(reply.config.projects.length, 6);
+  assert.equal(reply.config.apps.length, 7);
   assert.deepEqual(reply.config.projects[0].apps, ['cursor']);
   assert.equal(reply.config.projects[0].hasReminders, true);
-  assert.ok(reply.config.projects.some(project => !('apps' in project) && !project.hasReminders));
+  assert.ok(reply.config.projects.some(project => project.apps.length === 0 && !project.hasReminders));
   for (const project of reply.config.projects) {
     assert.ok(!('path' in project) && !('remindersList' in project));
   }
@@ -38,14 +38,14 @@ test('mock: getConfig returns display-only configuration and all 30/63 real medi
   assert.deepEqual(reply.media.backgrounds[0], { id: 'folder-01', url: '/media/backgrounds/folder-01.png' });
   assert.deepEqual(reply.media.backgrounds[6], { id: 'settings-01', url: '/media/backgrounds/settings-01.png' });
   assert.deepEqual(reply.media.backgrounds[62], { id: 'start-56', url: '/media/backgrounds/start-56.jpg' });
-  assert.deepEqual(reply.uiState, { avatarId: null, backgroundId: null, voiceEnabled: true });
+  assert.deepEqual(reply.uiState, { avatarId: '1', backgroundId: 'folder-01', voiceEnabled: true });
 });
 
 const badRequests = [
   [null, 'invalid'], [[], 'invalid'], ['x', 'invalid'], [{}, 'invalid'], [{ action: 1 }, 'invalid'],
   [{ action: 'nope' }, 'unknown-action'], [{ action: '__proto__' }, 'unknown-action'],
   [{ action: 'focusInput', extra: null }, 'invalid'], [{ action: 'blurInput', extra: '' }, 'invalid'],
-  [{ action: 'deleteTodo', todoId: 'mock-1' }, 'unknown-action'],
+  [{ action: 'deleteTodo', todoId: 't1' }, 'unknown-action'],
   [{ action: 'getConfig', path: '/' }, 'invalid'],
   [{ action: 'setHitRegions', regions: 'bad' }, 'invalid'],
   [{ action: 'openProject', projectId: 'absent' }, 'not-found'],
@@ -54,8 +54,8 @@ const badRequests = [
   [{ action: 'openProject', projectId: 'desktop-shell', path: '/' }, 'invalid'],
   [{ action: 'openProjectWith', projectId: 'desktop-shell' }, 'invalid'],
   [{ action: 'openProjectWith', projectId: 'missing', appId: '../bad' }, 'invalid'],
-  [{ action: 'openProjectWith', projectId: 'desktop-shell', appId: 'missing' }, 'not-found'],
-  [{ action: 'launchApp', appId: 'missing' }, 'not-found'],
+  [{ action: 'openProjectWith', projectId: 'desktop-shell', appId: 'absent-app' }, 'not-found'],
+  [{ action: 'launchApp', appId: 'absent-app' }, 'not-found'],
   [{ action: 'launchApp', appId: 'com.apple.Safari' }, 'invalid'],
   [{ action: 'saveUiState' }, 'invalid'],
   [{ action: 'saveUiState', avatarId: '31' }, 'not-found'],
@@ -69,7 +69,7 @@ const badRequests = [
   [{ action: 'addTodo', text: 'x', projectId: 'absent' }, 'not-found'],
   [{ action: 'addTodo', text: 'x', due: null }, 'invalid'],
   [{ action: 'setTodoDone', todoId: 'missing', done: true }, 'not-found'],
-  [{ action: 'setTodoDone', todoId: 'mock-1', done: 1 }, 'invalid'],
+  [{ action: 'setTodoDone', todoId: 't1', done: 1 }, 'invalid'],
   [{ action: 'setTodoDone', todoId: '../etc', done: true }, 'invalid'],
 ];
 for (const [index, [message, code]] of badRequests.entries()) {
@@ -122,14 +122,23 @@ test('mock: initial reminder fixtures use calendar days, project associations an
   const events = [];
   mock.start(event => events.push(event));
   const items = events.find(event => event.event === 'todos').items;
-  assert.equal(items.length, 5);
-  assert.deepEqual(items[0].due, { date: '2026-10-18', time: '09:00' });
-  assert.equal(items[0].projectId, 'desktop-shell');
-  assert.equal(items[1].due, null);
-  assert.ok((await mock.handle({ action: 'getConfig' })).config.projects.some(p => p.id === items[1].projectId && p.hasReminders));
-  assert.deepEqual(items[2].due, { date: '2026-10-17', time: null });
-  assert.deepEqual(items[3].due, { date: '2026-10-16', time: '18:00' });
-  assert.equal(items[4].done, true);
+  assert.deepEqual(items, [
+    { id: 't1', text: '检查桌面组件的点击区域', done: false, projectId: 'desktop-shell', due: { date: '2026-10-18', time: '09:00' } },
+    { id: 't2', text: '整理设计稿的修改意见', done: false, projectId: 'desktop-shell', due: { date: '2026-10-17', time: null } },
+    { id: 't3', text: '论文第三章初稿', done: false, projectId: 'thesis', due: { date: '2026-10-19', time: null } },
+    { id: 't4', text: '预约下周的体检', done: false, projectId: null, due: { date: '2026-10-16', time: '18:00' } },
+    { id: 't5', text: '给阳台的植物浇水', done: false, projectId: null, due: null },
+    { id: 't7', text: '更新个人网站的作品集页面', done: false, projectId: 'website', due: { date: '2026-10-20', time: null } },
+    { id: 't8', text: '交这个月的水电费', done: false, projectId: null, due: { date: '2026-10-17', time: '20:00' } },
+    { id: 't9', text: '读完《设计心理学》第五章', done: false, projectId: 'reading', due: null },
+    { id: 't10', text: '给妈妈打个电话', done: false, projectId: null, due: { date: '2026-10-17', time: '21:30' } },
+    { id: 't11', text: '把照片备份到移动硬盘', done: false, projectId: null, due: { date: '2026-10-22', time: null } },
+    { id: 't12', text: '确认启动栏图标的显示尺寸', done: false, projectId: 'desktop-shell', due: { date: '2026-10-21', time: null } },
+    { id: 't6', text: '回复导师的邮件', done: true, projectId: 'thesis', due: null },
+    { id: 't13', text: '整理桌面，只留两列图标', done: true, projectId: 'desktop-shell', due: null },
+  ]);
+  const config = (await mock.handle({ action: 'getConfig' })).config;
+  assert.ok(items.every(item => item.projectId === null || config.projects.some(p => p.id === item.projectId && p.hasReminders)));
   mock.stop();
 });
 
@@ -164,18 +173,18 @@ test('mock: setTodoDone broadcasts completion and undo; denied writes fail and g
   const { mock } = fixture();
   const events = [];
   mock.start(event => events.push(event));
-  assert.equal(await mock.handle({ action: 'setTodoDone', todoId: 'mock-1', done: true }), null);
+  assert.equal(await mock.handle({ action: 'setTodoDone', todoId: 't1', done: true }), null);
   assert.equal(events.at(-1).items[0].done, true);
-  assert.equal(await mock.handle({ action: 'setTodoDone', todoId: 'mock-1', done: false }), null);
+  assert.equal(await mock.handle({ action: 'setTodoDone', todoId: 't1', done: false }), null);
   assert.equal(events.at(-1).items[0].done, false);
   for (const access of ['denied', 'notDetermined', 'restricted', 'writeOnly']) {
     mock.setTodosAccess(access);
     assert.deepEqual(events.at(-1), { event: 'todos', access, items: [] });
     await rejects(mock, { action: 'addTodo', text: 'x' }, 'failed');
-    await rejects(mock, { action: 'setTodoDone', todoId: 'mock-1', done: true }, 'failed');
+    await rejects(mock, { action: 'setTodoDone', todoId: 't1', done: true }, 'failed');
   }
   mock.setTodosAccess('granted');
-  assert.equal(events.at(-1).items.length, 5);
+  assert.equal(events.at(-1).items.length, 13);
   assert.equal(events.at(-1).items[0].done, false);
   assert.deepEqual(mock.state, { sound: true, paused: false, todosAccess: 'granted' });
   assert.throws(() => { mock.state.sound = false; }, TypeError);
@@ -272,8 +281,44 @@ test('mock: M4 display fields, installed/missing icons and all 54 voice URLs', a
     { id: 'cursor', iconUrl: '/media/app-icons/cursor.png' },
     { id: 'safari', iconUrl: '/media/app-icons/safari.png' },
     { id: 'notes', iconUrl: '/media/app-icons/notes.png' },
-    { id: 'figma', iconUrl: null },
+    { id: 'music', iconUrl: '/media/app-icons/music.png' },
+    { id: 'mail', iconUrl: '/media/app-icons/mail.png' },
+    { id: 'calendar', iconUrl: '/media/app-icons/calendar.png' },
+    { id: 'missing', iconUrl: null },
   ]);
   assert.equal(media.voices.length, 54);
   for (let i = 1; i <= 54; i++) assert.deepEqual(media.voices[i - 1], { id: String(i), url: `/media/voice/${i}.mp3` });
+});
+
+test('mock: all six projects and seven apps match the approved preview', async () => {
+  const { mock } = fixture();
+  const { config } = await mock.handle({ action: 'getConfig' });
+  assert.deepEqual(config.projects, [
+    { id: 'desktop-shell', name: 'DesktopShell', tags: ['dev'], apps: ['cursor'], hasReminders: true },
+    { id: 'thesis', name: '课程论文', tags: ['写作'], apps: ['safari', 'notes'], hasReminders: true },
+    { id: 'photos', name: '旅行照片整理', tags: [], apps: [], hasReminders: false },
+    { id: 'website', name: '个人网站', tags: ['dev'], apps: ['cursor', 'safari'], hasReminders: true },
+    { id: 'reading', name: '读书笔记', tags: ['阅读'], apps: ['notes'], hasReminders: true },
+    { id: 'budget', name: '家庭账本', tags: [], apps: [], hasReminders: false },
+  ]);
+  assert.deepEqual(config.apps.map(({ id, name }) => ({ id, name })), [
+    { id: 'cursor', name: 'Cursor' }, { id: 'safari', name: 'Safari' },
+    { id: 'notes', name: '备忘录' }, { id: 'music', name: '音乐' },
+    { id: 'mail', name: '邮件' }, { id: 'calendar', name: '日历' }, { id: 'missing', name: 'Figma' },
+  ]);
+});
+
+test('mock: relative dates cross calendar boundaries and added reminders keep unique ids', async () => {
+  const mock = createMock({ now: () => new Date(2026, 11, 31, 12).getTime(), timers: { setInterval() {}, clearInterval() {} } });
+  const events = [];
+  mock.start(event => events.push(event));
+  const initial = events.find(event => event.event === 'todos').items;
+  assert.deepEqual(initial[0].due, { date: '2027-01-01', time: '09:00' });
+  assert.deepEqual(initial[3].due, { date: '2026-12-30', time: '18:00' });
+  const added = await mock.handle({ action: 'addTodo', text: '新提醒' });
+  assert.equal(added.id, 'mock-14');
+  const ids = events.at(-1).items.map(item => item.id);
+  assert.equal(ids.length, 14);
+  assert.equal(new Set(ids).size, ids.length);
+  mock.stop();
 });

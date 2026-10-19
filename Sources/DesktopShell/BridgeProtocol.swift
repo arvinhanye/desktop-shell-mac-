@@ -3,11 +3,7 @@ import CoreFoundation
 
 enum WebNavigationPolicy {
     static func allows(url: URL?, targetIsMainFrame: Bool?, sourceScheme: String, sourceHost: String) -> Bool {
-        if url?.scheme == "shell" { return true }
-        // The native self-check needs a loaded child frame to verify Bridge's
-        // main-frame restriction. Do not broaden this to other about URLs.
-        return url?.absoluteString == "about:srcdoc" && targetIsMainFrame == false
-            && sourceScheme == "shell" && sourceHost == "app"
+        url?.scheme == "shell"
     }
 }
 
