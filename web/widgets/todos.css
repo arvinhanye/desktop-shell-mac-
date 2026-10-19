@@ -1,0 +1,22 @@
+[data-widget="todos"] { left: var(--column-2); top: var(--todos-top); bottom: calc(var(--launcher-bottom) + var(--launcher-height) + var(--column-gap)); width: var(--column-width); }
+.todos-card { display: flex; flex-direction: column; height: 100%; }
+.todo-add { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-sm); background: var(--color-input-bg); }
+.todo-add input { flex: 1; min-width: 0; border: 0; outline: none; background: none; color: var(--color-text); font: inherit; }
+.todo-add input::placeholder { color: var(--color-text-faint); }
+.todo-add:focus-within { border-color: var(--color-focus-ring); }
+.todo-hint { margin: var(--space-2) 0 0; font-size: var(--text-sm); color: var(--color-text-faint); }
+.todo-hint:empty { display: none; }
+.todo-list { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: grid; align-content: start; gap: var(--space-half); flex: 1; min-height: 0; }
+.todo { display: grid; grid-template-columns: var(--check-size) 1fr; gap: var(--space-3); align-items: start; padding: var(--todo-row-padding) var(--space-1); border-radius: var(--radius-sm); }
+.todo:hover { background: var(--color-row-hover); }
+.todo-check { width: var(--check-size); height: var(--check-size); margin-top: var(--space-half); border-radius: var(--radius-full); border: var(--check-border-width) solid var(--color-text-muted); background: none; padding: 0; display: grid; place-items: center; }
+.todo-check svg { width: var(--check-mark-size); height: var(--check-mark-size); opacity: 0; }
+.todo.done .todo-check { background: var(--color-accent); border-color: var(--color-accent); }
+.todo.done .todo-check svg { opacity: 1; color: var(--color-accent-contrast); }
+.todo-text { font-size: var(--text-md); line-height: var(--leading-snug); }
+.todo-due { display: block; font-size: var(--text-sm); color: var(--color-text-muted); }
+.todo-due.overdue { color: var(--color-danger); }
+.todo.done .todo-text { color: var(--color-text-faint); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--color-text) 40%, transparent); }
+.todo-section { margin: var(--space-2) 0 0; padding-top: var(--space-2); border-top: var(--border-width) solid var(--color-card-border); font-size: var(--text-xs); color: var(--color-text-faint); }
+.todo-empty, .todo-denied { margin: var(--space-6) var(--space-2); color: var(--color-text-muted); font-size: var(--text-md); text-align: center; line-height: var(--leading-loose); }
+.todo-denied strong { display: block; color: var(--color-text); font-family: var(--font-serif); font-size: var(--text-lg); font-weight: var(--weight-regular); margin-bottom: var(--space-1); }
