@@ -184,6 +184,26 @@ test('appearance: failure message clears after 3 seconds; repeated failure resta
   const [id, timer] = [...f.timers][0]; f.timers.delete(id); timer.callback();
   assert.equal(message.textContent, ''); cleanup();
 });
+test('appearance: error message stays hidden except while a save failure is displayed', async () => {
+  let fail = true;
+  const f = fixture({}, async () => { if (fail) throw new Error('failed'); });
+  const cleanup = appearance.mount(f.host, f), message = one(f.host, 'card-meta');
+  assert.equal(message.hidden, true, 'empty message must not take space in the title row');
+  one(f.host, 'ghost-button').emit('click'); await flush();
+  assert.equal(message.hidden, false); assert.equal(message.textContent, '保存失败，请再试一次');
+  const [id, timer] = [...f.timers][0]; assert.equal(timer.delay, 3000);
+  f.timers.delete(id); timer.callback();
+  assert.equal(message.hidden, true); assert.equal(message.textContent, '');
+
+  one(f.host, 'ghost-button').emit('click'); await flush();
+  assert.equal(message.hidden, false);
+  fail = false; one(f.host, 'ghost-button').emit('click'); await flush();
+  assert.equal(message.hidden, true); assert.equal(message.textContent, ''); assert.equal(f.timers.size, 0);
+
+  fail = true; one(f.host, 'ghost-button').emit('click'); await flush();
+  assert.equal(message.hidden, false); cleanup();
+  assert.equal(message.hidden, true); assert.equal(message.textContent, ''); assert.equal(f.timers.size, 0);
+});
 test('appearance: sync send failure is handled and successful retry clears the message and timer', async () => {
   let fail = true; const f = fixture({}, () => { if (fail) throw new Error('failed'); return Promise.resolve(); });
   const cleanup = appearance.mount(f.host, f); one(f.host, 'ghost-button').emit('click'); await flush();

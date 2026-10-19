@@ -34,6 +34,7 @@ export default {
     const head = element('div', 'appearance-head');
     const actions = element('div', 'appearance-actions');
     const message = element('span', 'card-meta');
+    message.hidden = true;
     const reset = element('button', 'ghost-button', '恢复默认');
     const done = element('button', 'primary-button', '完成');
     reset.type = done.type = 'button';
@@ -59,6 +60,7 @@ export default {
       if (errorTimer !== null) win.clearTimeout(errorTimer);
       errorTimer = null;
       message.textContent = '';
+      message.hidden = true;
     };
     const save = async (key, id) => {
       if (disposed) return;
@@ -71,6 +73,7 @@ export default {
         if (disposed) return;
         clearError();
         message.textContent = '保存失败，请再试一次';
+        message.hidden = false;
         errorTimer = win.setTimeout(clearError, 3000);
       }
     };
