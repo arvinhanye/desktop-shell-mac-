@@ -1,11 +1,16 @@
 import Foundation
 
 struct AppConfig: Codable, Equatable {
+    var user: User? = nil
     var background: Background
     var character: Character
     var greetings: [Greeting]
     var projects: [Project]
     var apps: [App]
+
+    struct User: Codable, Equatable {
+        var name: String?
+    }
 
     struct Background: Codable, Equatable {
         var video: String
@@ -13,6 +18,7 @@ struct AppConfig: Codable, Equatable {
 
     struct Character: Codable, Equatable {
         var name: String
+        var motto: String? = nil
     }
 
     struct Greeting: Codable, Equatable {
@@ -37,8 +43,9 @@ struct AppConfig: Codable, Equatable {
     }
 
     static let example = AppConfig(
+        user: User(name: "Arvin"),
         background: Background(video: "video/aemeath.mp4"),
-        character: Character(name: "爱弥斯"),
+        character: Character(name: "爱弥斯", motto: "愿星光一直落在你走的路上"),
         greetings: [
             Greeting(from: 0, title: "深夜了", wish: "时辰已晚，且捻熄灯盏，良宵安枕"),
             Greeting(from: 6, title: "早上好", wish: "晨光熹微，愿您涤尽尘扰，理裳启新日"),

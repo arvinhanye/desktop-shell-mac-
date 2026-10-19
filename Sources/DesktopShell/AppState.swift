@@ -8,9 +8,16 @@ final class AppState {
     var uiState: UiState
     var onUiStateChanged: ((UiState) -> Void)?
     let uiStateStore: UiStateStore
+    private let appIcons: AppIcons
+    private let iconQueue = DispatchQueue(label: "DesktopShell.app-icons", qos: .userInitiated)
+    private var iconGeneration = 0
+    private var exportingIcons = false
+    private var exportedIconIDs = Set<String>()
+    private var iconWaiters: [(Set<String>) -> Void] = []
 
-    init(paths: AppPaths) {
+    init(paths: AppPaths, appIcons: AppIcons = AppIcons()) {
         self.paths = paths
+        self.appIcons = appIcons
         uiStateStore = UiStateStore(supportDir: paths.supportDir)
         uiState = uiStateStore.load()
         do {
@@ -19,6 +26,32 @@ final class AppState {
             Log.error("DesktopShell: configuration load failed, using in-memory example: \(String(describing: error))")
             config = .example
         }
+    }
+
+    func exportAppIcons() {
+        iconGeneration += 1
+        let generation = iconGeneration
+        let apps = config.apps
+        let mediaDir = paths.mediaDir
+        let exporter = appIcons
+        exportingIcons = true
+        // Serialize file publication so an older reload can never overwrite newer icons.
+        iconQueue.async { [weak self] in
+            let ids = exporter.export(apps: apps, mediaDir: mediaDir)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.iconGeneration == generation else { return }
+                self.exportedIconIDs = ids
+                self.exportingIcons = false
+                let waiters = self.iconWaiters
+                self.iconWaiters.removeAll()
+                for reply in waiters { reply(ids) }
+            }
+        }
+    }
+
+    func withAppIcons(_ reply: @escaping (Set<String>) -> Void) {
+        if exportingIcons { iconWaiters.append(reply) }
+        else { reply(exportedIconIDs) }
     }
 
     func saveUiState() throws {

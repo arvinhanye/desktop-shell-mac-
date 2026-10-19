@@ -3,6 +3,25 @@ import Testing
 @testable import DesktopShell
 
 struct MediaLibraryTests {
+    @Test("语音仅扫描 mp3，过滤隐藏、链接和非法 id，并自然排序去重")
+    func scansVoices() throws {
+        let fixture = try TemporaryTestDirectory()
+        defer { fixture.cleanup() }
+        for name in ["2.mp3", "10.mp3", "1.MP3", "1.mp3", "3.txt", "4.wav", "5.png", ".hidden.mp3", "bad name.mp3"] {
+            _ = try fixture.file("voice/" + name)
+        }
+        _ = try fixture.file("voice/nested/6.mp3")
+        _ = try fixture.directory("voice/7.mp3")
+        try FileManager.default.createSymbolicLink(at: fixture.root.appendingPathComponent("voice/link.mp3"), withDestinationURL: fixture.root.appendingPathComponent("voice/2.mp3"))
+        #expect(MediaLibrary.scan(mediaDir: fixture.root, subdirectory: "voice", extensions: ["mp3"]) == [
+            MediaItem(id: "1", url: "/media/voice/1.MP3"),
+            MediaItem(id: "2", url: "/media/voice/2.mp3"),
+            MediaItem(id: "10", url: "/media/voice/10.mp3")
+        ])
+        #expect(MediaLibrary.scan(mediaDir: fixture.root, subdirectory: "voice") == [MediaItem(id: "5", url: "/media/voice/5.png")])
+        #expect(MediaLibrary.scan(mediaDir: fixture.root, subdirectory: "voice", extensions: []).isEmpty)
+    }
+
     @Test("单层素材过滤、自然顺序、扩展名原样及同 id 去重")
     func scansImages() throws {
         let fixture = try TemporaryTestDirectory()

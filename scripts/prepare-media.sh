@@ -23,7 +23,7 @@ for tool in ffmpeg ffprobe sips; do
   fi
 done
 
-for directory in video voice avatars ornaments backgrounds/start-menu backgrounds/folder backgrounds/settings; do
+for directory in video voice avatars-2x ornaments fonts backgrounds/start-menu backgrounds/folder backgrounds/settings; do
   [[ -d "assets/$directory" ]] || fail "缺少素材目录：assets/$directory"
 done
 
@@ -77,7 +77,7 @@ add() {
 
 add assets/video/Wallpaper.webm video/aemeath.mp4 video 0
 for n in {1..54}; do add "assets/voice/($n).mp3" "voice/$n.mp3" copy 1; done
-for n in {1..30}; do add "assets/avatars/$n.png" "avatars/$n.png" copy 2; done
+for n in {1..30}; do add "assets/avatars-2x/$n.png" "avatars/$n.png" copy 2; done
 for n in {1..56}; do
   printf -v name 'backgrounds/start-%02d.jpg' "$n"
   add "assets/backgrounds/start-menu/$n.png" "$name" jpeg 3
@@ -96,9 +96,13 @@ for category in folder settings; do
 done
 add assets/ornaments/heart.png ornaments/heart.png heart 4
 
-labels=(video voice avatars backgrounds ornaments)
-generated=(0 0 0 0 0)
-skipped=(0 0 0 0 0)
+for font in SourceHanSerifSC-SemiBold.otf Gobold-Bold.otf Porter.otf GoogleSans-Regular.ttf GoogleSans-Bold.ttf; do
+  add "assets/fonts/$font" "fonts/$font" copy 5
+done
+
+labels=(video voice avatars backgrounds ornaments fonts)
+generated=(0 0 0 0 0 0)
+skipped=(0 0 0 0 0 0)
 
 # Refuse symlinked category directories rather than accidentally writing to assets
 # or elsewhere. Each completed file is published atomically from our own staging
@@ -112,7 +116,7 @@ for output in "${outputs[@]}" backgrounds/CREDITS.txt; do
   target="$MEDIA_DIR/$output"
   [[ ! -L "$target" && ( ! -e "$target" || -f "$target" ) ]] || fail "输出目标不是常规文件：$target"
 done
-mkdir -p "$MEDIA_DIR"/{video,voice,avatars,backgrounds,ornaments}
+mkdir -p "$MEDIA_DIR"/{video,voice,avatars,backgrounds,ornaments,fonts}
 STAGING=$(mktemp -d "$MEDIA_DIR/.prepare-media.XXXXXX")
 trap 'rm -rf -- "$STAGING"' EXIT
 trap 'exit 130' INT
@@ -135,8 +139,8 @@ for ((i = 0; i < ${#sources[@]}; i++)); do
   case "${kinds[i]}" in
     video)
       ffmpeg -loglevel error -y -i "$source" -an \
-        -vf "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709,scale=2560:1440:flags=lanczos" \
-        -c:v libx265 -preset slow -crf 22 -pix_fmt yuv420p -tag:v hvc1 \
+        -vf "setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709" \
+        -c:v libx265 -preset medium -crf 22 -pix_fmt yuv420p -tag:v hvc1 \
         -color_primaries bt709 -color_trc bt709 -colorspace bt709 \
         -x265-params log-level=error -movflags +faststart \
         "$temporary"
@@ -169,7 +173,7 @@ for ((i = 0; i < ${#sources[@]}; i++)); do
       ;;
     heart)
       sips -c 800 4800 "$source" --out "$temporary" >/dev/null
-      sips -Z 2400 "$temporary" >/dev/null
+      sips -Z 1280 "$temporary" >/dev/null
       ;;
   esac
   mv -f "$temporary" "$output"

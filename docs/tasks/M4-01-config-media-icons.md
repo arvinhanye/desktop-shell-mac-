@@ -1,6 +1,6 @@
 # M4-01: 配置新字段、语音列表、应用图标和素材升级
 
-- **状态**：todo
+- **状态**：review
 - **里程碑**：M4
 - **依赖**：M3 完成；M3.5 设计定稿已合并到 `main`
 - **分支**：task/M4-01
@@ -140,12 +140,43 @@
 ## 交付记录
 
 - **改动摘要**：
-- **自测结果**：
-- **疑问 / 偏离**：
+  - 从最新 `main`（`495d066`）新建 `task/M4-01`，按本任务单重新实现。旧尝试 `attempt/M4-01-codex1` 原样保留。
+  - 配置增加可选 `user.name`、`character.motto`；读取已有配置保持字节原样。公开回复包含去空白后的字符串或显式 null，继续排除路径、bundle id、列表名和视频配置。
+  - 素材扫描支持扩展名参数，`voice/` 仅收 mp3；网页 store、回复规范化和 mock 同步新增字段及 54 条语音。
+  - 新增 `AppIcons`：可替换的图标读取函数、128×128 PNG、同目录临时文件与原子 rename、目录类型校验、失败日志和逐轮成功表。串行后台队列在创建窗口前启动；重载配置后再次导出；等待中的 `getConfig` 在最近一轮结束后由主线程逐个回复，旧一轮结果不提前释放等待者。
+  - 素材脚本保留原片 4K、使用 medium、复制 2 倍头像、心形输出 1280×213、复制指定的 5 个字体。沿用原有增量规则，未加入配方标记、额外测试目录或交接文档。
+- **自测结果**（2026-10-18）：
+  - 基线 PASS：Swift 152/152，网页 149/149。
+  - RED→GREEN：配置字段保留/示例、语音扫描、公开回复、网页规范化和 mock、实际图标文件导出、异步等待及重载竞态均先观察到预期失败，再实现并通过。素材临时夹具在旧脚本下 4K/头像/心形/字体四项均 FAIL，新脚本下四项均 PASS。
+  - 最终 PASS：`scripts/test.sh` 161/161（18 suites）；`scripts/test-web.sh` 158/158；`swift build` 退出 0，日志无 warning/error；`bash -n scripts/prepare-media.sh`、`git diff --check` 均通过。
+  - 实际素材 PASS：`MEDIA_DIR=/tmp/desktopshell-m4-01-check/real-media scripts/prepare-media.sh` 退出 0；HEVC/hvc1、3840×2160、30fps、30秒、BT.709、无音轨；心形 1280×213；30 张头像和指定 5 个字体逐一与源文件字节一致；54 条语音、56 JPEG + 7 PNG 背景、63 行 CREDITS；脚本未创建 app-icons。
+  - 耗时：完整素材脚本由 `/usr/bin/time -p` 测得 133.88 秒；视频转码约 98.3 秒（日志创建到视频产物最后写入的时间差估算，未单独包装 ffmpeg 计时）。相同目录第二次执行，六类全部“生成 0”，跳过数依次 1/54/30/64/1/5。
+  - 原生图标探针 PASS：直接运行当前 `AppIcons`，后台读取本机 Cursor、Safari 和一个不存在的测试 bundle id；成功 2/3，约 0.291 秒，两张 PNG 均 128×128，缺失应用不进入成功表。输出仅在 `/tmp/desktopshell-m4-01-check/native-icons/`。
+  - 独立只读检查：18 个改动文件均在白名单内，未发现可操作缺陷。正式 Claude Code 审查记录保持待填写。
+  - 证据：`/tmp/desktopshell-m4-01-check/` 中的 `red-*.log`、`final-swift.log`、`full-web.log`、`build.log`、`real-media.log`、`incremental-media.log`、`verify-media.log`、`native-icons.log`；临时材料不进 git。
+  - 推送状态：用户已明确确认目标仓库和任务分支；实现提交 `93323ac` 已推送至 `https://github.com/arvinhanye/desktop-shell-mac-` 的 `task/M4-01`，`git ls-remote` 核对远端提交一致。状态保持 review，等待正式审查，尚未合并 main。
+  - SKIP / 待复验：任务单指定的打包 `.app` 启动日志顺序与启动到导出耗时、菜单重载、真实桌面视频清晰度/循环/颜色仍由 Claude Code 和用户按上方步骤验证。临时探针不等同于这些验收。
+- **疑问 / 偏离**：无需求偏离。真实运行时的 config.json、ui.json 和 media 保持原样。正式目录升级仍需用户运行一次 `scripts/prepare-media.sh --force`，否则比源文件新的旧版视频和心形会按原有增量规则跳过。提交任务分支供审查，尚未合并 main。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 
 ## 审查记录
 
-- **结论**：
+- **结论**：**代码审查通过，自动验收全部通过，待用户手动验证**（见"用户手动验证"的三项）。用户确认后合并到 `main`。
+- **复验结果**（Claude Code，2026-10-18，在 `fe542e8` 的独立检出上执行；素材脚本和打包需要 `assets/`，在主目录的同一提交上执行）：
+  - [x] `swift build` 零警告零错误
+  - [x] `scripts/test.sh`：161 项全部通过（18 个 suite）；`scripts/test-web.sh`：158 项全部通过
+  - [x] 只改了允许的 18 个文件；`git diff --check`、`bash -n scripts/prepare-media.sh` 通过
+  - [x] `MEDIA_DIR=<临时目录> scripts/prepare-media.sh` 退出 0，用时 98 秒：视频 `hevc` / `hvc1`、3840 × 2160、30/1、30 秒，没有音轨；心形 1280 × 213；30 张头像和 `assets/avatars-2x/` 逐字节相同；`fonts/` 正好 5 个文件、逐字节相同、没有 `Emilea.otf`；语音 54、背景图 63 加 `CREDITS.txt`；没有创建 `app-icons/`。同一目录再跑一次，六类都是"生成 0"
+  - [x] `scripts/bundle.sh`（release，固定证书）后打开应用：`20:23:14.025` 启动，`20:23:14.061` 记录 `DesktopShell icons: exported=2/2`（36 毫秒），随后 `DesktopShell bridge: getConfig avatars=30 backgrounds=63 voices=54 icons=2`。`media/app-icons/` 里 `cursor.png`、`safari.png` 被重写为 128 × 128，目录里另外 4 个旧图标没动，没有残留临时文件
 - **意见**：
+  - `AppIcons`：取图标的函数可以替换；写同目录临时文件再 `rename`；`app-icons` 是符号链接或普通文件时整次不导出；非法 id 跳过；日志只写 app id 和原因。符合任务单。
+  - `AppState` 用代号加串行队列，只有最近一次导出的结果生效；导出期间的 `getConfig` 排队等待，不阻塞主线程。"重新加载"按"读配置 → 导出 → 重载页面"的顺序，新页面的 `getConfig` 会等到新一轮结果。
+  - `ConfigReply`：`user` 对象总在；`name`、`motto` 去掉首尾空白，空就是 `NSNull`；`iconUrl` 只给成功表里的应用；回复里仍然没有路径、bundle id、列表名和背景视频。
+  - `bridge.js` 的 `voices` 和头像、背景分开规范化，`voices` 有问题不会连累另外两类。素材脚本改动很小，没有带上旧版的"配方标记"。
+  - 媒体扫描的日志从 `image id rejected` 改成 `id rejected`（语音也走这里），合理。
+  - 审查记录由 Claude Code 在 `fe542e8` 之上提交并推送到 `origin/task/M4-01`；主目录里本地的 `task/M4-01` 比远端少这一个提交，合并时以远端为准。
+- **待用户手动验证**（目前正式目录里的视频还是 2560 × 1440，`config.json` 里还没有 `user`、`motto`）：
+  1. 在 `config.json` 里加上 `"user": { "name": "Arvin" }` 和 `character.motto`，点菜单栏"重新加载"
+  2. 运行 `scripts/prepare-media.sh --force`（约 2 分钟），退出再打开 DesktopShell，看视频是否更清楚、循环处不卡、颜色不变
+  3. 在 `apps` 里临时加 `{ "id": "figma", "name": "Figma", "bundleId": "com.figma.Desktop" }`，"重新加载"，告诉 Claude Code 去查日志；查完删掉

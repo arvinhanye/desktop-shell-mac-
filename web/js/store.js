@@ -56,7 +56,7 @@ export function createStore(initialState) {
 export const initialState = {
   ready: false,
   config: null,
-  media: { avatars: [], backgrounds: [] },
+  media: { avatars: [], backgrounds: [], voices: [] },
   ui: { avatarId: null, backgroundId: null, voiceEnabled: true },
   todos: [],
   todosAccess: 'unknown',

@@ -16,7 +16,8 @@ const isPlainObject = value => value !== null && typeof value === 'object'
 
 export function createMock({ timers = globalThis, now = () => Date.now(), random = Math.random } = {}) {
   const config = {
-    character: { name: '爱弥斯' },
+    user: { name: 'Arvin' },
+    character: { name: '爱弥斯', motto: '愿星光一直落在你走的路上' },
     greetings: [
       { from: 0, title: '深夜了', wish: '时辰已晚，且捻熄灯盏，良宵安枕' },
       { from: 6, title: '早上好', wish: '晨光熹微，愿您涤尽尘扰，理裳启新日' },
@@ -31,12 +32,18 @@ export function createMock({ timers = globalThis, now = () => Date.now(), random
       { id: 'reading', name: '阅读笔记', tags: ['notes'], apps: ['safari'], hasReminders: true },
       { id: 'sketches', name: '草图', tags: [], hasReminders: false },
     ],
-    apps: [{ id: 'cursor', name: 'Cursor' }, { id: 'safari', name: 'Safari' }, { id: 'notes', name: '备忘录' }],
+    apps: [
+      { id: 'cursor', name: 'Cursor', iconUrl: '/media/app-icons/cursor.png' },
+      { id: 'safari', name: 'Safari', iconUrl: '/media/app-icons/safari.png' },
+      { id: 'notes', name: '备忘录', iconUrl: '/media/app-icons/notes.png' },
+      { id: 'figma', name: 'Figma', iconUrl: null },
+    ],
   };
   const sequence = (count, make) => Array.from({ length: count }, (_, index) => make(index + 1));
   const pad = number => String(number).padStart(2, '0');
   const background = (id, extension) => ({ id, url: `/media/backgrounds/${id}.${extension}` });
   const media = {
+    voices: sequence(54, id => ({ id: String(id), url: `/media/voice/${id}.mp3` })),
     avatars: sequence(30, id => ({ id: String(id), url: `/media/avatars/${id}.png` })),
     backgrounds: [
       ...sequence(6, id => background(`folder-${pad(id)}`, 'png')),

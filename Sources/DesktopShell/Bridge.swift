@@ -52,11 +52,15 @@ final class Bridge: NSObject, WKScriptMessageHandlerWithReply {
                 }
             }
         case .success(.getConfig):
-            let avatars = MediaLibrary.scan(mediaDir: appState.paths.mediaDir, subdirectory: "avatars")
-            let backgrounds = MediaLibrary.scan(mediaDir: appState.paths.mediaDir, subdirectory: "backgrounds")
-            Log.notice("DesktopShell bridge: getConfig avatars=\(avatars.count) backgrounds=\(backgrounds.count)")
-            replyHandler(ConfigReply.make(config: appState.config, avatars: avatars,
-                backgrounds: backgrounds, uiState: appState.uiState), nil)
+            appState.withAppIcons { [appState] iconIDs in
+                let avatars = MediaLibrary.scan(mediaDir: appState.paths.mediaDir, subdirectory: "avatars")
+                let backgrounds = MediaLibrary.scan(mediaDir: appState.paths.mediaDir, subdirectory: "backgrounds")
+                let voices = MediaLibrary.scan(mediaDir: appState.paths.mediaDir, subdirectory: "voice", extensions: ["mp3"])
+                let count = appState.config.apps.filter { iconIDs.contains($0.id) }.count
+                Log.notice("DesktopShell bridge: getConfig avatars=\(avatars.count) backgrounds=\(backgrounds.count) voices=\(voices.count) icons=\(count)")
+                replyHandler(ConfigReply.make(config: appState.config, avatars: avatars,
+                    backgrounds: backgrounds, voices: voices, iconIDs: iconIDs, uiState: appState.uiState), nil)
+            }
         case .success(.focusInput):
             guard let window, let webView = message.webView else {
                 reject(.failed, action: action, replyHandler: replyHandler)
