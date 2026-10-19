@@ -13,10 +13,43 @@ button { font: inherit; color: inherit; }
 #desktop { position: fixed; top: var(--safe-top); right: var(--safe-right); bottom: var(--safe-bottom); left: var(--safe-left); }
 #desktop[data-debug-safe-area] { outline: var(--border-width) dashed var(--color-debug); }
 .widget { position: absolute; z-index: var(--z-widgets); }
-.card {
-  background: var(--color-card-bg); border: var(--border-width) solid var(--color-card-border);
-  border-radius: var(--radius-lg); box-shadow: var(--shadow-card); padding: var(--card-padding);
-}
 :root[data-paused] *, :root[data-paused] *::before, :root[data-paused] *::after { animation-play-state: paused !important; }
 
 [hidden] { display: none !important; }
+
+.card {
+  position: relative; overflow: hidden;
+  border: var(--border-width) solid var(--color-card-border);
+  border-radius: var(--radius-lg);
+  padding: var(--card-padding);
+  box-shadow: var(--shadow-card);
+  text-shadow: var(--shadow-text);
+}
+/* 底色单独放一层：应用里垫着原生毛玻璃时只调这一层的不透明度，时段配色照常生效 */
+.card::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(var(--color-card-tint), var(--color-card-tint)), var(--color-card-bg);
+  opacity: var(--card-fill-opacity);
+}
+/* 可换的背景图（角色卡、启动栏），在底色之上、内容之下 */
+.card-art { position: absolute; inset: 0; background-size: cover; background-position: center 30%; opacity: var(--card-art-opacity); }
+/* :where() 不增加优先级，组件自己的定位规则（例如 position: absolute）照常生效 */
+.card > :where(:not(.card-art)) { position: relative; z-index: 1; }
+.card-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
+.card-title { margin: 0; font-family: var(--font-serif); font-size: var(--text-lg); font-weight: var(--weight-regular); letter-spacing: var(--tracking-title); }
+.card-meta { color: var(--color-text-muted); font-size: var(--text-sm); }
+
+.tag { padding: 0 var(--space-2); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-sm); font-size: var(--text-xs); color: var(--color-text-muted); line-height: var(--leading-loose); }
+.ghost-button { padding: var(--space-half) var(--space-2); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-sm); background: none; font-size: var(--text-sm); color: var(--color-text-muted); }
+.ghost-button:hover { color: var(--color-text); border-color: var(--color-accent); }
+.primary-button { padding: var(--space-1) var(--space-4); border: 0; border-radius: var(--radius-sm); background: var(--color-accent); color: var(--color-accent-contrast); font-weight: var(--weight-bold); }
+
+/* 可滚动列表（项目、待办）：细滚动条只在鼠标移上去时出现；上下还有内容时边缘淡出（JS 切换 more-above / more-below） */
+.scroll-list { overflow-y: auto; overscroll-behavior: contain; margin-right: calc(-1 * var(--space-2)); padding-right: var(--space-2); }
+.scroll-list::-webkit-scrollbar { width: var(--scrollbar-width); }
+.scroll-list::-webkit-scrollbar-track { background: none; }
+.scroll-list::-webkit-scrollbar-thumb { background: none; border-radius: var(--radius-full); }
+.scroll-list:hover::-webkit-scrollbar-thumb { background: var(--color-track); }
+.scroll-list.more-below { -webkit-mask-image: linear-gradient(to bottom, var(--mask-solid) calc(100% - var(--scroll-fade)), transparent); }
+.scroll-list.more-above { -webkit-mask-image: linear-gradient(to bottom, transparent, var(--mask-solid) var(--scroll-fade)); }
+.scroll-list.more-above.more-below { -webkit-mask-image: linear-gradient(to bottom, transparent, var(--mask-solid) var(--scroll-fade), var(--mask-solid) calc(100% - var(--scroll-fade)), transparent); }

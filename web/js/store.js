@@ -66,6 +66,10 @@ export const initialState = {
   audioSpectrum: null,
   phase: 'day',
   selectedProject: null,
+  now: null,
+  appearanceOpen: false,
+  voiceRequest: 0,
+  voicePlaying: false,
 };
 
 export const store = createStore(initialState);

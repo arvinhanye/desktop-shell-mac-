@@ -1,0 +1,8 @@
+/* 字体文件来自美化包，仅供个人使用，不进 git：放在运行时素材目录 media/fonts/
+   （由 scripts/prepare-media.sh 从 assets/fonts/ 复制，M4 补上这一步）。
+   在 .app 里是 shell://app/media/fonts/…，在开发服务器里是 /media/fonts/…，路径相同。 */
+@font-face { font-family: "Source Han Serif SC"; src: url("/media/fonts/SourceHanSerifSC-SemiBold.otf") format("opentype"); font-weight: 400 700; font-display: swap; }
+@font-face { font-family: "Gobold"; src: url("/media/fonts/Gobold-Bold.otf") format("opentype"); font-weight: 700; font-display: swap; }
+@font-face { font-family: "Porter"; src: url("/media/fonts/Porter.otf") format("opentype"); font-display: swap; }
+@font-face { font-family: "Google Sans"; src: url("/media/fonts/GoogleSans-Regular.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Google Sans"; src: url("/media/fonts/GoogleSans-Bold.ttf") format("truetype"); font-weight: 700; font-display: swap; }
