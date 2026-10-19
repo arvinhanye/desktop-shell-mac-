@@ -54,6 +54,7 @@ final class WebContainer: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        bridge.window?.setGlassRegions([])
         resetDeliveryLog()
     }
 

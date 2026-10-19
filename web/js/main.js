@@ -2,6 +2,7 @@ import { store } from './store.js';
 import { createBridge } from './bridge.js';
 import { mountWidgets } from './widgets.js';
 import { installHitRegions } from './hit-regions.js';
+import { installGlassRegions } from './glass-regions.js';
 import { installKeyboardFocus } from './keyboard-focus.js';
 
 const bridge = createBridge(store, { target: window, now: () => performance.now() });
@@ -23,3 +24,10 @@ store.subscribe('paused', paused => document.documentElement.toggleAttribute('da
 const WIDGETS = ['clock', 'greeting', 'projects', 'launcher', 'todos', 'stats', 'character', 'appearance', 'voice', 'visualizer'];
 await mountWidgets(document.getElementById('desktop'), WIDGETS, { store, bridge, hitRegions });
 await bridge.start();
+
+if (bridge.mode === 'native') {
+  installGlassRegions({ send: async regions => {
+    await bridge.send('setGlassRegions', { regions });
+    if (document.documentElement.dataset.glass !== 'on') document.documentElement.dataset.glass = 'on';
+  } });
+}

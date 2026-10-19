@@ -1,6 +1,6 @@
 # M4-09: 原生毛玻璃和 M4 整体验收
 
-- **状态**：todo
+- **状态**：review
 - **里程碑**：M4
 - **依赖**：M4-08、M4-10（都必须已合并到 `main`；所有组件都已就位，才能对着真实的卡片验证毛玻璃；窗口层级在 M4-10 已经改好）
 - **分支**：task/M4-09
@@ -106,12 +106,55 @@
 ## 交付记录
 
 - **改动摘要**：
-- **自测结果**：
+  - `GlassRegions.parse` 严格校验五元区域、64 项上限、有限数字且排除布尔；`clip` 在实际网页视口裁剪并收小圆角。Bridge 接入严格参数白名单，失败回复 `invalid`。
+  - WidgetWindow 使用容器叠放 `GlassLayer` / WKWebView，铺满并随尺寸变化；保留原有面板属性、层级赋值顺序和点击/键盘控制。毛玻璃使用 `.hudWindow` / `.behindWindow` / `.active` / `.darkAqua`，复用视图与可拉伸圆角 mask，更新关闭隐式动画；导航开始和关闭窗口时清空，仅区域数量变化记日志。
+  - 网页仅 native 模式安装 reporter，保留小数坐标，观察布局/可见性/字体/过渡变化，每帧合并、结果去重；装饰后代变化不触发连续扫描。首次成功回复后才启用玻璃 token，mock 浏览器保持原底色。
+  - 特别排除 `document.documentElement`：根节点的 `data-glass="on"` 是能力标记，不是整屏底板；增加 RED→GREEN 回归。hit-regions.js、所有 CSS/设计文件保持原样。
+- **自测结果**（2026-10-19）：
+  - 基线：Swift **167/167 PASS**；网页 **403/403 PASS**。
+  - RED：新增 Bridge 两项测试均因 `unknown-action` 失败；mock 新动作测试同样失败。新区域文件实现前分别报告缺少 Swift 类型/JS 模块，属接口尚未实现，不计行为测试通过。入口未接线时真实 main 测试失败；根能力标记测试捕获多报整屏区域后修复。
+  - 测试编写期间修正 `CGFloat.infinity` 类型歧义和 Testing 宏 key-path 写法；最终无编译错误。
+  - 最终：`scripts/test.sh` **174/174 PASS，20 suites**；`scripts/test-web.sh` **412/412 PASS**，包含新解析/裁剪/视图复用/窗口 resize/导航/关闭、上报去重/可见性/native 成功与失败/mock 回退测试。
+  - `swift build` **PASS**，真实退出码 0，warning/error 检索无输出。`grep -rn "backdrop-filter" web/` 无匹配；`git diff --check` **PASS**。13 个改动文件均在允许范围，未改需求与 Claude 审查记录。
+  - `scripts/bundle.sh --open` **PASS**：release 打包、固定 `DesktopShell Self-Signed` 证书校验通过并重启。`swift scripts/window-levels.swift`：组件 **icon+3**、视频 **icon-1**，均 `behind app windows`。
+  - 真实应用启动日志（PID 18932）：`widget=icon+3 video=icon-1`，随后 `setGlassRegions regions=5`，该启动检查范围内无被拒日志。测试进程的 1/0 区域日志单独识别，未算作真实应用证据。
+  - 浏览器：普通 mock 页面根节点无 data-glass，底板 opacity=1、面板底色 alpha=0.9；打开外观面板无 warn/error。另用 `/tmp` 下的 native 传输替身承接真实网页，点击外观/完成观察 **5→6→5**，无 warn/error。该测试只证明网页上报，不等同原生模糊或原生 5→6→5 日志验收；1280×720 预览不作为目标桌面布局验收。
+  - 独立只读子代理 `m409_glass_review`：检查全部 13 个文件，独立针对测试 **72 PASS**，未发现可复现的 Critical/High/Medium 问题；这不替代 Claude Code 复验与合并。
+  - 本地证据：`/tmp/desktopshell-m4-09-check/` 下保存 baseline、RED、最终测试/构建/打包/窗口日志；截图为 `browser-mock-appearance.jpg` 和 `browser-regions-5-6-5.jpg`。
 - **疑问 / 偏离**：
+  - 无视觉或接口扩展，M4-11 保持暂缓；交接只写本任务单，未改额外交接文件。
+  - 审查保留项：相同失败区域不自动重试（沿用既有去重约定，首次失败保留原底色，需布局变化或重载后再报）；半径缓存不额外限额（当前定稿半径固定）；首次成功后的后续失败不撤销 data-glass（原生保留上次成功区域）。未增加这些任务外策略；若未来动态圆角或持续传输故障成为实际需求，再单独处理。
+  - **待 Claude 复验**：真实应用打开/关闭外观面板的日志 **5→6→5** 与无拒绝日志。
+  - **待用户手动验收**：卡片模糊及圆角对齐；点击/切换应用透明度稳定；外观玻璃显示/消失；隐藏桌面文件开关；WindowServer CPU 前后对比；与目标设计截图逐态对照；暂停时系统状态继续刷新；Finder 选择/框选/拖动/双击；中文输入与 Esc 交还键盘；全屏/普通应用遮挡；外接显示器插拔。以上未标为 PASS，M4 整体验收仍待完成。
+  - 回退方式：Claude 合并前保持 main 不变；需要撤回运行效果时从已合并的 main 重新签名打包，不改写已推送历史，不调整用户配置或提醒事项数据。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 
 ## 审查记录
 
-- **结论**：
+- **结论**：**代码审查通过，自动验收全部通过，待用户手动验证**（毛玻璃 5 项 + M4 整体 7 项，见最后）。用户确认、Claude Code 对照日志后合并到 `main`，M4 完成。
+- **复验结果**（Claude Code，2026-10-19，在 `4042684` 的独立检出上执行；打包在主目录的同一提交上执行）：
+  - [x] `swift build` 零警告零错误；`scripts/test.sh` 174 项全部通过（20 个 suite，含 `GlassLayerTests`）；`scripts/test-web.sh` 412 项全部通过
+  - [x] 只改了允许的 13 个文件（`hit-regions.js` 和它的测试没动）；`git diff --check` 通过；`grep -rn "backdrop-filter" web/` 没有输出；样式、组件、`docs/design/` 都没动
+  - [x] M4-10 的层级顺序保留：`isFloatingPanel` 在第 75 行、设 `level` 在第 83 行
+  - [x] `scripts/bundle.sh --open`（`07:56:21`）：日志 `windows: … widget=icon+3 video=icon-1`、`setGlassRegions regions=5`，没有被拒的记录；`swift scripts/window-levels.swift` 两个窗口都在普通应用窗口后面
+  - [x] WindowServer CPU（开着毛玻璃，接电源，后台有其他应用）：每 2 秒一次、共 8 次，52–69%，和 M3.5 探针的结论（开 54–64%、关 55–65%）一致，看不出额外开销。供"活动监视器"那一项参考
 - **意见**：
+  - Swift：`GlassRegions.parse` 严格校验（5 个有限数字、排除布尔、最多 64 项、半径不超过短边一半），`clip` 按网页视图实际尺寸裁剪并收小半径，都是纯函数；`GlassLayer` 是翻转坐标、不接收鼠标的视图，复用 `NSVisualEffectView`（`.hudWindow` / `.behindWindow` / `.active` / 深色外观），圆角 mask 按半径缓存，更新时关闭隐式动画；窗口内容改成容器，毛玻璃在下、网页在上；页面开始加载、窗口关闭时清空；只在数量变化时记日志。和任务单一致。
+  - 网页：只在应用里（`bridge.mode === 'native'`）安装；上报 `.card` 和 `[data-glass]`，保留小数，合并到一帧、结果不变不重发；第一次成功后才设 `data-glass="on"`。**Codex 额外处理得好的一点**：`<html data-glass="on">` 本身也匹配 `[data-glass]`，不排除的话会多报一块整屏的毛玻璃，Codex 排除了根元素并加了回归测试。律动条每秒 30 次的样式变化不会触发重新收集。
+  - 交付记录里的三个保留项（同一组区域失败后不自动重试、半径缓存不设上限、成功后再失败不撤销 `data-glass`）都可以接受：现在定稿只有一种圆角，传输失败要靠重新加载恢复，和点击区域的做法一致。
+- **待用户手动验证**（现在桌面上运行的就是这一版；带"日志"的 Claude Code 会对照）。对照截图时注意两处已知出入：项目卡片和外观面板按钮的字（截图偏大偏白，以 `design.css` 为准，见 `docs/design/README.md`）；头像发光（光环 M4-11 暂缓，现在仍是整张图的发光）。
+  - 毛玻璃：
+    - [ ] 每块卡片后面是模糊的视频，卡片边缘和模糊区域对齐，没有露出直角或错位
+    - [ ] 点卡片里的按钮、切换到别的应用再切回来、点桌面空白处：卡片的透明度都**不跳动**
+    - [ ] 打开外观面板：面板后面也是毛玻璃；关上后那块毛玻璃消失（日志：`setGlassRegions regions=6`，关上回到 `5`）
+    - [ ] 菜单栏"隐藏桌面文件"：卡片后面的毛玻璃照常；取消后恢复（日志：`windows: … video=icon+3`，再回到 `icon-1`）
+    - [x] WindowServer 的 CPU 没有明显变化（Claude Code 已实测，见上）
+  - M4 整体（对照 `assets/design-screenshots/`）：
+    - [ ] 当前时段的整体效果和对应时段的截图一致：布局、字体、配色、底板
+    - [ ] 选中项目、外观面板、隐藏桌面文件三种状态和截图一致
+    - [ ] 菜单栏"暂停动画"：视频停住，律动条静止；系统状态卡照常更新（日志：`power: paused=true`）
+    - [ ] 右侧访达图标能正常选中、框选、拖动、双击打开；框选经过组件时不会被打断
+    - [ ] 在待办输入框打字（含中文拼音），Esc 退出后键盘回到原来的应用（日志：`focusInput ok`、`blurInput ok`）
+    - [ ] 应用全屏时看不到组件；点过组件之后，其他应用的窗口仍然盖在组件上面
+    - [ ] 有外接显示器时：每块屏幕都有一套组件和毛玻璃，插拔后正常（没有外接显示器可以跳过）

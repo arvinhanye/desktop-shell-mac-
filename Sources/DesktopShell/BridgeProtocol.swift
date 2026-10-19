@@ -24,6 +24,7 @@ enum BridgeRequest: Equatable {
     case addTodo(text: String, projectId: String?)
     case setTodoDone(id: String, done: Bool)
     case setHitRegions([[Double]])
+    case setGlassRegions([GlassRegion])
     case openProject(String)
     case openProjectWith(projectId: String, appId: String)
     case launchApp(String)
@@ -78,6 +79,10 @@ enum BridgeRequest: Equatable {
                   let avatar = UiPatch.parse(body["avatarId"]),
                   let background = UiPatch.parse(body["backgroundId"]) else { return .failure(.invalid) }
             return .success(.saveUiState(avatar: avatar, background: background))
+        case "setGlassRegions":
+            guard Set(body.keys) == ["action", "regions"],
+                  let regions = GlassRegions.parse(body["regions"]) else { return .failure(.invalid) }
+            return .success(.setGlassRegions(regions))
         case "setHitRegions":
             // Validate with the existing parser, but retain raw coordinates until the
             // receiving web view's actual viewport is available for clipping.

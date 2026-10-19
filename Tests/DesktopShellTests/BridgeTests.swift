@@ -3,6 +3,31 @@ import Testing
 @testable import DesktopShell
 
 struct BridgeTests {
+    @Test("毛玻璃动作接受五元区域和空数组")
+    func glassRequestsRecognized() {
+        #expect(BridgeRequest.parse(["action": "setGlassRegions", "regions": []]) == .success(.setGlassRegions([])))
+        #expect(BridgeRequest.parse(["action": "setGlassRegions", "regions": [[-1.25, 2.5, 20, 30, 5.5]]])
+            == .success(.setGlassRegions([GlassRegion(rect: CGRect(x: -1.25, y: 2.5, width: 20, height: 30), radius: 5.5)])))
+        for regions: [[Double]] in [[[-1.25, 2.5, 20, 30, 5.5]], []] {
+            if case .failure(let error) = BridgeRequest.parse(["action": "setGlassRegions", "regions": regions]) {
+                Issue.record("setGlassRegions rejected: \(error.rawValue)")
+            }
+        }
+    }
+
+    @Test("毛玻璃动作缺参、额外参数与非法区域统一返回 invalid")
+    func glassRequestErrors() {
+        for body: [String: Any] in [
+            ["action": "setGlassRegions"],
+            ["action": "setGlassRegions", "regions": [], "extra": NSNull()],
+            ["action": "setGlassRegions", "regions": [[0, 0, 10, 10]]],
+            ["action": "setGlassRegions", "regions": [[0, 0, 10, 10, true]]],
+            ["action": "setGlassRegions", "regions": [[0, 0, 10, 10, 6]]],
+        ] {
+            #expect(BridgeRequest.parse(body) == .failure(.invalid))
+        }
+    }
+
     @Test("getConfig 新字段去空白且保留 null 键，仅使用最近成功的图标 id")
     func newPublicFields() throws {
         for value: String? in [nil, "", " \t\n", " Arvin \n"] {
