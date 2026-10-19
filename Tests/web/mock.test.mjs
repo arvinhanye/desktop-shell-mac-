@@ -322,3 +322,15 @@ test('mock: relative dates cross calendar boundaries and added reminders keep un
   assert.equal(new Set(ids).size, ids.length);
   mock.stop();
 });
+
+
+test('mock: glass regions accepts arrays, rejects missing/non-array and extra parameters', async () => {
+  const { mock } = fixture();
+  assert.equal(await mock.handle({ action: 'setGlassRegions', regions: [[1, 2, 30, 40, 5]] }), null);
+  assert.equal(await mock.handle({ action: 'setGlassRegions', regions: [] }), null);
+  for (const message of [
+    { action: 'setGlassRegions' }, { action: 'setGlassRegions', regions: null },
+    { action: 'setGlassRegions', regions: '[]' },
+    { action: 'setGlassRegions', regions: [], extra: true },
+  ]) await rejects(mock, message, 'invalid');
+});

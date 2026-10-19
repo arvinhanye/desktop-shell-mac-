@@ -80,6 +80,13 @@ final class Bridge: NSObject, WKScriptMessageHandlerWithReply {
             if window.isKeyWindow { NSApp.deactivate() }
             Log.notice("DesktopShell bridge: blurInput ok")
             replyHandler(nil, nil)
+        case .success(.setGlassRegions(let regions)):
+            guard let window, let webView = message.webView else {
+                reject(.failed, action: action, replyHandler: replyHandler)
+                return
+            }
+            window.setGlassRegions(GlassRegions.clip(regions, viewport: webView.bounds.size))
+            replyHandler(nil, nil)
         case .success(.setHitRegions(let values)):
             guard let window, let webView = message.webView else {
                 reject(.failed, action: action, replyHandler: replyHandler)

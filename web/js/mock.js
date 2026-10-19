@@ -1,5 +1,5 @@
 const parameters = new Map([
-  ['getConfig', []], ['setHitRegions', ['regions']],
+  ['getConfig', []], ['setHitRegions', ['regions']], ['setGlassRegions', ['regions']],
   ['focusInput', []], ['blurInput', []],
   ['openProject', ['projectId']], ['openProjectWith', ['projectId', 'appId']],
   ['launchApp', ['appId']], ['saveUiState', ['avatarId', 'backgroundId']],
@@ -120,6 +120,7 @@ export function createMock({ timers = globalThis, now = () => Date.now(), random
         case 'focusInput':
         case 'blurInput':
           return null;
+        case 'setGlassRegions':
         case 'setHitRegions':
           if (!Array.isArray(message.regions)) fail('invalid');
           return null;

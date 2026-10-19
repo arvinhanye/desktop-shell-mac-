@@ -1,6 +1,6 @@
 # M4-09: 原生毛玻璃和 M4 整体验收
 
-- **状态**：todo
+- **状态**：review
 - **里程碑**：M4
 - **依赖**：M4-08、M4-10（都必须已合并到 `main`；所有组件都已就位，才能对着真实的卡片验证毛玻璃；窗口层级在 M4-10 已经改好）
 - **分支**：task/M4-09
@@ -106,8 +106,27 @@
 ## 交付记录
 
 - **改动摘要**：
-- **自测结果**：
+  - `GlassRegions.parse` 严格校验五元区域、64 项上限、有限数字且排除布尔；`clip` 在实际网页视口裁剪并收小圆角。Bridge 接入严格参数白名单，失败回复 `invalid`。
+  - WidgetWindow 使用容器叠放 `GlassLayer` / WKWebView，铺满并随尺寸变化；保留原有面板属性、层级赋值顺序和点击/键盘控制。毛玻璃使用 `.hudWindow` / `.behindWindow` / `.active` / `.darkAqua`，复用视图与可拉伸圆角 mask，更新关闭隐式动画；导航开始和关闭窗口时清空，仅区域数量变化记日志。
+  - 网页仅 native 模式安装 reporter，保留小数坐标，观察布局/可见性/字体/过渡变化，每帧合并、结果去重；装饰后代变化不触发连续扫描。首次成功回复后才启用玻璃 token，mock 浏览器保持原底色。
+  - 特别排除 `document.documentElement`：根节点的 `data-glass="on"` 是能力标记，不是整屏底板；增加 RED→GREEN 回归。hit-regions.js、所有 CSS/设计文件保持原样。
+- **自测结果**（2026-10-19）：
+  - 基线：Swift **167/167 PASS**；网页 **403/403 PASS**。
+  - RED：新增 Bridge 两项测试均因 `unknown-action` 失败；mock 新动作测试同样失败。新区域文件实现前分别报告缺少 Swift 类型/JS 模块，属接口尚未实现，不计行为测试通过。入口未接线时真实 main 测试失败；根能力标记测试捕获多报整屏区域后修复。
+  - 测试编写期间修正 `CGFloat.infinity` 类型歧义和 Testing 宏 key-path 写法；最终无编译错误。
+  - 最终：`scripts/test.sh` **174/174 PASS，20 suites**；`scripts/test-web.sh` **412/412 PASS**，包含新解析/裁剪/视图复用/窗口 resize/导航/关闭、上报去重/可见性/native 成功与失败/mock 回退测试。
+  - `swift build` **PASS**，真实退出码 0，warning/error 检索无输出。`grep -rn "backdrop-filter" web/` 无匹配；`git diff --check` **PASS**。13 个改动文件均在允许范围，未改需求与 Claude 审查记录。
+  - `scripts/bundle.sh --open` **PASS**：release 打包、固定 `DesktopShell Self-Signed` 证书校验通过并重启。`swift scripts/window-levels.swift`：组件 **icon+3**、视频 **icon-1**，均 `behind app windows`。
+  - 真实应用启动日志（PID 18932）：`widget=icon+3 video=icon-1`，随后 `setGlassRegions regions=5`，该启动检查范围内无被拒日志。测试进程的 1/0 区域日志单独识别，未算作真实应用证据。
+  - 浏览器：普通 mock 页面根节点无 data-glass，底板 opacity=1、面板底色 alpha=0.9；打开外观面板无 warn/error。另用 `/tmp` 下的 native 传输替身承接真实网页，点击外观/完成观察 **5→6→5**，无 warn/error。该测试只证明网页上报，不等同原生模糊或原生 5→6→5 日志验收；1280×720 预览不作为目标桌面布局验收。
+  - 独立只读子代理 `m409_glass_review`：检查全部 13 个文件，独立针对测试 **72 PASS**，未发现可复现的 Critical/High/Medium 问题；这不替代 Claude Code 复验与合并。
+  - 本地证据：`/tmp/desktopshell-m4-09-check/` 下保存 baseline、RED、最终测试/构建/打包/窗口日志；截图为 `browser-mock-appearance.jpg` 和 `browser-regions-5-6-5.jpg`。
 - **疑问 / 偏离**：
+  - 无视觉或接口扩展，M4-11 保持暂缓；交接只写本任务单，未改额外交接文件。
+  - 审查保留项：相同失败区域不自动重试（沿用既有去重约定，首次失败保留原底色，需布局变化或重载后再报）；半径缓存不额外限额（当前定稿半径固定）；首次成功后的后续失败不撤销 data-glass（原生保留上次成功区域）。未增加这些任务外策略；若未来动态圆角或持续传输故障成为实际需求，再单独处理。
+  - **待 Claude 复验**：真实应用打开/关闭外观面板的日志 **5→6→5** 与无拒绝日志。
+  - **待用户手动验收**：卡片模糊及圆角对齐；点击/切换应用透明度稳定；外观玻璃显示/消失；隐藏桌面文件开关；WindowServer CPU 前后对比；与目标设计截图逐态对照；暂停时系统状态继续刷新；Finder 选择/框选/拖动/双击；中文输入与 Esc 交还键盘；全屏/普通应用遮挡；外接显示器插拔。以上未标为 PASS，M4 整体验收仍待完成。
+  - 回退方式：Claude 合并前保持 main 不变；需要撤回运行效果时从已合并的 main 重新签名打包，不改写已推送历史，不调整用户配置或提醒事项数据。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 

@@ -26,6 +26,8 @@ final class VideoWindow: NSWindow {
 @MainActor
 final class WidgetWindow: NSPanel {
     private let webContainer: WebContainer
+    private let glassLayer = GlassLayer(frame: .zero)
+    private var glassRegionCount = 0
     var acceptsKeyboard = false
     override var canBecomeKey: Bool { acceptsKeyboard }
     override var canBecomeMain: Bool { false }
@@ -56,7 +58,13 @@ final class WidgetWindow: NSPanel {
 
         Self.configure(self, iconLevel: Int(CGWindowLevelForKey(.desktopIconWindow)))
 
-        contentView = webContainer.webView
+        let container = NSView(frame: NSRect(origin: .zero, size: screen.frame.size))
+        glassLayer.frame = container.bounds
+        glassLayer.autoresizingMask = [.width, .height]
+        webContainer.webView.frame = container.bounds
+        container.addSubview(glassLayer)
+        container.addSubview(webContainer.webView)
+        contentView = container
 
         update(screen: screen)
         webContainer.bind(to: self)
@@ -89,6 +97,14 @@ final class WidgetWindow: NSPanel {
         onHitRegionsChanged?()
     }
 
+    func setGlassRegions(_ regions: [GlassRegion]) {
+        glassLayer.update(regions)
+        if glassRegionCount != regions.count {
+            glassRegionCount = regions.count
+            Log.notice("DesktopShell bridge: setGlassRegions regions=\(regions.count)")
+        }
+    }
+
     override func resignKey() {
         super.resignKey()
         // AppKit may return keyboard ownership before the page sends blurInput.
@@ -97,6 +113,7 @@ final class WidgetWindow: NSPanel {
 
     override func close() {
         onHitRegionsChanged = nil
+        setGlassRegions([])
         webContainer.stop()
         super.close()
     }
