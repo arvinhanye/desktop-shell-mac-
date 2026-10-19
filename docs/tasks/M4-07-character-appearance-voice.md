@@ -1,6 +1,6 @@
 # M4-07: 角色卡、外观面板和点击语音
 
-- **状态**：todo
+- **状态**：review
 - **里程碑**：M4
 - **依赖**：M4-06（必须已合并到 `main`；用到 M4-04 的 `web/js/media.js`）
 - **分支**：task/M4-07
@@ -108,9 +108,15 @@
 
 ## 交付记录
 
-- **改动摘要**：
-- **自测结果**：
-- **疑问 / 偏离**：
+- **改动摘要**：从最新 `main`（`58b7e03`）建立 `task/M4-07`，只涉及允许的 9 个文件。新增角色卡、外观面板、无界面的语音组件；`main.js` 仅增加三个 WIDGETS。角色卡通过共享媒体 helper 取 URL，名字和签名用纯文本；外观仅发送 id/null，等待 bridge 的 `uiState` 推送再更新选择，`ui` 更新保留缩略图节点；语音每次使用局部 Audio，处理播放结束、错误、Promise 拒绝、关闭开关和销毁，暂停动画不影响播放。
+- **TDD 记录**：网页基线 345/345 PASS。语音占位实现的 RED 为 14 FAIL / 1 PASS，实现后 15/15 PASS；外观与角色卡占位实现及未注册组件的 RED 为 19 FAIL / 7 PASS，实现后 26/26 PASS。新增合计 41 项测试，覆盖选择回退、请求参数、无乐观更新、背景联动、DOM/监听/计时器清理、重复请求及迟到播放回调。
+- **最终自动检查**：`scripts/test-web.sh` 386/386 PASS（0 FAIL / 0 SKIP）；`scripts/test.sh` 167/167 PASS（19 suites）；`swift build` PASS。两条任务单 CSS 比对命令均无输出；`git diff --check` 无输出。允许范围检查为 9/9 文件，规范、设计文件和本任务需求/验收/正式审查部分保持原样。
+- **浏览器自测**：在 `http://127.0.0.1:8765/` 使用 mock 数据，切换头像 1→2 后角色卡同步变化；背景 folder-01→folder-02 后角色卡和启动栏同时变化；恢复默认后头像为第一张、两处背景均为 none；完成与遮罩空白点击均关闭面板；打开/关闭及选择过程中控制台 error/warn 均为空。点头像观察到 `playing` class，之后复位。自测后恢复 mock 原选择（头像 1、背景 folder-01），未在原生应用中更改用户外观。浏览器截图为 1280×720 局部视口，用于交互/布局证据，不等同于真实桌面全屏目测或声音听感验收。
+- **原生打包**：`scripts/bundle.sh --open` PASS，以现有 `DesktopShell Self-Signed` 证书生成 release 包 `/Users/arvinhan/Desktop/desktop-shell/build/DesktopShell.app` 并重启，严格签名检查通过。打包的 6 个本次网页源码/样式文件与工作区逐一相同；进程已运行，启动日志仍为 `widget=icon+3 video=icon-1`。
+- **独立自查**：Codex 子代理只读覆盖 9/9 文件，Critical / Important / Minor 均为 0；独立复跑新增测试 41/41 PASS、两份 CSS 比对及 diff 检查通过，并额外检查同步重入请求和播放前清理。此自查不替代 Claude Code 正式复验，下面审查区留空。
+- **证据位置**：本机 `/tmp/desktopshell-m4-07-check/` 包含 baseline、两轮 RED、GREEN、最终 web/native/build/bundle/startup 日志及 `appearance-browser.jpg`。素材、截图、运行时数据均不进入提交。
+- **待人工验收**：按上面的用户清单确认真实语音听感、播放中重复点击与菜单栏关闭、暂停动画后播放、外观面板打开/关闭时 Finder 点击穿透、切换并重启保持选择，以及全程前台应用不变；完成后恢复原外观选择。状态交付为 `review`，留待 Claude 正式复验与用户桌面验收。
+- **疑问 / 偏离**：无范围扩展或新增设计决定；按钮字号与颜色按 `design.css`，不用旧截图的覆盖样式。原生毛玻璃区域接入仍属 M4-09，本任务只保留定稿的 `data-glass` 标记。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 
