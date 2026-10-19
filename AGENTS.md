@@ -86,6 +86,7 @@
 | 系统提醒事项（EventKit），2026-10-17 | **可行**，详见下方 |
 | 键盘焦点，2026-10-18 | 组件窗口**改用不激活应用的面板**，详见下方 |
 | 原生毛玻璃（`NSVisualEffectView`），2026-10-18 | **可行**，开销测不出来，详见下方 |
+| 播放检测（不开捕获时判断有没有应用在放声音），2026-10-19 | **可行**，不需要权限，详见下方 |
 
 **系统音频捕获探针**（全局 tap `CATapDescription(stereoGlobalTapButExcludeProcesses: [])`，`muteBehavior = .unmuted`，加上"默认输出设备 + tap"的私有聚合设备，再加 IOProc）：
 
@@ -93,7 +94,7 @@
 - **第一次启动**时弹出权限框，`AudioDeviceCreateIOProcIDWithBlock` 会**阻塞到用户点完为止**（实测 5 秒），所以**捕获初始化不能放在主线程**。同一个签名再次启动不再弹框，0.1 秒内开始捕获。签名一变（例如重新 ad-hoc 签名）可能需要重新授权，所以 M2.5 的固定证书是必需的。
 - 格式：48kHz、双声道、Float32、交错存储；每秒约 94 次回调，每次 512 帧。
 - 频谱准确：440Hz 和 3000Hz 的单音、60 到 10000Hz 的扫频，峰值频率和频段都对得上。参数用 FFT 4096、hop 2048、Hann 窗、12 个对数频段（20–16500Hz）。
-- CPU（i7-9750H）：频谱分析本身约 **0.3%**；捕获期间系统音频服务 `coreaudiod` 大约**多耗 3% 的单核，安静时也是这样**。所以：暂停时必须停止捕获；建议 M5.5 再验证一下，能否监听输出设备的 `kAudioDevicePropertyDeviceIsRunningSomewhere`，只在有应用在放声音时才开启捕获。
+- CPU（i7-9750H）：频谱分析本身约 **0.3%**；捕获期间系统音频服务 `coreaudiod` 大约**多耗 3% 的单核，安静时也是这样**。所以：暂停时必须停止捕获，没有应用在放声音时也不开捕获（做法见下方"播放检测探针"）。
 - 释放顺序（`AudioDeviceStop` → `AudioDeviceDestroyIOProcID` → `AudioHardwareDestroyAggregateDevice` → `AudioHardwareDestroyProcessTap`）全部成功，没有残留。
 
 **系统提醒事项探针**（ad-hoc 签名的 `LSUIElement` 小程序，用 `open` 启动，`Info.plist` 写 `NSRemindersFullAccessUsageDescription`）：
@@ -124,7 +125,15 @@
   - 毛玻璃开和关，WindowServer CPU 的差别在误差以内（54–64% 对 55–65%），独显占用多 2–4 个百分点。
   - 主要开销在视频本身：只放视频时，WindowServer 比不开多约 20%；全屏透明网页窗口再多 5–10%。
   - 4K 和 1440p 测不出差别：WindowServer 53% 对 52%，解码进程 4.6% 对 4.3%。
-  - 律动条用 60 帧/秒的模拟动画时，网页进程约 13%，WindowServer 再多约 10%。正式实现只在收到 `audioSpectrum`（约 30 次/秒）时刷新，静音时停住。
+  - 律动条用 60 帧/秒的模拟动画时，网页进程约 13%，WindowServer 再多约 10%。正式实现只在收到 `audioSpectrum`（约 23 次/秒）时刷新，静音时停住。
+
+**播放检测探针**（命令行小程序，不开捕获、不需要任何权限；用 `afplay` 和一个反复开关输出的 AVAudioEngine 小程序做对照）：
+
+- 系统对象的 `kAudioHardwarePropertyProcessObjectList`（macOS 14.2 起）列出所有用过音频的进程。每个进程对象能读到 `kAudioProcessPropertyPID` 和 `kAudioProcessPropertyIsRunningOutput`，由此可以知道有没有别的进程在输出声音。音量为 0 的播放也算在输出。
+- **要监听 `kAudioProcessPropertyIsRunning`**：进程开始或停止输出时，进程对象发的是 `IsRunning`（`pir?`）和 `kAudioProcessPropertyDevices`（`pdv#`），不发 `IsRunningOutput` 本身，直接监听它一个事件都收不到。收到 `IsRunning` 后再去读 `IsRunningOutput`。事件在输出开关后约 0.05 秒内到达。
+- 新进程出现时可能已经在输出了，之后不会再单独发事件（`afplay` 就是这样）。所以进程列表变化时要把全部进程重新读一遍。列表的事件常常连着来两次。
+- 默认输出设备的 `kAudioDevicePropertyDeviceIsRunningSomewhere` 也会跟着变，但开着捕获时，聚合设备包含输出设备，这个属性很可能被我们自己占住，所以不用它。
+- 本应用自己不放声音（背景视频没有音轨）。点头像的语音由 WebKit 的进程播放，也算"别的进程在放声音"，会触发捕获，这是想要的。
 
 ## 窗口要求
 
@@ -157,7 +166,7 @@
 
 AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则视频壁纸会阻止显示器休眠。所有屏幕共用**一个** AVPlayer（每个窗口各自一个 `AVPlayerLayer`），只解码一路视频。
 
-暂停时还要**停止系统音频捕获**（停掉 IOProc，而不是只停止推送），因为它是最耗电的部分。没有声音时（持续静音超过 2 秒）不做频谱分析、不推送 `audioSpectrum`。点击语音由用户主动触发，暂停时照样可以播放。
+暂停时还要**停止系统音频捕获**（停掉 IOProc，而不是只停止推送），因为它是最耗电的部分。**没有应用在放声音时也不开捕获**（2026-10-19 定）：别的应用开始输出声音时立刻开始捕获，全部停止输出持续 3 秒后再拆掉，切歌的间隙不会反复开关；判断方法见"技术探针"里的播放检测探针。捕获开着、但没有声音时（持续静音超过 2 秒，例如有的应用暂停后输出流还开着）不做频谱分析、不推送 `audioSpectrum`。点击语音由用户主动触发，暂停时照样可以播放。
 
 ## Bridge 接口（白名单）
 
@@ -202,7 +211,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 | `paused` | `paused`：true / false | 状态变化时 |
 | `uiState` | `avatarId`, `backgroundId`（为空时是 `null`）, `voiceEnabled` | 启动时、菜单栏切换语音开关时、外观保存后 |
 | `todos` | `access`（`granted` / `denied` / `notDetermined` / `restricted` / `writeOnly`）、`items: [{id, text, done, projectId, due}]`：所有列表的未完成提醒加上今天完成的；`projectId` 由列表对应的项目得出，没有就是 `null`；`due` 为 `{date: "YYYY-MM-DD", time: "HH:mm" 或 null}` 或 `null` | 启动时、提醒事项有变化时（含 iPhone 同步过来的改动） |
-| `audioSpectrum` | `bands`：每侧 12 个 0–1 的数值（左右两侧共用一组，由网页镜像显示） | 有声音时约 30 次/秒；静音或暂停时不推送 |
+| `audioSpectrum` | `bands`：每侧 12 个 0–1 的数值（左右两侧共用一组，由网页镜像显示） | 有声音时约 23 次/秒（48 kHz 时每 2048 帧一次）；静音、暂停或没有应用在放声音时不推送 |
 
 电量用 IOKit（`IOPSCopyPowerSourcesInfo`），CPU 和内存用 `host_statistics` / `host_statistics64`。
 
@@ -357,7 +366,9 @@ desktop-shell/
 │   ├── SystemStats.swift          # 电量/CPU/内存
 │   ├── PowerPolicy.swift          # 暂停规则
 │   ├── UiStateStore.swift         # 读写 ui.json
-│   ├── AudioSpectrum.swift        # 系统音频捕获 + FFT（M5.5）
+│   ├── AudioSpectrum.swift        # 系统音频捕获：tap、聚合设备、IOProc，何时开关（M5.5）
+│   ├── SpectrumAnalyzer.swift     # 采样 → 12 个 0–1 柱高（FFT、平滑、分频段；纯计算）
+│   ├── PlaybackMonitor.swift      # 监听有没有别的应用在放声音
 │   └── ConfigStore.swift          # 读写 JSON
 ├── web/
 │   ├── index.html
@@ -469,7 +480,7 @@ desktop-shell/
 - **M3.5 设计定稿**（由 Claude Code 负责，不交给 Codex）：先从美化包皮肤配置整理参数表，再从壁纸素材提取配色，确定字体、卡片样式（圆角、阴影、透明度、毛玻璃）、八个组件的版式、外观面板、桌面布局，以及四个时段主题和选中、高亮、省电等状态样式。布局要给访达桌面图标留出区域（访达默认从右上角往下排列，用户桌面上约有 68 个项目），与用户商定图标区和组件区的划分。还要根据定下的显示尺寸，决定原图偏小的立绘（726×660）和头像（240×150）是否需要 AI 超分放大（Real-ESRGAN 动漫模型；需要下载时先征得用户同意）。产出放在 `docs/design/`：一个能在浏览器里直接打开的效果图页面（叠在壁纸上、用 mock 数据），一份定稿的 `tokens.css` 数值，以及截图。用户确认后才进入 M4。
 - **M4 组件**：八个组件和两项功能全部完成，**照 M3.5 定稿实现**，样式统一。"联动规则"表里的联动在各组件里一起实现（定稿画出了选中、高亮等状态）。音频律动此时用 mock 数据。
 - **M5 联动**（2026-10-18 改定，原来是"实现并逐条验证"）：联动已在 M4 各组件里实现；M5 到桌面上按"联动规则"表逐条验证，发现问题再修补。
-- **M5.5 系统音频律动**：`AudioSpectrum.swift` 捕获系统声音、做频谱分析，推送 `audioSpectrum`，接上 M4 的律动组件；暂停和静音时停止；初始参数采用 Lano-Visualizer 的取值。
+- **M5.5 系统音频律动**：`AudioSpectrum.swift` 捕获系统声音、做频谱分析，推送 `audioSpectrum`，接上 M4 的律动组件；暂停和没有应用在放声音时不开捕获，静音时不推送；初始参数采用 Lano-Visualizer 的取值。
 - **M6 开机自启**：用 `SMAppService` 实现开机自启（在菜单栏里提供开关）。
 
 ## 后续想法
