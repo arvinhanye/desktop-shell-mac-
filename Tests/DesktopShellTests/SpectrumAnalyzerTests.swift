@@ -220,7 +220,7 @@ struct SpectrumAnalyzerTests {
         let raw = try #require(feed(rawAnalyzer, signal).last)
         let db = rawAnalyzer.lastBandDB
         let expected = db.enumerated().map { band, value in
-            min(1, max(0, (value + 3 * Double(band - 6) + 45) / 35))
+            min(1, max(0, (value + 3 * Double(band - 6) + 49) / 35))
         }
         #expect(raw == expected)
         let activeBand = frequency < 100 ? 0 : frequency > 10000 ? 11 : 6

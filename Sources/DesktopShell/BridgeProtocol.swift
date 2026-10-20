@@ -153,6 +153,10 @@ enum ConfigReply {
 }
 
 enum PageEvent {
+    static func audioSpectrum(_ bands: [Double]) -> [String: Any] {
+        ["event": "audioSpectrum", "bands": bands]
+    }
+
     static func safeArea(_ insets: SafeAreaInsets) -> [String: Any] {
         ["event": "safeArea", "top": insets.top, "right": insets.right,
          "bottom": insets.bottom, "left": insets.left]
