@@ -1,6 +1,6 @@
 # M6-01: 开机自启
 
-- **状态**：todo
+- **状态**：done
 - **里程碑**：M6
 - **依赖**：无（M5.5 已完成）
 - **分支**：task/M6-01
@@ -96,13 +96,53 @@ enum LaunchAtLogin {
 
 ## 交付记录
 
-- **改动摘要**：
+- **改动摘要**（2026-10-20）：
+  - 基于最新 `main` / `origin/main` 的 `4d29526ef1ca6cc6c815d0035a17d83058ce5e51`，在 `task/M6-01` 实现；仅涉及本任务允许的 4 个文件。
+  - `LaunchAtLogin.swift`：五种状态对应菜单勾选和点击动作的纯函数；`LoginItemService` 薄封装读取 `SMAppService.mainApp.status`、注册、取消注册和打开登录项设置。未来未知系统枚举值映射为 `unknown`。
+  - 菜单在“点击语音”下面增加“开机自启”；启动查询并记录一次状态，每次 `menuNeedsUpdate` 重新查询。点击时再次查询并选择动作，动作结束后（包括失败）重读系统状态，而非直接翻转勾选。
+  - 启动不注册，不轮询，不写 `ui.json`。成功日志按任务格式记录，注册路径来自 `Bundle.main.bundleURL.path`；失败仅记录操作名与 NSError domain/code，不弹窗。
+  - 新增 10 项严格断言测试，覆盖 5 种状态分别对应的菜单状态与点击动作。没有改动已有测试、打包脚本、配置、Bridge 或网页。
 - **自测结果**：
+  - **PASS 基线**：实现前 `scripts/test.sh`，215/215，24 suites。日志 `/tmp/desktop-shell-m6-01-baseline.log`。
+  - **预期 RED**：先新增测试再运行 `scripts/test.sh --filter LaunchAtLoginTests`，因缺少 `LaunchAtLogin` 实现而编译失败；未调整断言。日志 `/tmp/desktop-shell-m6-01-red.log`。
+  - **PASS GREEN**：实现后同一聚焦命令，10/10，1 suite。日志 `/tmp/desktop-shell-m6-01-green.log`。
+  - **PASS 全量 Swift**：`scripts/test.sh`，225/225，25 suites。日志 `/tmp/desktop-shell-m6-01-full.log`。
+  - **PASS 构建**：`swift build`，退出 0，无错误、无警告。日志 `/tmp/desktop-shell-m6-01-build.log`。
+  - **PASS release 打包**：`scripts/bundle.sh`，退出 0；Info.plist 校验及固定证书签名校验通过。日志 `/tmp/desktop-shell-m6-01-bundle.log`。
+  - **PASS 最终产物复验**：`codesign --verify --strict --verbose=2 build/DesktopShell.app`、`codesign -d -r- build/DesktopShell.app`、`plutil -lint build/DesktopShell.app/Contents/Info.plist`。产物为主仓库 `/Users/arvinhan/Desktop/desktop-shell/build/DesktopShell.app`，指定要求仍为 `identifier "local.desktopshell.DesktopShell" and certificate leaf = H"7d0b2eb51dec80fa75cdbd1d01ace77cee1c62ce"`。
+  - **PASS 范围检查**：`git diff --check` 通过；已跟踪差异与新文件合计正好 4 个允许路径；`AGENTS.md`、`CLAUDE.md`、`scripts/bundle.sh` 及任务需求/正式审查区均保持不变。
+  - **PASS 独立复核**：子代理只读核对任务、全部新增文件、菜单调用链与本机 SDK 声明，未发现明确 P1/P2/P3 问题。另在临时目录独立编译纯映射 harness，10/10 断言通过；未调用 ServiceManagement 变更 API。该复核不替代 Claude 正式审查或实机验收。
+  - **SKIP 手动验收**：本次未启动应用、未注册或取消登录项、未注销/重启 Mac。上方 6 项用户验收均留待用户操作；只使用主仓库的 `build/DesktopShell.app`，对照日志、系统登录项记录和实际重新登录结果。薄系统包装按任务要求不做单元测试，真实系统调用成功/失败路径留作实机验证。网页未改动，本任务未重复运行 web 测试。
 - **疑问 / 偏离**：
+  - 实现无范围或行为偏离。验收口径补充：本机 SDK 说明，在系统设置撤销允许时可能返回 `requiresApproval`，此时按第 1 节显示 `.mixed`（横杠，非 `.on` 勾选），点击打开登录项设置；只有 `notRegistered`、`notFound`、`unknown` 显示 `.off`。不把所有“系统设置关闭”情况强行显示为 `.off`。
+  - 用户已明确允许推送 `task/M6-01`；交付仅提交/推送该任务分支，`main` 留给 Claude 正式审查后合并。真实登录项最终保持开启或关闭，由用户自己选择。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 
 ## 审查记录
 
-- **结论**：
-- **意见**：
+- **结论**：通过（2026-10-20，Claude Code），合并到 `main`。M6 完成。**"注销再登录后自动启动"这一项待下次登录时确认**：用户当时不方便注销或重启，经用户同意先合并。开机自启目前开着，下次登录后用启动日志确认。
+- **可执行的检查**（在 `3416939` 的临时检出里实际运行）：
+  - `swift build`：0 个警告。
+  - `scripts/test.sh`：225/225 通过。
+  - 改动范围：只有允许的 4 个文件。
+  - 打包：Codex 在主仓库打的 `build/DesktopShell.app`，签名指定要求不变。
+- **代码核对**：
+  - 两个纯函数和任务单的对应表一致，测试覆盖 5 种状态。
+  - 菜单每次打开都重新读系统状态；点击前也重新读一次，不按旧的勾选操作。失败只记日志。
+  - 启动时不注册，不写 `ui.json`。注册成功时记下 `.app` 路径。
+- **桌面验证**：
+  - 运行的是主仓库的 `build/DesktopShell.app`（01:52 重启到新构建）。
+  - 用户操作，Claude Code 对照日志和 `sfltool dumpbtm`：
+
+    | 验收项 | 证据 | 结果 |
+    |---|---|---|
+    | 启动时记录状态，菜单没勾 | 01:52:28 `login item: status=notFound` | 通过 |
+    | 勾上 | 01:53:32 `registered path=/Users/arvinhan/Desktop/desktop-shell/build/DesktopShell.app`；系统记录指向同一路径，`enabled, allowed`；用户在"系统设置 → 登录项"里看到 DesktopShell | 通过 |
+    | 在系统设置里关掉 → 菜单的勾消失 | 用户在系统设置里关掉后点菜单，01:57:41 记录的是 `registered`：点击时读到的是"未注册"，菜单显示未勾（如果是需要批准，会记 `opened settings`） | 通过 |
+    | 取消 | 01:55:43、01:56:17 `unregistered` | 通过 |
+    | 注销再登录后自动启动 | — | **待下次登录时确认** |
+    | 最后的状态 | 用户留在"开"，系统记录 `enabled`，指向主仓库那份 | — |
+
+  - 下次登录时这样确认：登录后不手动打开 DesktopShell，看它是否自己启动。用 `/usr/bin/log show --last 10m --predicate 'subsystem == "local.desktopshell.DesktopShell"'` 查看，应该有登录后不久的 `login item: status=enabled` 和 `windows: …` 启动日志。如果没有自动启动，另开修复任务。
+- **意见**：无。

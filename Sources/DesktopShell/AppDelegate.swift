@@ -1,8 +1,9 @@
 import AppKit
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
+    private var loginItem: NSMenuItem?
     private var screenManager: ScreenManager?
     private var backgroundPlayer: BackgroundPlayer?
     private var powerMonitor: PowerMonitor?
@@ -38,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         item.button?.image = image
 
         let menu = NSMenu()
+        menu.delegate = self
         let pauseItem = NSMenuItem(title: "暂停动画", action: #selector(togglePause(_:)), keyEquivalent: "")
         pauseItem.target = self
         pauseItem.state = .off
@@ -50,6 +52,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         voiceItem.target = self
         voiceItem.state = appState.uiState.voiceEnabled ? .on : .off
         menu.addItem(voiceItem)
+        let loginItem = NSMenuItem(title: "开机自启", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        loginItem.target = self
+        let loginStatus = LoginItemService.status
+        loginItem.state = LaunchAtLogin.menuState(loginStatus)
+        Log.notice("DesktopShell login item: status=\(loginStatus.rawValue)")
+        menu.addItem(loginItem)
+        self.loginItem = loginItem
         menu.addItem(.separator())
         let reloadItem = NSMenuItem(title: "重新加载", action: #selector(reloadPages), keyEquivalent: "")
         reloadItem.target = self
@@ -142,6 +151,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSStatusBar.system.removeStatusItem(statusItem)
         }
         statusItem = nil
+        loginItem = nil
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        refreshLoginItem()
+    }
+
+    private func refreshLoginItem() {
+        loginItem?.state = LaunchAtLogin.menuState(LoginItemService.status)
+    }
+
+    @objc private func toggleLaunchAtLogin() {
+        // Read again rather than act on a possibly stale menu checkmark.
+        LoginItemService.perform(LaunchAtLogin.action(for: LoginItemService.status))
+        refreshLoginItem()
     }
 
     @objc private func togglePause(_ sender: NSMenuItem) {
