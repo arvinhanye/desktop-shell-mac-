@@ -87,6 +87,7 @@
 | 键盘焦点，2026-10-18 | 组件窗口**改用不激活应用的面板**，详见下方 |
 | 原生毛玻璃（`NSVisualEffectView`），2026-10-18 | **可行**，开销测不出来，详见下方 |
 | 播放检测（不开捕获时判断有没有应用在放声音），2026-10-19 | **可行**，不需要权限，详见下方 |
+| 开机自启（`SMAppService.mainApp`），2026-10-20 | **可行**。自签名、放在普通目录（不在"应用程序"文件夹）的 `.app` 调用 `register()` 直接成功，`status` 立刻是 `.enabled`，不需要批准；从没注册过时 `status` 是 `.notFound`。`bundle.sh` 那样在同一路径原地替换 `.app` 后仍是 `.enabled`。系统登录项记录（`sfltool dumpbtm`）记的是**注册时正在运行的那份 `.app` 的路径**，从别的副本再注册会改指向那个副本；而 `status` 只按 bundle id 判断，任何副本都显示 `.enabled`，看不出指向哪份。`unregister()` 后记录变为"已停用" |
 
 **系统音频捕获探针**（全局 tap `CATapDescription(stereoGlobalTapButExcludeProcesses: [])`，`muteBehavior = .unmuted`，加上"默认输出设备 + tap"的私有聚合设备，再加 IOProc）：
 
@@ -369,6 +370,7 @@ desktop-shell/
 │   ├── AudioSpectrum.swift        # 系统音频捕获：tap、聚合设备、IOProc，何时开关（M5.5）
 │   ├── SpectrumAnalyzer.swift     # 采样 → 12 个 0–1 柱高（FFT、平滑、分频段；纯计算）
 │   ├── PlaybackMonitor.swift      # 监听有没有别的应用在放声音
+│   ├── LaunchAtLogin.swift        # 开机自启：SMAppService 状态 → 菜单勾选、点击动作（M6）
 │   └── ConfigStore.swift          # 读写 JSON
 ├── web/
 │   ├── index.html
@@ -414,6 +416,7 @@ desktop-shell/
 - 打包：`scripts/bundle.sh [--debug] [--adhoc] [--open]`，产物为 `build/DesktopShell.app`（不进 git），bundle id 为 `local.desktopshell.DesktopShell`，签名身份为 `DesktopShell Self-Signed`（由用户按 `scripts/setup-signing.md` 创建）。`.app` 的日志用 `/usr/bin/log stream --style compact --predicate 'subsystem == "local.desktopshell.DesktopShell"'` 查看（**必须写 `/usr/bin/log`**：zsh 有一个同名的内置命令）。
 - **日志**：一律用 `Log.notice` / `Log.error`（M2.5-02 起），不用 `NSLog`。`.app` 启动时 NSLog 的内容在统一日志里会被隐藏成 `<private>`；`Log` 用 `os.Logger` 并标记为公开，同时写一行到 stderr。日志里只写路径、状态和错误信息，**不写用户的内容**（例如待办文字）。
 - 直接运行 `.build/debug/DesktopShell` 仍然可以用来快速调试，但需要系统权限的功能（M5.5 系统音频）只能用签名后的 `.app` 测试。
+- **开机自启只在主仓库的 `build/DesktopShell.app` 里打开**（2026-10-20 定）：系统记住的是点开关时正在运行的那份 `.app` 的路径（见"技术探针"）。审查、调试用的临时构建（worktree、临时目录里的 `.app`）不要去点菜单栏的"开机自启"，否则登录时会去启动那份临时构建，临时目录删掉后就不再自启。注册成功时日志会记下 `login item: registered path=…`，可以据此核对。
 
 ## 多智能体协作
 
