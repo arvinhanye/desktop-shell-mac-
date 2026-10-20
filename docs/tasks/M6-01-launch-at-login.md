@@ -1,6 +1,6 @@
 # M6-01: 开机自启
 
-- **状态**：review
+- **状态**：done
 - **里程碑**：M6
 - **依赖**：无（M5.5 已完成）
 - **分支**：task/M6-01
@@ -121,5 +121,28 @@ enum LaunchAtLogin {
 
 ## 审查记录
 
-- **结论**：
-- **意见**：
+- **结论**：通过（2026-10-20，Claude Code），合并到 `main`。M6 完成。**"注销再登录后自动启动"这一项待下次登录时确认**：用户当时不方便注销或重启，经用户同意先合并。开机自启目前开着，下次登录后用启动日志确认。
+- **可执行的检查**（在 `3416939` 的临时检出里实际运行）：
+  - `swift build`：0 个警告。
+  - `scripts/test.sh`：225/225 通过。
+  - 改动范围：只有允许的 4 个文件。
+  - 打包：Codex 在主仓库打的 `build/DesktopShell.app`，签名指定要求不变。
+- **代码核对**：
+  - 两个纯函数和任务单的对应表一致，测试覆盖 5 种状态。
+  - 菜单每次打开都重新读系统状态；点击前也重新读一次，不按旧的勾选操作。失败只记日志。
+  - 启动时不注册，不写 `ui.json`。注册成功时记下 `.app` 路径。
+- **桌面验证**：
+  - 运行的是主仓库的 `build/DesktopShell.app`（01:52 重启到新构建）。
+  - 用户操作，Claude Code 对照日志和 `sfltool dumpbtm`：
+
+    | 验收项 | 证据 | 结果 |
+    |---|---|---|
+    | 启动时记录状态，菜单没勾 | 01:52:28 `login item: status=notFound` | 通过 |
+    | 勾上 | 01:53:32 `registered path=/Users/arvinhan/Desktop/desktop-shell/build/DesktopShell.app`；系统记录指向同一路径，`enabled, allowed`；用户在"系统设置 → 登录项"里看到 DesktopShell | 通过 |
+    | 在系统设置里关掉 → 菜单的勾消失 | 用户在系统设置里关掉后点菜单，01:57:41 记录的是 `registered`：点击时读到的是"未注册"，菜单显示未勾（如果是需要批准，会记 `opened settings`） | 通过 |
+    | 取消 | 01:55:43、01:56:17 `unregistered` | 通过 |
+    | 注销再登录后自动启动 | — | **待下次登录时确认** |
+    | 最后的状态 | 用户留在"开"，系统记录 `enabled`，指向主仓库那份 | — |
+
+  - 下次登录时这样确认：登录后不手动打开 DesktopShell，看它是否自己启动。用 `/usr/bin/log show --last 10m --predicate 'subsystem == "local.desktopshell.DesktopShell"'` 查看，应该有登录后不久的 `login item: status=enabled` 和 `windows: …` 启动日志。如果没有自动启动，另开修复任务。
+- **意见**：无。
