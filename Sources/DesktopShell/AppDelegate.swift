@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var backgroundPlayer: BackgroundPlayer?
     private var powerMonitor: PowerMonitor?
     private var audioSpectrum: AudioSpectrum?
+    private var playbackMonitor: PlaybackMonitor?
     private var statsMonitor: SystemStatsMonitor?
     private var hitTestController: HitTestController?
     private var appState: AppState?
@@ -75,6 +76,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         powerMonitor = monitor
         let audio = AudioSpectrum()
         audioSpectrum = audio
+        let playback = PlaybackMonitor()
+        playbackMonitor = playback
+        playback.onChange = { [weak audio] playing in audio?.setPlayback(playing) }
         audio.onSpectrum = { [weak manager] bands in
             manager?.broadcast(PageEvent.audioSpectrum(bands))
         }
@@ -99,6 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statsMonitor = stats
         stats.onSample = { [weak manager] event in manager?.broadcast(event) }
         manager.start()
+        playback.start()
         monitor.start()
         stats.start()
         hitTesting.start()
@@ -115,6 +120,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hitTestController = nil
         appState?.onUiStateChanged = nil
         powerMonitor?.onPausedChanged = nil
+        playbackMonitor?.onChange = nil
+        playbackMonitor?.stop()
+        playbackMonitor = nil
         audioSpectrum?.stop()
         audioSpectrum = nil
         appState?.remindersStore?.onChange = nil

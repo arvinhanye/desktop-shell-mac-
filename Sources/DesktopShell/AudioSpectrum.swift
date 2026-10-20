@@ -4,11 +4,13 @@ import CoreAudio
 /// Decisions only. The worker serializes effects; a short lock protects this
 /// mailbox so a pause can supersede setup even while the permission dialog waits.
 struct AudioCaptureState {
-    enum StopReason: String { case paused, deviceChanged, quit, error }
+    enum StopReason: String { case paused, noPlayback, deviceChanged, quit, error }
     enum Action: Equatable { case start(Int), stop(StopReason) }
     private enum Phase { case idle, starting, running(Int) }
     private var phase: Phase = .idle
     private var paused = true
+    private var othersPlaying = false
+    private(set) var noPlaybackDeadline: TimeInterval?
     private var requested = false
     private var reason: StopReason = .paused
     private(set) var generation = 0
@@ -18,14 +20,39 @@ struct AudioCaptureState {
         guard !terminated else { return }
         if paused != value { generation += 1 }
         paused = value
-        requested = !value
-        if value { reason = .paused }
+        requested = !value && othersPlaying
+        if value {
+            reason = .paused
+            noPlaybackDeadline = nil
+        }
+    }
+
+    mutating func setPlayback(_ playing: Bool, now: TimeInterval) {
+        guard !terminated, playing != othersPlaying else { return }
+        othersPlaying = playing
+        requested = playing && !paused
+        if playing {
+            noPlaybackDeadline = nil
+        } else if !paused {
+            switch phase {
+            case .starting, .running: noPlaybackDeadline = now + 3
+            case .idle: break // A grace period keeps an existing capture, never starts one.
+            }
+        }
+    }
+
+    mutating func expireNoPlayback(now: TimeInterval) {
+        guard let deadline = noPlaybackDeadline, now >= deadline else { return }
+        noPlaybackDeadline = nil
+        requested = false
+        generation += 1
+        reason = .noPlayback
     }
 
     mutating func deviceChanged() {
-        guard !terminated, !paused else { return }
+        guard !terminated, !paused, othersPlaying || noPlaybackDeadline != nil else { return }
         generation += 1
-        requested = true
+        requested = othersPlaying
         reason = .deviceChanged
     }
 
@@ -34,6 +61,7 @@ struct AudioCaptureState {
         terminated = true
         paused = true
         requested = false
+        noPlaybackDeadline = nil
         generation += 1
         reason = .quit
     }
@@ -42,14 +70,15 @@ struct AudioCaptureState {
         switch phase {
         case .starting: return nil
         case .running(let active):
-            if paused || terminated || active != generation {
+            if paused || terminated || active != generation || (!othersPlaying && noPlaybackDeadline == nil) {
                 phase = .idle
+                noPlaybackDeadline = nil
                 return .stop(reason)
             }
             requested = false
             return nil
         case .idle:
-            guard !paused, !terminated, requested else { return nil }
+            guard !paused, !terminated, othersPlaying, requested else { return nil }
             requested = false
             phase = .starting
             return .start(generation)
@@ -58,12 +87,16 @@ struct AudioCaptureState {
 
     mutating func didStart(generation: Int, success: Bool) {
         phase = success ? .running(generation) : .idle
-        if !success, self.generation == generation { self.generation += 1 }
+        if !success {
+            noPlaybackDeadline = nil
+            if self.generation == generation { self.generation += 1 }
+        }
     }
 
     mutating func captureFailed(generation: Int) -> Bool {
         guard case .running(let active) = phase, active == generation else { return false }
         phase = .idle
+        noPlaybackDeadline = nil
         // Only an explicit request made after this capture became obsolete may
         // start another attempt. A queued reconcile is not a retry request.
         if self.generation == generation {
@@ -74,10 +107,43 @@ struct AudioCaptureState {
     }
 
     func accepts(_ generation: Int) -> Bool {
-        guard !paused, !terminated, self.generation == generation,
+        guard !paused, !terminated, othersPlaying || noPlaybackDeadline != nil,
+              self.generation == generation,
               case .running(let active) = phase else { return false }
         return active == generation
     }
+}
+
+/// One-shot scheduling, owned by the capture control queue. A token also rejects
+/// cancelled work that had already been dequeued; repeated events keep the deadline.
+final class AudioPlaybackTimer {
+    typealias Schedule = (TimeInterval, @escaping () -> Void) -> () -> Void
+    private let schedule: Schedule
+    private var deadline: TimeInterval?
+    private var token: UUID?
+    private var cancel: (() -> Void)?
+
+    init(schedule: @escaping Schedule) { self.schedule = schedule }
+
+    func update(deadline: TimeInterval?, now: TimeInterval, fire: @escaping () -> Void) {
+        guard self.deadline != deadline else { return }
+        token = nil
+        cancel?()
+        cancel = nil
+        self.deadline = deadline
+        guard let deadline else { return }
+        let id = UUID()
+        token = id
+        cancel = schedule(max(0, deadline - now)) { [weak self] in
+            guard let self, self.token == id else { return }
+            self.token = nil
+            self.deadline = nil
+            self.cancel = nil
+            fire()
+        }
+    }
+
+    deinit { cancel?() }
 }
 
 @MainActor
@@ -88,10 +154,21 @@ final class AudioSpectrum {
 
     func setPaused(_ paused: Bool) {
         guard !stopped else { return }
+        ensureWorker().setPaused(paused)
+    }
+
+    func setPlayback(_ playing: Bool) {
+        guard !stopped else { return }
+        // Some apps keep their output stream open after playback pauses. Capture
+        // stays on then, but SpectrumAnalyzer gates FFT and events during silence.
+        ensureWorker().setPlayback(playing)
+    }
+
+    private func ensureWorker() -> AudioCaptureWorker {
         if worker == nil {
             worker = AudioCaptureWorker { [weak self] bands in self?.onSpectrum?(bands) }
         }
-        worker?.setPaused(paused)
+        return worker!
     }
 
     func stop() {
@@ -197,6 +274,11 @@ private final class AudioCaptureWorker {
     private var state = AudioCaptureState()
     private var session: AudioCaptureSession?
     private var listener: AudioObjectPropertyListenerBlock?
+    private lazy var playbackTimer = AudioPlaybackTimer { [control] delay, action in
+        let work = DispatchWorkItem(block: action)
+        control.asyncAfter(deadline: .now() + delay, execute: work)
+        return { work.cancel() }
+    }
     private let receive: @MainActor ([Double]) -> Void
 
     init(receive: @escaping @MainActor ([Double]) -> Void) { self.receive = receive }
@@ -209,6 +291,11 @@ private final class AudioCaptureWorker {
 
     func setPaused(_ paused: Bool) {
         withState { $0.setPaused(paused) }
+        control.async { self.reconcile() }
+    }
+
+    func setPlayback(_ playing: Bool) {
+        withState { $0.setPlayback(playing, now: ProcessInfo.processInfo.systemUptime) }
         control.async { self.reconcile() }
     }
 
@@ -228,7 +315,11 @@ private final class AudioCaptureWorker {
     }
 
     private func reconcile() {
-        while let action = withState({ $0.nextAction() }) {
+        // Recheck the monotonic deadline after a potentially blocking setup too.
+        while let action = withState({ state in
+            state.expireNoPlayback(now: ProcessInfo.processInfo.systemUptime)
+            return state.nextAction()
+        }) {
             switch action {
             case .stop(let reason):
                 session?.close(reason: reason)
@@ -254,6 +345,10 @@ private final class AudioCaptureWorker {
                     withState { $0.didStart(generation: generation, success: false) }
                 }
             }
+        }
+        playbackTimer.update(deadline: withState { $0.noPlaybackDeadline },
+                             now: ProcessInfo.processInfo.systemUptime) { [weak self] in
+            self?.reconcile()
         }
     }
 
