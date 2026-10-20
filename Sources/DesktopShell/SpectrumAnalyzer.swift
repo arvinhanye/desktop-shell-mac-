@@ -9,8 +9,8 @@ struct SpectrumParameters: Equatable {
     var bandCount = 12
     var attack = 0.100
     var decay = 0.060
-    var floorDB = -45.0
-    var ceilingDB = -10.0
+    var floorDB = -49.0
+    var ceilingDB = -14.0
     var tiltDBPerBand = 3.0
     var tiltPivot = 6
     var neighborAverage = true

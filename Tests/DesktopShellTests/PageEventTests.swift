@@ -3,6 +3,29 @@ import Testing
 @testable import DesktopShell
 
 struct PageEventTests {
+    @Test("audioSpectrum 只有事件名与 12 个数值且可 JSON 序列化")
+    func audioSpectrum() throws {
+        let bands = (0..<12).map { Double($0) / 11 }
+        let event = PageEvent.audioSpectrum(bands)
+        #expect(Set(event.keys) == ["event", "bands"])
+        #expect(event["event"] as? String == "audioSpectrum")
+        #expect(event["bands"] as? [Double] == bands)
+        #expect(JSONSerialization.isValidJSONObject(event))
+        let data = try JSONSerialization.data(withJSONObject: event)
+        let decoded = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        #expect(decoded["bands"] as? [Double] == bands)
+    }
+
+    @Test("实时频谱不进入重载缓存，也不替换其他事件")
+    func spectrumIsNotReplayed() {
+        var cache = PageEventCache()
+        cache.remember(PageEvent.paused(false))
+        cache.remember(PageEvent.audioSpectrum(Array(repeating: 0.5, count: 12)))
+        let replay = cache.replay(safeArea: .init(top: 0, right: 0, bottom: 0, left: 0))
+        #expect(replay.compactMap { $0["event"] as? String } == ["safeArea", "paused"])
+        #expect(replay.last?["paused"] as? Bool == false)
+    }
+
     @Test("safeArea 仅包含事件名和四个 CSS 像素数值")
     func safeArea() {
         let event = PageEvent.safeArea(SafeAreaInsets(top: 24.5, right: 0, bottom: 70, left: 3))

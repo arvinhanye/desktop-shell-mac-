@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var screenManager: ScreenManager?
     private var backgroundPlayer: BackgroundPlayer?
     private var powerMonitor: PowerMonitor?
+    private var audioSpectrum: AudioSpectrum?
     private var statsMonitor: SystemStatsMonitor?
     private var hitTestController: HitTestController?
     private var appState: AppState?
@@ -72,7 +73,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         manager.setDesktopIconsHidden(appState.uiState.desktopIconsHidden)
         let monitor = PowerMonitor(backgroundPlayer: player)
         powerMonitor = monitor
-        monitor.onPausedChanged = { [weak manager] paused in
+        let audio = AudioSpectrum()
+        audioSpectrum = audio
+        audio.onSpectrum = { [weak manager] bands in
+            manager?.broadcast(PageEvent.audioSpectrum(bands))
+        }
+        monitor.onPausedChanged = { [weak manager, weak audio] paused in
+            audio?.setPaused(paused)
             manager?.broadcast(PageEvent.paused(paused))
         }
         appState.onUiStateChanged = { [weak manager] state in
@@ -108,6 +115,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hitTestController = nil
         appState?.onUiStateChanged = nil
         powerMonitor?.onPausedChanged = nil
+        audioSpectrum?.stop()
+        audioSpectrum = nil
         appState?.remindersStore?.onChange = nil
         appState?.remindersStore?.stop()
         appState?.remindersStore = nil
