@@ -4,9 +4,124 @@ import Testing
 @testable import DesktopShell
 
 struct AudioSpectrumTests {
+    @Test("未暂停但无人播放不搭建，有人播放立即搭建")
+    func playbackRequired() {
+        var state = AudioCaptureState()
+        state.setPaused(false)
+        #expect(state.nextAction() == nil)
+        state.deviceChanged()
+        #expect(state.nextAction() == nil)
+        state.setPlayback(true, now: 10)
+        #expect(state.nextAction() == .start(state.generation))
+    }
+
+    @Test("2.9 秒内恢复保留当前会话，不重建、不丢掉有效频谱")
+    func playbackGap() {
+        var state = running()
+        let generation = state.generation
+        state.setPlayback(false, now: 10)
+        #expect(state.noPlaybackDeadline == 13)
+        state.expireNoPlayback(now: 12.9)
+        #expect(state.nextAction() == nil && state.accepts(generation))
+        state.setPlayback(true, now: 12.9)
+        state.expireNoPlayback(now: 13)
+        #expect(state.noPlaybackDeadline == nil)
+        #expect(state.nextAction() == nil && state.accepts(generation))
+    }
+
+    @Test("停止满三秒拆除，重复 false 不延长截止时间")
+    func playbackTimeout() {
+        var state = running()
+        let old = state.generation
+        state.setPlayback(false, now: 10)
+        state.setPlayback(false, now: 12)
+        #expect(state.noPlaybackDeadline == 13)
+        state.expireNoPlayback(now: 13)
+        #expect(state.nextAction() == .stop(.noPlayback))
+        #expect(!state.accepts(old) && state.nextAction() == nil)
+        state.setPaused(false)
+        state.deviceChanged()
+        #expect(state.nextAction() == nil)
+        state.setPlayback(true, now: 20)
+        #expect(state.nextAction() == .start(state.generation))
+    }
+
+    @Test("暂停优先；缓冲期暂停后无人播放的恢复不重新捕获")
+    func pauseCancelsPlaybackGrace() {
+        var state = running()
+        state.setPlayback(false, now: 10)
+        state.setPaused(true)
+        #expect(state.noPlaybackDeadline == nil)
+        #expect(state.nextAction() == .stop(.paused))
+        state.setPaused(false)
+        #expect(state.nextAction() == nil)
+        state.setPaused(true)
+        state.setPlayback(true, now: 11)
+        #expect(state.nextAction() == nil)
+        state.setPaused(false)
+        #expect(state.nextAction() == .start(state.generation))
+    }
+
+    @Test("搭建期间无人播放，到期后拒绝迟到结果并拆除")
+    func playbackEndsDuringSetup() {
+        var state = AudioCaptureState()
+        state.setPlayback(true, now: 0)
+        state.setPaused(false)
+        let old = state.generation
+        #expect(state.nextAction() == .start(old))
+        state.setPlayback(false, now: 1)
+        state.expireNoPlayback(now: 4)
+        #expect(state.nextAction() == nil)
+        state.didStart(generation: old, success: true)
+        #expect(!state.accepts(old))
+        #expect(state.nextAction() == .stop(.noPlayback))
+        #expect(state.nextAction() == nil)
+    }
+
+    @Test("缓冲期设备变化或错误后，无人播放不重开")
+    func noPlaybackAfterTeardown() {
+        var state = running()
+        state.setPlayback(false, now: 0)
+        state.deviceChanged()
+        #expect(state.nextAction() == .stop(.deviceChanged))
+        #expect(state.nextAction() == nil)
+        state = running()
+        state.setPlayback(false, now: 0)
+        _ = state.captureFailed(generation: state.generation)
+        #expect(state.noPlaybackDeadline == nil)
+        state.setPaused(false)
+        #expect(state.nextAction() == nil)
+    }
+
+    @Test("一次性停止任务保留截止时刻，取消后的旧回调无效")
+    func playbackTimer() {
+        var actions: [() -> Void] = []
+        var delays: [Double] = []
+        var cancelled: [Int] = []
+        let timer = AudioPlaybackTimer { delay, action in
+            let index = actions.count
+            actions.append(action); delays.append(delay)
+            return { cancelled.append(index) }
+        }
+        var fired = 0
+        timer.update(deadline: 13, now: 10) { fired += 1 }
+        timer.update(deadline: 13, now: 12.9) { fired += 1 }
+        #expect(delays == [3])
+        timer.update(deadline: nil, now: 12.9) { fired += 1 }
+        #expect(cancelled == [0])
+        actions[0]()
+        #expect(fired == 0)
+        timer.update(deadline: 23, now: 20) { fired += 1 }
+        actions[0]()
+        #expect(fired == 0)
+        actions[1](); actions[1]()
+        #expect(fired == 1 && delays == [3, 3])
+    }
+
     @Test("初始暂停不搭建，恢复搭建，重复恢复不重复，暂停拆除")
     func pauseLifecycle() {
         var state = AudioCaptureState()
+        state.setPlayback(true, now: 0)
         #expect(state.nextAction() == nil)
         state.setPaused(false)
         let generation = state.generation
@@ -42,6 +157,7 @@ struct AudioSpectrumTests {
     @Test("搭建失败无自动重试，下一次 false 或设备变化可重试", arguments: [false, true])
     func failureRetry(device: Bool) {
         var state = AudioCaptureState()
+        state.setPlayback(true, now: 0)
         state.setPaused(false)
         #expect(state.nextAction() == .start(state.generation))
         state.didStart(generation: state.generation, success: false)
@@ -53,6 +169,7 @@ struct AudioSpectrumTests {
     @Test("权限等待期间暂停按最终状态收敛且旧结果被丢弃")
     func pauseDuringStart() {
         var state = AudioCaptureState()
+        state.setPlayback(true, now: 0)
         state.setPaused(false)
         let old = state.generation
         #expect(state.nextAction() == .start(old))
@@ -83,6 +200,7 @@ struct AudioSpectrumTests {
     @Test("退出是终态，包括搭建未完成时退出")
     func quitDuringStart() {
         var state = AudioCaptureState()
+        state.setPlayback(true, now: 0)
         state.setPaused(false)
         let old = state.generation
         #expect(state.nextAction() == .start(old))
@@ -112,6 +230,7 @@ struct AudioSpectrumTests {
     @Test("失败重试的新会话拒绝旧频谱和旧错误", arguments: [false, true])
     func failureInvalidatesGeneration(duringSetup: Bool) {
         var state = AudioCaptureState()
+        state.setPlayback(true, now: 0)
         state.setPaused(false)
         let old = state.generation
         _ = state.nextAction()
@@ -204,6 +323,7 @@ struct AudioSpectrumTests {
 
     private func running() -> AudioCaptureState {
         var state = AudioCaptureState()
+        state.setPlayback(true, now: 0)
         state.setPaused(false)
         _ = state.nextAction()
         state.didStart(generation: state.generation, success: true)
