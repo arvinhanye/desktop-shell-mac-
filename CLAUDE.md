@@ -15,7 +15,7 @@
 
 ## 审查
 
-- 用户说"审 Mx-yy"时，按 `AGENTS.md` 的"Claude Code 审查规则"执行。
+- 用户说"审 Mx-yy"时，按 `AGENTS.md` 的"审查规则"执行。用户说"Codex 审 Mx-yy"时由 Codex 审，Claude Code 不重复审；如果 Codex 的审查记录里有要另开任务或改规范的意见，由 Claude Code 接手。
 - 不替 Codex 重写业务代码。发现问题就写进审查记录，状态改为 `changes-requested`。
 - 只有在验收命令实际跑过、结果符合预期之后，才能判定通过。
 
