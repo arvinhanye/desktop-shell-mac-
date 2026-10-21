@@ -49,8 +49,10 @@ export default {
     input.placeholder = '粘贴文件夹路径，或把文件夹拖进来';
     input.setAttribute('spellcheck', 'false');
     input.setAttribute('autocomplete', 'off');
-    add.append(element('span', '', '＋'), input);
-    const hint = element('div', 'project-hint');
+    const plus = element('span', '', '＋');
+    plus.setAttribute('aria-hidden', 'true');
+    add.append(plus, input);
+    const hint = element('p', 'project-hint');
     const drop = element('div', 'project-drop');
     drop.setAttribute('aria-hidden', 'true');
     drop.append(svg('0 0 24 24', [
