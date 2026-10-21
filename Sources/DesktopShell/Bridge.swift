@@ -25,6 +25,16 @@ final class Bridge: NSObject, WKScriptMessageHandlerWithReply {
         switch BridgeRequest.parse(message.body) {
         case .failure(let error):
             reject(error, action: action, replyHandler: replyHandler)
+        case .success(.addProject(let path)):
+            switch appState.addProject(path: path) {
+            case .success(let project): replyHandler(ConfigReply.makeProject(project), nil)
+            case .failure(let error): reject(error, action: action, replyHandler: replyHandler)
+            }
+        case .success(.removeProject(let id)):
+            switch appState.removeProject(id: id) {
+            case .success: replyHandler(NSNull(), nil)
+            case .failure(let error): reject(error, action: action, replyHandler: replyHandler)
+            }
         case .success(.addTodo(let text, let projectId)):
             guard let reminders = appState.remindersStore else {
                 reject(.failed, action: action, replyHandler: replyHandler)

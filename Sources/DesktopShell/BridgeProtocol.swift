@@ -15,6 +15,18 @@ enum BridgeOrigin {
 
 enum BridgeError: String, Error {
     case untrusted, invalid, unknownAction = "unknown-action", notFound = "not-found", failed
+    case notDirectory = "not-directory", outsideHome = "outside-home", duplicate
+}
+
+extension ProjectEditing.AddError {
+    var bridgeError: BridgeError {
+        switch self {
+        case .notFound: return .notFound
+        case .notDirectory: return .notDirectory
+        case .outsideHome: return .outsideHome
+        case .duplicate: return .duplicate
+        }
+    }
 }
 
 enum BridgeRequest: Equatable {
@@ -26,6 +38,8 @@ enum BridgeRequest: Equatable {
     case setHitRegions([[Double]])
     case setGlassRegions([GlassRegion])
     case openProject(String)
+    case addProject(path: String)
+    case removeProject(String)
     case openProjectWith(projectId: String, appId: String)
     case launchApp(String)
     case saveUiState(avatar: UiPatch, background: UiPatch)
@@ -35,6 +49,14 @@ enum BridgeRequest: Equatable {
             return .failure(.invalid)
         }
         switch action {
+        case "addProject":
+            guard Set(body.keys) == ["action", "path"], let path = body["path"] as? String,
+                  !path.isEmpty, path.count <= 1024 else { return .failure(.invalid) }
+            return .success(.addProject(path: path))
+        case "removeProject":
+            guard Set(body.keys) == ["action", "projectId"],
+                  let id = validID(body["projectId"]) else { return .failure(.invalid) }
+            return .success(.removeProject(id))
         case "addTodo":
             guard Set(body.keys).isSubset(of: ["action", "text", "projectId"]),
                   let rawText = body["text"] as? String else { return .failure(.invalid) }
@@ -119,29 +141,34 @@ enum ConfigReply {
          "voiceEnabled": state.voiceEnabled]
     }
 
-    static func make(config: AppConfig, avatars: [MediaItem], backgrounds: [MediaItem], voices: [MediaItem] = [], iconIDs: Set<String> = [], uiState: UiState) -> [String: Any] {
+    static func makeProject(_ project: AppConfig.Project) -> [String: Any] {
+        ["id": project.id, "name": project.name, "tags": project.tags ?? [], "apps": project.apps ?? [],
+         "hasReminders": !(project.remindersList?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)]
+    }
+
+    static func makeConfig(_ config: AppConfig, iconIDs: Set<String>) -> [String: Any] {
         // Build an explicit public projection instead of serializing the private config.
         func trimmedOrNull(_ value: String?) -> Any {
             guard let text = value?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return NSNull() }
             return text
         }
-        let projects: [[String: Any]] = config.projects.map {
-            ["id": $0.id, "name": $0.name, "tags": $0.tags ?? [], "apps": $0.apps ?? [],
-             "hasReminders": !($0.remindersList?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)]
-        }
         let greetings: [[String: Any]] = config.greetings.map {
             ["from": $0.from, "title": $0.title, "wish": $0.wish]
         }
         return [
-            "config": [
-                "user": ["name": trimmedOrNull(config.user?.name)],
-                "character": ["name": config.character.name, "motto": trimmedOrNull(config.character.motto)],
-                "greetings": greetings, "projects": projects,
-                "apps": config.apps.map { app -> [String: Any] in
-                    ["id": app.id, "name": app.name,
-                     "iconUrl": iconIDs.contains(app.id) ? "/media/app-icons/\(app.id).png" as Any : NSNull()]
-                },
-            ],
+            "user": ["name": trimmedOrNull(config.user?.name)],
+            "character": ["name": config.character.name, "motto": trimmedOrNull(config.character.motto)],
+            "greetings": greetings, "projects": config.projects.map(makeProject),
+            "apps": config.apps.map { app -> [String: Any] in
+                ["id": app.id, "name": app.name,
+                 "iconUrl": iconIDs.contains(app.id) ? "/media/app-icons/\(app.id).png" as Any : NSNull()]
+            },
+        ]
+    }
+
+    static func make(config: AppConfig, avatars: [MediaItem], backgrounds: [MediaItem], voices: [MediaItem] = [], iconIDs: Set<String> = [], uiState: UiState) -> [String: Any] {
+        [
+            "config": makeConfig(config, iconIDs: iconIDs),
             "media": [
                 "avatars": avatars.map { ["id": $0.id, "url": $0.url] },
                 "backgrounds": backgrounds.map { ["id": $0.id, "url": $0.url] },
@@ -153,6 +180,10 @@ enum ConfigReply {
 }
 
 enum PageEvent {
+    static func config(_ config: AppConfig, iconIDs: Set<String>) -> [String: Any] {
+        ["event": "config", "config": ConfigReply.makeConfig(config, iconIDs: iconIDs)]
+    }
+
     static func audioSpectrum(_ bands: [Double]) -> [String: Any] {
         ["event": "audioSpectrum", "bands": bands]
     }

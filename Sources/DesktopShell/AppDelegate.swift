@@ -98,6 +98,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         appState.onUiStateChanged = { [weak manager] state in
             manager?.broadcast(PageEvent.uiState(state))
         }
+        appState.onConfigChanged = { [weak manager, weak appState] in
+            appState?.withAppIcons { [weak manager, weak appState] iconIDs in
+                guard let appState else { return }
+                manager?.broadcast(PageEvent.config(appState.config, iconIDs: iconIDs))
+            }
+        }
         manager.broadcast(PageEvent.uiState(appState.uiState))
         manager.onWindowsChanged = { [weak monitor] windows in
             monitor?.updateWindows(windows)
@@ -128,6 +134,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hitTestController?.stop()
         hitTestController = nil
         appState?.onUiStateChanged = nil
+        appState?.onConfigChanged = nil
         powerMonitor?.onPausedChanged = nil
         playbackMonitor?.onChange = nil
         playbackMonitor?.stop()

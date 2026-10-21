@@ -1,6 +1,6 @@
 # M7-01: 增删项目（Swift：核对路径、改写配置、Bridge 动作）
 
-- **状态**：todo
+- **状态**：done
 - **里程碑**：M7
 - **依赖**：无（M6 已合并）。和 M7-02 互不依赖（M7-02 用 mock 开发），可以先做任意一个；M7-03 依赖本任务和 M7-02
 - **分支**：task/M7-01
@@ -137,12 +137,44 @@ enum ProjectEditing {
 ## 交付记录
 
 - **改动摘要**：
+  - 从最新 `main`（`922684e`，已 fetch 确认与 `origin/main` 一致）建立 `task/M7-01`。
+  - 新增 `ProjectEditing` 与可注入文件系统：展开 `~`、标准化、解析链接，依次核对存在 / 文件夹 / home 内部 / 重复；按路径组件比较边界；生成唯一 ASCII id 与新项目默认值。
+  - `ConfigStore.loadUnfiltered()` 原样解码，`save()` 以既定格式原子写入；保留启动时过滤和排序行为。增删每次读取磁盘最新配置，只修改一个项目；成功后更新内存、通知提醒事项重映射并广播公共 `config`。
+  - 接入 `addProject` / `removeProject`、固定错误码、共享公共项目与配置投影；回复和事件不含路径等私有字段，图标 id 经 `withAppIcons` 获取，`config` 不进入重载缓存。
+  - 未改网页、拖入逻辑、设计定稿、AGENTS.md 或 CLAUDE.md；未启动应用，未操作真实配置、提醒事项或登录项。
 - **自测结果**：
+  - **RED**：实现前完整 Swift 套件运行 226 项，原有 225 项通过；新增 `projectEditingRequestsRecognized` 的两条合法动作均因 `unknown-action` 失败。随后新增路径 / 配置 / 事件 / 持久化测试在所需 API 缺失时编译失败，与首轮行为 RED 分开记录。
+  - **PASS Swift**：`scripts/test.sh` 最终 248/248（26 suites）；覆盖路径边界和链接、校验顺序、默认值和 id 冲突、未过滤读写、外部配置变动、失败保留、重复检测、移除后目录内容不变、通知时机及真实 `RemindersStore` 搭配内存后端的增删重映射。
+  - **PASS 原子写入**：临时目录的旧硬链接仍保留旧字节，配置文件已换为新 JSON；验证是替换文件而非原地截断；写入失败保留内容。
+  - **PASS web**：`scripts/test-web.sh` 421/421，0 failed / skipped。
+  - **PASS build**：`swift build` 无编译错误、无警告。
+  - **PASS bundle**：`scripts/bundle.sh` release 成功；`/Users/arvinhan/Desktop/desktop-shell/build/DesktopShell.app` 已生成；最终路径 `codesign --verify --strict --verbose=2` 和 `plutil -lint` 通过，指定要求仍绑定 `DesktopShell Self-Signed` 证书。
+  - **PASS 范围 / 格式**：`git diff --check` 通过；11 个改动文件均在允许清单内，任务需求与审查记录保持原样。最终提交范围限定为这些文件，提交后复核 `main...task/M7-01`。
+  - **环境说明**：初次沙盒测试在 Swift/Clang 缓存写入阶段失败，尚未执行测试；经权限流程原样重跑后通过，未更改工具链或检查规则。沙盒内单独签名复验返回 `CSSMERR_TP_NOT_TRUSTED`，在打包所用的相同权限环境复验通过，未改证书信任设置。
+  - **PASS 独立复核**：子代理只读覆盖全部 11/11 文件，未发现确定缺陷；OCR 仅用 delegate preview/rule，不调用外部 LLM。临时目录独立 Swift 探针确认大小写不同的同一文件夹规范化后返回 `duplicate`，3/3 通过；未启动应用或接触真实数据。该复核不替代 Claude 正式审查。
+  - **SKIP 实机**：未启动打包应用，因此“桌面照旧、启动无新错误”待用户检查；实际输入框增删、跨页面更新和真实提醒事项联动按任务安排留到 M7-02 合并后，先备份配置再验证。自动化测试只使用临时目录或内存后端。
 - **疑问 / 偏离**：
+  - **推送授权已确认**：首次推送被自动权限审查拦下后，用户于 2026-10-21 明确确认该仓库归其所有，并允许推送 `task/M7-01`，不合并 `main`。本次交付仅推送到 `origin`（`https://github.com/arvinhanye/desktop-shell-mac-.git`）的同名任务分支；不推送或合并 `main`。
+  - 无需求或允许文件范围偏离。为隔离集成测试，`AppState` 初始化增加 `projectHome` 可注入参数，默认仍为当前用户 home；不新增配置项或 Bridge 接口。
+  - 额外将含 NUL 的路径归为 `not-found`，避免底层文件 API 截断后指向另一个文件夹；其余输入不擅自修剪，路径长度仍按任务要求的字符数校验。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 
 ## 审查记录
 
-- **结论**：
-- **意见**：
+- **结论**：通过（2026-10-21，Claude Code），合并到 `main`。实际增删和跨页面更新照任务单安排，在 M7-03 的整体验收里做。
+- **可执行的检查**（在 `308413a` 的临时检出里实际运行）：
+  - `swift build`：0 个警告。
+  - `scripts/test.sh`：248/248 通过。
+  - `scripts/test-web.sh`：421/421 通过。
+  - `scripts/bundle.sh`：Codex 在主仓库打的包，签名不变。
+  - 改动范围：只有允许的 11 个文件。
+- **代码核对**：
+  - **路径核对**：展开 `~`、标准化、解析符号链接，再按"存在 → 是文件夹 → 在 home 里且不是 home 本身 → 不重复"的顺序核对。判断"在 home 里"用路径组件，不用字符串前缀。重复检查对已有项目的路径做同样的解析。路径里含 NUL 时按 `not-found` 处理（额外加的，合理）。
+  - **id 和默认值**：id 生成照 AGENTS.md 的规则；`apps` 按配置里有没有 `cursor` 决定。
+  - **改写配置**：每次先用 `loadUnfiltered` 从磁盘读，只增删一项，再原子写回。成功后用 `load()` 刷新内存里的配置，调用 `configDidReload` 让提醒事项重新推送，并推送 `config`。读或写失败时回 `failed`，不覆盖文件。`removeProject` 不碰磁盘上的文件夹。
+  - **Bridge 和推送**：参数校验严格；回复和 `config` 事件都不含路径；`config` 不进重推缓存。
+  - **日志**：被拒时只写错误码；添加成功时写 id 和存储的路径，符合 AGENTS.md。
+  - **测试注入**：为了测试，`AppState` 加了可注入的 `projectHome`，默认是当前用户的 home，可以接受。
+- **桌面检查**（本任务的手动部分）：06:41:52 用主仓库的新构建重启。启动日志完整（窗口层级、音频、电源、提醒事项、`getConfig`），没有任何错误。
+- **意见**：无。

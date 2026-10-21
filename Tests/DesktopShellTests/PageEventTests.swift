@@ -173,3 +173,42 @@ extension PageEventTests {
         }
     }
 }
+
+extension PageEventTests {
+    @Test("config 推送与 getConfig 公共配置一致，项目回复复用投影且不泄露路径")
+    func configEvent() throws {
+        var config = AppConfig.example
+        config.projects[0].remindersList = "Private list"
+        let event = PageEvent.config(config, iconIDs: ["cursor"])
+        #expect(Set(event.keys) == ["event", "config"])
+        #expect(event["event"] as? String == "config")
+        #expect(JSONSerialization.isValidJSONObject(event))
+        let value = try #require(event["config"] as? [String: Any])
+        let reply = ConfigReply.make(config: config, avatars: [], backgrounds: [], iconIDs: ["cursor"], uiState: UiState())
+        #expect(NSDictionary(dictionary: value).isEqual(to: try #require(reply["config"] as? [String: Any])))
+        #expect(Set(value.keys) == ["user", "character", "greetings", "projects", "apps"])
+        let project = try #require((value["projects"] as? [[String: Any]])?.first)
+        #expect(Set(project.keys) == ["id", "name", "tags", "apps", "hasReminders"])
+        #expect(project["id"] as? String == "desktop-shell")
+        #expect(project["hasReminders"] as? Bool == true)
+        #expect(NSDictionary(dictionary: project).isEqual(to: ConfigReply.makeProject(config.projects[0])))
+        let apps = try #require(value["apps"] as? [[String: Any]])
+        #expect(apps[0]["iconUrl"] as? String == "/media/app-icons/cursor.png")
+        #expect(apps[1]["iconUrl"] is NSNull)
+        let serialized = try JSONSerialization.data(withJSONObject: event)
+        let text = try #require(String(data: serialized, encoding: .utf8))
+        for privateValue in ["remindersList", "bundleId", "Private list", "video/aemeath.mp4", "~/Desktop"] {
+            #expect(!text.contains(privateValue))
+        }
+    }
+
+    @Test("config 不进入页面重载缓存且不影响已有状态")
+    func configIsNotReplayed() {
+        var cache = PageEventCache()
+        cache.remember(PageEvent.paused(true))
+        cache.remember(PageEvent.config(.example, iconIDs: []))
+        let replay = cache.replay(safeArea: .init(top: 0, right: 0, bottom: 0, left: 0))
+        #expect(replay.compactMap { $0["event"] as? String } == ["safeArea", "paused"])
+        #expect(replay.last?["paused"] as? Bool == true)
+    }
+}

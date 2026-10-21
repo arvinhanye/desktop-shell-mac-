@@ -185,3 +185,64 @@ struct ConfigStoreTests {
         #expect(isValidID(value) == expected)
     }
 }
+
+extension ConfigStoreTests {
+    @Test("原样读写保留被启动过滤的项目、应用和问候顺序")
+    func unfilteredRoundTrip() throws {
+        let fixture = try TemporaryTestDirectory(); defer { fixture.cleanup() }
+        let store = ConfigStore(supportDir: fixture.root)
+        var config = AppConfig.example
+        config.projects.insert(.init(id: "bad/id", name: "preserve", path: "~/bad", tags: nil, apps: nil), at: 0)
+        config.apps.append(.init(id: "bad app", name: "preserve", bundleId: "test.bad"))
+        config.greetings.reverse()
+        config.greetings.insert(.init(from: 24, title: "preserve", wish: "preserve"), at: 0)
+        try JSONEncoder().encode(config).write(to: fixture.root.appendingPathComponent("config.json"))
+        #expect(try store.loadUnfiltered() == config)
+        try store.save(config)
+        #expect(try store.loadUnfiltered() == config)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        #expect(try Data(contentsOf: fixture.root.appendingPathComponent("config.json")) == encoder.encode(config))
+        let filtered = try store.load()
+        #expect(filtered.projects.map(\.id) == ["desktop-shell"])
+        #expect(filtered.apps.map(\.id) == ["cursor", "safari"])
+        #expect(filtered.greetings.map(\.from) == [0, 6, 12, 18, 20, 21, 23])
+        #expect(try store.loadUnfiltered() == config)
+    }
+
+    @Test("原样读取缺失或损坏配置时抛错且不生成示例")
+    func unfilteredReadFailure() throws {
+        let fixture = try TemporaryTestDirectory(); defer { fixture.cleanup() }
+        let missing = fixture.root.appendingPathComponent("absent")
+        let store = ConfigStore(supportDir: missing)
+        #expect(throws: (any Error).self) { try store.loadUnfiltered() }
+        #expect(!FileManager.default.fileExists(atPath: missing.path))
+        let file = try fixture.file("config.json", contents: "{broken")
+        #expect(throws: (any Error).self) { try ConfigStore(supportDir: fixture.root).loadUnfiltered() }
+        #expect(try String(contentsOf: file, encoding: .utf8) == "{broken")
+    }
+
+    @Test("save 原子替换文件，旧硬链接仍保留原数据")
+    func atomicSave() throws {
+        let fixture = try TemporaryTestDirectory(); defer { fixture.cleanup() }
+        let file = try fixture.file("config.json", contents: "old bytes")
+        let link = fixture.root.appendingPathComponent("old-link.json")
+        try FileManager.default.linkItem(at: file, to: link)
+        let store = ConfigStore(supportDir: fixture.root)
+        try store.save(.example)
+        #expect(try store.loadUnfiltered() == .example)
+        #expect(try String(contentsOf: link, encoding: .utf8) == "old bytes")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: fixture.root.path).sorted() == ["config.json", "old-link.json"])
+    }
+
+    @Test("save 失败保留原目录及内容，不创建缺失的配置目录")
+    func saveFailurePreservesContents() throws {
+        let fixture = try TemporaryTestDirectory(); defer { fixture.cleanup() }
+        let marker = try fixture.file("config.json/marker", contents: "keep")
+        #expect(throws: (any Error).self) { try ConfigStore(supportDir: fixture.root).save(.example) }
+        #expect(try String(contentsOf: marker, encoding: .utf8) == "keep")
+        let missing = fixture.root.appendingPathComponent("absent")
+        #expect(throws: (any Error).self) { try ConfigStore(supportDir: missing).save(.example) }
+        #expect(!FileManager.default.fileExists(atPath: missing.path))
+    }
+}
