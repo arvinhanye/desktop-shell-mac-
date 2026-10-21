@@ -484,3 +484,26 @@ extension BridgeTests {
         }
     }
 }
+
+extension BridgeTests {
+    @Test("setDropRegions 接受空数组和最多八个区域，保留原始坐标待窗口裁剪")
+    func dropRegions() {
+        #expect(BridgeRequest.parse(["action": "setDropRegions", "regions": []]) == .success(.setDropRegions([])))
+        let rows = Array(repeating: [-2.5, 3.5, 100.0, 90.0], count: 8)
+        #expect(BridgeRequest.parse(["action": "setDropRegions", "regions": rows]) == .success(.setDropRegions(rows)))
+        #expect(HitTesting.parseRegions(rows, viewport: CGSize(width: 50, height: 50))?.first == CGRect(x: 0, y: 3.5, width: 50, height: 46.5))
+        #expect(BridgeRequest.parse(["action": "setDropRegions", "regions": rows + [[0, 0, 1, 1]]]) == .failure(.invalid))
+    }
+
+    @Test("setDropRegions 拒绝额外键和非有限、布尔、非正尺寸及错误结构")
+    func invalidDropRegions() {
+        let bad: [Any] = [NSNull(), "bad", [1, 2], [[0, 0, 1]], [[0, 0, 1, 1, 0]],
+                          [[0, true, 1, 1]], [[0, 0, 0, 1]], [[0, 0, 1, -1]],
+                          [[Double.nan, 0, 1, 1]], [[0, Double.infinity, 1, 1]], [["0", 0, 1, 1]]]
+        for value in bad {
+            #expect(BridgeRequest.parse(["action": "setDropRegions", "regions": value]) == .failure(.invalid))
+        }
+        #expect(BridgeRequest.parse(["action": "setDropRegions"]) == .failure(.invalid))
+        #expect(BridgeRequest.parse(["action": "setDropRegions", "regions": [], "extra": 1]) == .failure(.invalid))
+    }
+}

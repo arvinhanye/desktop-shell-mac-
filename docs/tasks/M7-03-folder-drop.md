@@ -1,6 +1,6 @@
 # M7-03: 把文件夹拖到项目卡片上添加（原生拖放）
 
-- **状态**：todo
+- **状态**：review
 - **里程碑**：M7
 - **依赖**：M7-01（`AppState.addProject`、`PageEvent` 的写法）和 M7-02（`data-drop`、`projectDrop` 的网页处理）都合并到 `main` 之后再开始
 - **分支**：task/M7-03
@@ -134,8 +134,23 @@
 ## 交付记录
 
 - **改动摘要**：
+  - 基于已合并 M7-01、M7-02 的 `main` / `origin/main`（`d9a3864`）建立 `task/M7-03`。
+  - 新增 `FileDropTracking`：按下时的剪贴板版本与文件 URL 联合判断、跨屏区域命中、成功项与首个错误的纯结果汇总；`PageEvent.projectDrop` 仅序列化 id/name/error，不含路径，且不进入重载缓存。
+  - `setDropRegions` 严格沿用矩形校验与窗口裁剪，上限 8 个，存入对应 WidgetWindow 并通知鼠标控制器。全局/本地左键按下记录剪贴板版本，文件拖动进入区域才接收，普通拖动仍冻结原状态；隐藏桌面文件分支和 VideoWindow 保持原样。
+  - 用 `FileDropWebView` 截获拖放，覆盖进入、更新、离开、准备、执行、结束与取消回调，不调用 WebKit 的 super 拖放行为；仅返回 copy，关闭周期性拖放更新。路径只交给原生 `AppState.addProject`；配置广播沿用 M7-01，结果仅发给本页面；重载、区域移除、关闭及停止监听清除悬停。
+  - 复用可配置的区域 reporter，新增 `[data-drop]` 上报，在 main 中启动并响应安全区变化。原点击区域默认选择器、64 项限制、去重及触发机制保留；拖入独立限制 8 项，移除标记会清空旧区域。mock 接入新动作。
 - **自测结果**：
+  - 基线 PASS：Swift 248/248；web 468/468。
+  - RED：先添加测试，Swift 因尚无 FileDropTracking / setDropRegions / projectDrop 实现而编译失败；web 因缺少 drop-regions 模块以及 mock 返回 unknown-action 失败，记录为预期缺失实现，不计为环境或既有产品失败。
+  - GREEN：`scripts/test.sh` 254/254 PASS（27 suites）；`scripts/test-web.sh` 474/474 PASS，0 FAIL / 0 SKIP。覆盖检测四组合、缺失按下记录、双屏与负坐标边界、全部/部分/零成功、首错、JSON 投影、9 区域拒绝、非法参数、上报去重/可见性/标记移除，以及真实 main 在 native/mock 模式启动和安全区变化。
+  - `swift build` PASS，无编译错误或警告；`scripts/bundle.sh` release PASS，固定 DesktopShell Self-Signed 证书签名、plist 与 designated requirement 验证通过；产物 `build/DesktopShell.app`，未启动。
+  - `git diff --check` PASS；`grep -n "\.move" Sources/DesktopShell/WebContainer.swift` 无输出；无 super 拖放调用或新增轮询；VideoWindow 源码与基线一致。
+  - 独立只读审查覆盖全部 17 个变更文件，未发现阻塞缺陷；额外执行 drop/hit/mock 82/82、glass 8/8 PASS。最终范围为原任务允许文件加用户批准的一行测试隔离例外。
+  - 手动验收尚未执行：真实 Finder 单/多文件夹拖入、文件拒绝、穿过卡片、框选、输入框增删及配置保留/恢复，按本任务单由 Claude Code 备份配置后与用户一起验证。本次未启动应用、未修改真实 config.json、未操作任何被拖文件。
 - **疑问 / 偏离**：
+  - 2026-10-21 用户明确批准“同意，仅补这一行”：在 `Tests/web/glass-regions.test.mjs` 的入口测试 mock 表增加一行 `drop-regions.js` 隔离，保留全部毛玻璃断言；该文件没有其他改动。此前 web 唯一失败是该旧测试把新的 drop 选择器误当作 glass 选择器；补齐隔离后全量通过。
+  - 按任务第 5 节允许的方案复用 hit-regions reporter；未添加依赖、全局调试 API 或新样式。
+  - 交付状态为 review；仅提交并推送 task/M7-03，不合并或推送 main。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 

@@ -397,3 +397,14 @@ test('mock: dropFolders emits hover, adds each name, reports first error and fin
   await assert.rejects(mock.dropFolders([null]), /invalid/);
   mock.stop(); assert.equal(jobs.size, 0);
 });
+
+test('mock: setDropRegions accepts regions like setHitRegions and rejects missing/non-array/extra parameters', async () => {
+  const { mock } = fixture();
+  for (const regions of [[], [[0, 0, 20, 30]]]) {
+    assert.equal(await mock.handle({ action: 'setDropRegions', regions }), null);
+  }
+  for (const message of [{ action: 'setDropRegions' }, { action: 'setDropRegions', regions: 'bad' },
+    { action: 'setDropRegions', regions: [], path: '~/private' }]) {
+    await rejects(mock, message, 'invalid');
+  }
+});
