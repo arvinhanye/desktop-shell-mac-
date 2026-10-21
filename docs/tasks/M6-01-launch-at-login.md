@@ -121,7 +121,7 @@ enum LaunchAtLogin {
 
 ## 审查记录
 
-- **结论**：通过（2026-10-20，Claude Code），合并到 `main`。M6 完成。**"注销再登录后自动启动"这一项待下次登录时确认**：用户当时不方便注销或重启，经用户同意先合并。开机自启目前开着，下次登录后用启动日志确认。
+- **结论**：通过（2026-10-20，Claude Code），合并到 `main`。M6 完成。"注销再登录后自动启动"当时不方便验证，经用户同意先合并；**2026-10-21 已确认**（见下面补充）。
 - **可执行的检查**（在 `3416939` 的临时检出里实际运行）：
   - `swift build`：0 个警告。
   - `scripts/test.sh`：225/225 通过。
@@ -141,7 +141,7 @@ enum LaunchAtLogin {
     | 勾上 | 01:53:32 `registered path=/Users/arvinhan/Desktop/desktop-shell/build/DesktopShell.app`；系统记录指向同一路径，`enabled, allowed`；用户在"系统设置 → 登录项"里看到 DesktopShell | 通过 |
     | 在系统设置里关掉 → 菜单的勾消失 | 用户在系统设置里关掉后点菜单，01:57:41 记录的是 `registered`：点击时读到的是"未注册"，菜单显示未勾（如果是需要批准，会记 `opened settings`） | 通过 |
     | 取消 | 01:55:43、01:56:17 `unregistered` | 通过 |
-    | 注销再登录后自动启动 | — | **待下次登录时确认** |
+    | 注销再登录后自动启动 | 2026-10-21 重启两次后，DesktopShell 都在登录后自动启动：01:56 重启 → 01:56:59 启动（pid 603）；06:23 重启 → 06:23:33 启动（pid 630），之后日志 `login item: status=enabled` | 通过（2026-10-21 补） |
     | 最后的状态 | 用户留在"开"，系统记录 `enabled`，指向主仓库那份 | — |
 
   - 下次登录时这样确认：登录后不手动打开 DesktopShell，看它是否自己启动。用 `/usr/bin/log show --last 10m --predicate 'subsystem == "local.desktopshell.DesktopShell"'` 查看，应该有登录后不久的 `login item: status=enabled` 和 `windows: …` 启动日志。如果没有自动启动，另开修复任务。
