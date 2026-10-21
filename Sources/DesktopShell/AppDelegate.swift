@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var appState: AppState?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.mainMenu = EditMenu.makeMainMenu()
         let paths = AppPaths.current
         Log.notice("DesktopShell supportDir: \(paths.supportDir.path)")
         Log.notice("DesktopShell mediaDir: \(paths.mediaDir.path)")

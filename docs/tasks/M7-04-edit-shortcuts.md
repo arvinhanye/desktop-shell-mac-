@@ -1,6 +1,6 @@
 # M7-04: 输入框支持复制、粘贴等编辑快捷键
 
-- **状态**：todo
+- **状态**：review
 - **里程碑**：M7
 - **依赖**：无。只改 `AppDelegate.swift` 和一个新文件，和 M7-03 的文件不冲突，前后都行
 - **分支**：task/M7-04
@@ -110,12 +110,42 @@ enum EditMenu {
 ## 交付记录
 
 - **改动摘要**：
+  - 从最新 `main` / `origin/main`（`00268d0`）建立 `task/M7-04`。
+  - 新增 `@MainActor EditMenu.makeMainMenu()`：唯一“编辑”子菜单依次为撤销、重做、分隔线、剪切、拷贝、粘贴、全选；六个标准 action 使用 nil target，快捷键与修饰键严格按任务表设置，保留 AppKit 自动菜单验证。
+  - `applicationDidFinishLaunching` 第一行设置主菜单，早于窗口创建。`AppDelegate.swift` 只有这一行变化，状态栏图标菜单保持原样；未修改网页、窗口焦点、激活逻辑或 DesktopWindow.swift。
 - **自测结果**：
+  - 基线 PASS：`scripts/test.sh` 254/254（27 suites）。
+  - RED：先写 EditMenuTests，确认缺少 EditMenu 实现导致编译失败。
+  - 中间失败与诊断：首次全量 255/256，失败来自新测试额外假设父菜单项也必须保持 nil action/target。临时 AppKit 探针确认设置 submenu 会自动给父项绑定 `submenuAction:` 与 NSMenu target；修正该父容器断言，保留六个编辑命令及分隔线的 nil target 检查。未为消除该失败修改生产菜单逻辑。
+  - GREEN：`scripts/test.sh` 256/256 PASS（28 suites）；新增 2 项覆盖菜单唯一性、项目顺序、分隔线、action、keyEquivalent、modifier mask、nil target、独立工厂对象与不替换当前主菜单的行为。
+  - 网页回归 `scripts/test-web.sh` 474/474 PASS，0 FAIL / 0 SKIP；无网页修改。
+  - `swift build` PASS，无错误或警告；`scripts/bundle.sh` release PASS，固定 DesktopShell Self-Signed 签名、plist 与 designated requirement 验证通过，产物 `/Users/arvinhan/Desktop/desktop-shell/build/DesktopShell.app`。
+  - `git diff --check`、4 文件范围检查 PASS；接线位于 ScreenManager 创建之前，状态栏菜单逐字保持基线。子代理只读自查未发现阻塞缺陷，仅算交付前自查，不是正式审查。
+  - 尚未执行桌面手动验收：两个输入框的粘贴、全选/拷贝/剪切、撤销/重做、拼音输入、无焦点时不误贴、其他应用快捷键、Esc 交还键盘及菜单栏不变。本次未启动 DesktopShell、未读写用户剪贴板或真实配置；测试只在测试进程构造 AppKit 菜单。
 - **疑问 / 偏离**：
+  - 无范围扩展。按任务先交付主菜单方案，未提前实现 performKeyEquivalent 后备；仅在主仓库打包应用的桌面验收确认主菜单分派无效后，再启用第 3 节方案并补纯函数测试。
+  - 交付为 review，仅提交并推送 task/M7-04，不合并或推送 main。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 
 ## 审查记录
 
-- **结论**：
-- **意见**：
+- **审查者**：Codex（独立会话，2026-10-21；未参与实现）
+- **审查对象**：`main...task/M7-04`，基线 `00268d0`，实现提交 `4d19d6d`。
+- **结论**：通过。代码审查、自动复验和用户桌面手动验收均通过，未发现需退回的缺陷。用户已明确同意提交审查记录、合并到 `main` 并推送 `origin`。
+- **复验结果**：
+  - 在独立临时检出中执行，未改业务代码、未启动临时应用、未操作登录项。
+  - `swift build` PASS，无编译错误或警告。
+  - `scripts/test.sh` PASS：256 tests / 28 suites。
+  - `scripts/test-web.sh` PASS：474/474，0 FAIL / 0 SKIP。
+  - `scripts/bundle.sh` PASS：release 构建、plist 校验、固定证书签名和 designated requirement 验证均成功。
+  - `git diff --check` 和文件范围检查 PASS：4 个变更文件均在允许范围内，任务需求部分未改动。
+  - 审阅覆盖 4/4 文件，0 跳过。OCR delegate 用于文件与规则解析；另行完整检查其默认排除的测试和任务单。菜单顺序、selector、快捷键、修饰键、nil target、MainActor 隔离及启动接线符合任务要求；状态栏菜单、Bridge 白名单、网页和窗口焦点逻辑保持原样。
+- **桌面验收与证据**：
+  - 用户针对完整清单回复“通过”：项目和待办输入框 ⌘V；⌘A / ⌘C / ⌘X / ⌘Z / ⇧⌘Z；跨应用复制粘贴；中文拼音候选框和上屏；失焦后不误贴；Esc 交还键盘；前台应用菜单栏保持原样。
+  - 审查者补充核对：运行日志显示加载主仓库 `/Users/arvinhan/Desktop/desktop-shell/build/DesktopShell.app/Contents/Resources/web`，同一进程记录了 5 组 `focusInput ok` / `blurInput ok`。日志仅佐证运行来源和焦点消息，快捷键内容及中文候选框结果以用户实测为依据。
+  - 主仓库应用二进制含 `EditMenu.makeMainMenu`，`LSUIElement=true`，designated requirement 使用既定固定证书。沙盒内签名校验曾返回 `CSSMERR_TP_NOT_TRUSTED`；在正常钥匙串访问环境重验通过（`valid on disk` / `satisfies its Designated Requirement`），未修改证书或信任设置。
+  - 主菜单方案桌面验收通过，无需第 3 节后备分派。
+- **流程记录**：
+  - 首次提交并推送命令因授权确认被权限审核拦截，未执行；用户随后明确同意提交、合并和推送。获取远端后确认 `main` 与 `origin/main`、`task/M7-04` 与对应远端分支分别一致。
+  - 自动复验日志：`/private/tmp/m7-04-review-build.log`、`/private/tmp/m7-04-review-tests.log`、`/private/tmp/m7-04-review-web.log`、`/private/tmp/m7-04-review-bundle.log`。
