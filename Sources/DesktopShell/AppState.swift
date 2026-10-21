@@ -7,17 +7,21 @@ final class AppState {
     private(set) var config: AppConfig
     var uiState: UiState
     var onUiStateChanged: ((UiState) -> Void)?
+    var onConfigChanged: (() -> Void)?
     let uiStateStore: UiStateStore
     private let appIcons: AppIcons
+    private let projectHome: URL
     private let iconQueue = DispatchQueue(label: "DesktopShell.app-icons", qos: .userInitiated)
     private var iconGeneration = 0
     private var exportingIcons = false
     private var exportedIconIDs = Set<String>()
     private var iconWaiters: [(Set<String>) -> Void] = []
 
-    init(paths: AppPaths, appIcons: AppIcons = AppIcons()) {
+    init(paths: AppPaths, appIcons: AppIcons = AppIcons(),
+         projectHome: URL = FileManager.default.homeDirectoryForCurrentUser) {
         self.paths = paths
         self.appIcons = appIcons
+        self.projectHome = projectHome.resolvingSymlinksInPath().standardizedFileURL
         uiStateStore = UiStateStore(supportDir: paths.supportDir)
         uiState = uiStateStore.load()
         do {
@@ -56,6 +60,54 @@ final class AppState {
 
     func saveUiState() throws {
         try uiStateStore.save(uiState)
+    }
+
+    func addProject(path: String) -> Result<AppConfig.Project, BridgeError> {
+        let store = ConfigStore(supportDir: paths.supportDir)
+        do {
+            var updated = try store.loadUnfiltered()
+            let folder: URL
+            switch ProjectEditing.resolve(path, home: projectHome, existing: updated.projects.map(\.path),
+                                          fileSystem: LocalProjectFileSystem()) {
+            case .failure(let error):
+                Log.error("DesktopShell project: add rejected code=\(error.bridgeError.rawValue)")
+                return .failure(error.bridgeError)
+            case .success(let resolved): folder = resolved
+            }
+            let project = ProjectEditing.newProject(folder: folder, home: projectHome, config: updated)
+            updated.projects.append(project)
+            try saveProjects(updated, store: store)
+            Log.notice("DesktopShell project: added id=\(project.id) path=\(project.path)")
+            return .success(project)
+        } catch {
+            Log.error("DesktopShell project: add rejected code=failed")
+            return .failure(.failed)
+        }
+    }
+
+    func removeProject(id: String) -> Result<Void, BridgeError> {
+        let store = ConfigStore(supportDir: paths.supportDir)
+        do {
+            var updated = try store.loadUnfiltered()
+            guard let index = updated.projects.firstIndex(where: { $0.id == id }) else {
+                Log.error("DesktopShell project: remove rejected code=not-found")
+                return .failure(.notFound)
+            }
+            updated.projects.remove(at: index)
+            try saveProjects(updated, store: store)
+            Log.notice("DesktopShell project: removed id=\(id)")
+            return .success(())
+        } catch {
+            Log.error("DesktopShell project: remove rejected code=failed")
+            return .failure(.failed)
+        }
+    }
+
+    private func saveProjects(_ updated: AppConfig, store: ConfigStore) throws {
+        try store.save(updated)
+        config = try store.load()
+        remindersStore?.configDidReload()
+        onConfigChanged?()
     }
 
     func reloadConfig() {

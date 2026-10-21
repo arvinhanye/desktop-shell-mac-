@@ -438,3 +438,49 @@ extension BridgeTests {
         #expect(BridgeRequest.parse(["action": "setTodoDone", "todoId": "x", "done": true, "text": "x"]) == .failure(.invalid))
     }
 }
+
+extension BridgeTests {
+    @Test("项目增删合法请求进入各自动作而非 unknown-action")
+    func projectEditingRequestsRecognized() {
+        for body: [String: Any] in [
+            ["action": "addProject", "path": "~/My App"],
+            ["action": "removeProject", "projectId": "my-app"],
+        ] {
+            if case .failure(let error) = BridgeRequest.parse(body) {
+                Issue.record("Project editing rejected: \(error.rawValue)")
+            }
+        }
+    }
+}
+
+extension BridgeTests {
+    @Test("项目增删严格校验参数，保留路径原值")
+    func projectEditingPayloads() {
+        for path in ["~/My App", " /Users/me/a ", String(repeating: "中", count: 1024)] {
+            #expect(BridgeRequest.parse(["action": "addProject", "path": path]) == .success(.addProject(path: path)))
+        }
+        for path: Any in ["", String(repeating: "a", count: 1025), NSNull(), true, 3, ["~/a"]] {
+            #expect(BridgeRequest.parse(["action": "addProject", "path": path]) == .failure(.invalid))
+        }
+        #expect(BridgeRequest.parse(["action": "addProject"]) == .failure(.invalid))
+        #expect(BridgeRequest.parse(["action": "addProject", "path": "~/a", "extra": NSNull()]) == .failure(.invalid))
+        #expect(BridgeRequest.parse(["action": "removeProject", "projectId": "AZ09_a-b"]) == .success(.removeProject("AZ09_a-b")))
+        for id: Any in ["", "a/b", "a b", "中文", NSNull(), true, 1] {
+            #expect(BridgeRequest.parse(["action": "removeProject", "projectId": id]) == .failure(.invalid))
+        }
+        #expect(BridgeRequest.parse(["action": "removeProject"]) == .failure(.invalid))
+        #expect(BridgeRequest.parse(["action": "removeProject", "projectId": "a", "path": "~/a"]) == .failure(.invalid))
+    }
+
+    @Test("项目路径错误映射到固定 Bridge 错误码")
+    func projectEditingErrorCodes() {
+        let cases: [(ProjectEditing.AddError, BridgeError, String)] = [
+            (.notFound, .notFound, "not-found"), (.notDirectory, .notDirectory, "not-directory"),
+            (.outsideHome, .outsideHome, "outside-home"), (.duplicate, .duplicate, "duplicate"),
+        ]
+        for (error, bridge, code) in cases {
+            #expect(error.bridgeError == bridge)
+            #expect(bridge.rawValue == code)
+        }
+    }
+}
