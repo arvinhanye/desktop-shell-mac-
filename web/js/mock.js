@@ -101,8 +101,12 @@ export function createMock({ timers = globalThis, now = () => Date.now(), random
     if (typeof path !== 'string' || !path) fail('invalid');
     let count = 0;
     for (const _ of segmenter.segment(path)) if (++count > 1024) fail('invalid');
-    const clean = path.trim().replace(/\/+$/, '');
-    if (!/^(~|\/Users\/[^/]+)\/.+/.test(clean)) fail('outside-home');
+    let clean = path.trim().replace(/\/+$/, '');
+    const homePath = /^(~|\/Users\/[^/]+)\/.+/;
+    if (!homePath.test(clean)) {
+      clean = clean.replace(/^～/, '~').replaceAll('／', '/').replace(/\/+$/, '');
+    }
+    if (!homePath.test(clean)) fail('outside-home');
     if (/\.[a-z0-9]{1,5}$/i.test(clean)) fail('not-directory');
     if (/不存在|missing/.test(clean)) fail('not-found');
     const name = clean.split('/').at(-1);

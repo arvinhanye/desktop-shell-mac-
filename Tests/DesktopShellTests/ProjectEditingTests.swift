@@ -24,6 +24,68 @@ private final class EditingFileSystem: ProjectFileSystem {
 struct ProjectEditingTests {
     private let home = URL(fileURLWithPath: "/Users/me", isDirectory: true)
 
+    @Test("只替换开头的全角波浪号和所有全角斜杠", arguments: [
+        ("～/Desktop/a", "~/Desktop/a"), ("／etc", "/etc"),
+        ("～／Desktop／a", "~/Desktop/a"), ("~/a～b", "~/a～b"),
+        ("~/Desktop/a", "~/Desktop/a"), ("", ""),
+        (" ～／a", " ～/a"), ("～／项目Ａ／a～b", "~/项目Ａ/a～b"),
+    ])
+    func normalizesFullWidthSymbols(_ input: String, _ expected: String) {
+        #expect(ProjectEditing.normalizeFullWidth(input) == expected)
+    }
+
+    @Test("原路径不存在时重试全角符号并返回真实路径", arguments: [
+        "～/Desktop/a", "～／Desktop／a", "／Users／me／Desktop／a", "~/Desktop／a",
+    ])
+    func retriesFullWidthPath(_ input: String) throws {
+        let fs = EditingFileSystem()
+        fs.directories.insert("/Users/me/Desktop/a")
+        let folder = try ProjectEditing.resolve(input, home: home, existing: [], fileSystem: fs).get()
+        #expect(folder.path == "/Users/me/Desktop/a")
+        #expect(ProjectEditing.storedPath(folder, home: home) == "~/Desktop/a")
+    }
+
+    @Test("重试路径仍执行原有校验并返回第二次的错误", arguments: [
+        ("／etc", AddError.outsideHome), ("～/file", .notDirectory),
+        ("～/a", .duplicate), ("～/missing", .notFound), ("～/link", .outsideHome),
+        ("～", .outsideHome), ("～/a\0suffix", .notFound),
+    ])
+    func fullWidthRetryErrors(_ input: String, _ expected: AddError) {
+        let fs = EditingFileSystem()
+        fs.directories.insert("/etc")
+        #expect(ProjectEditing.resolve(input, home: home, existing: ["~/a"], fileSystem: fs) == .failure(expected))
+    }
+
+    @Test("原样存在的全角文件名优先，即使半角路径也存在")
+    func preservesExistingFullWidthFolder() throws {
+        let fs = EditingFileSystem()
+        fs.directories.formUnion(["/Users/me/a／b", "/Users/me/a/b"])
+        let folder = try ProjectEditing.resolve("~/a／b", home: home, existing: [], fileSystem: fs).get()
+        #expect(folder.path == "/Users/me/a／b")
+        #expect(ProjectEditing.storedPath(folder, home: home) == "~/a／b")
+        #expect(fs.checks == ["exists:/Users/me/a／b", "directory:/Users/me/a／b"])
+    }
+
+    @Test("原样得到非 notFound 错误时不重试", arguments: [AddError.notDirectory, .outsideHome, .duplicate])
+    func preservesOriginalError(_ expected: AddError) {
+        let fs = EditingFileSystem()
+        let path = expected == .outsideHome ? "/outside／folder" : "/Users/me/a／b"
+        fs.directories.formUnion(["/Users/me/a/b", "/outside/folder"])
+        if expected == .notDirectory { fs.files.insert(path) }
+        else { fs.directories.insert(path) }
+        #expect(ProjectEditing.resolve(path, home: home, existing: [path], fileSystem: fs) == .failure(expected))
+        #expect(fs.checks == ["exists:\(path)", "directory:\(path)"])
+    }
+
+    @Test("无全角符号的缺失路径只检查一次")
+    func unchangedMissingPathIsNotRetried() {
+        let fs = EditingFileSystem()
+        #expect(ProjectEditing.resolve("~/missing", home: home, existing: [], fileSystem: fs) == .failure(.notFound))
+        #expect(fs.checks == ["exists:/Users/me/missing"])
+    }
+
+    typealias AddError = ProjectEditing.AddError
+
     @Test("展开波浪号、标准化和解析符号链接后返回真实文件夹", arguments: [
         "~/a", "/Users/me/a/", "/Users/me/b/../a", "~/alias",
     ])
@@ -106,6 +168,24 @@ struct ProjectEditingTests {
 }
 
 extension ProjectEditingTests {
+    @MainActor @Test("全角输入添加后持久化真实路径，再用半角添加判重复")
+    func fullWidthPersistence() throws {
+        let fixture = try TemporaryTestDirectory(); defer { fixture.cleanup() }
+        let support = try fixture.directory("support")
+        let home = try fixture.directory("home").resolvingSymlinksInPath()
+        _ = try fixture.directory("home/Desktop/a")
+        let store = ConfigStore(supportDir: support)
+        var config = AppConfig.example
+        config.projects = []
+        try store.save(config)
+        let state = AppState(paths: .init(supportDir: support, mediaDir: support, webDir: support), projectHome: home)
+        let project = try state.addProject(path: "～／Desktop／a").get()
+        #expect(project.path == "~/Desktop/a")
+        #expect(project.name == "a")
+        #expect(try store.loadUnfiltered().projects == [project])
+        #expect(state.addProject(path: "~/Desktop/a") == .failure(.duplicate))
+    }
+
     @MainActor @Test("增删每次读取磁盘最新配置，保留未过滤内容，保存后才通知且不碰项目文件夹")
     func editingPersistence() throws {
         let fixture = try TemporaryTestDirectory(); defer { fixture.cleanup() }
