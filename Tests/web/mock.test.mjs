@@ -360,6 +360,34 @@ for (const [path, code] of [
   assert.deepEqual(await mock.handle({ action: 'getConfig' }), before); assert.equal(events.length, count); mock.stop();
 });
 
+for (const path of ['～/Desktop/test', '～／Desktop／test', '／Users／me／Desktop／test']) {
+  test(`mock: full-width prefix ${path} is normalized before adding`, async () => {
+    const { mock } = fixture(); const events = []; mock.start(event => events.push(event));
+    const project = await mock.handle({ action: 'addProject', path });
+    assert.deepEqual(project, { id: 'test', name: 'test', tags: [], apps: ['cursor'], hasReminders: false });
+    assert.deepEqual(events.at(-1).config.projects.at(-1), project);
+    await rejects(mock, { action: 'addProject', path: '~/Desktop/test' }, 'duplicate');
+    mock.stop();
+  });
+}
+
+for (const [path, code] of [['／etc', 'outside-home'], ['～/Desktop/missing', 'not-found'],
+  ['～/Desktop/file.txt', 'not-directory'], ['～/Desktop/DesktopShell', 'duplicate']]) {
+  test(`mock: normalized path ${path} preserves ${code} and config`, async () => {
+    const { mock } = fixture(); const events = []; mock.start(event => events.push(event));
+    const before = await mock.handle({ action: 'getConfig' }), count = events.length;
+    await rejects(mock, { action: 'addProject', path }, code);
+    assert.deepEqual(await mock.handle({ action: 'getConfig' }), before);
+    assert.equal(events.length, count); mock.stop();
+  });
+}
+
+test('mock: valid original prefix preserves full-width filename characters', async () => {
+  const { mock } = fixture();
+  const project = await mock.handle({ action: 'addProject', path: '~/Desktop/a／b～c' });
+  assert.equal(project.name, 'a／b～c');
+});
+
 test('mock: project add validates path payload/length and remove validates ids and extra fields', async () => {
   const { mock } = fixture();
   for (const message of [

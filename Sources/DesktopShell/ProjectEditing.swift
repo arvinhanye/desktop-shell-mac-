@@ -20,8 +20,23 @@ struct LocalProjectFileSystem: ProjectFileSystem {
 enum ProjectEditing {
     enum AddError: Error, Equatable { case notFound, notDirectory, outsideHome, duplicate }
 
+    static func normalizeFullWidth(_ input: String) -> String {
+        input.replacingOccurrences(of: "～", with: "~", options: [.anchored, .literal])
+            .replacingOccurrences(of: "／", with: "/", options: .literal)
+    }
+
     static func resolve(_ input: String, home: URL, existing: [String],
                         fileSystem: ProjectFileSystem) -> Result<URL, AddError> {
+        let original = resolveOriginal(input, home: home, existing: existing, fileSystem: fileSystem)
+        // Full-width slashes can belong to real filenames; only retry a missing path.
+        guard case .failure(.notFound) = original else { return original }
+        let normalized = normalizeFullWidth(input)
+        guard normalized != input else { return original }
+        return resolveOriginal(normalized, home: home, existing: existing, fileSystem: fileSystem)
+    }
+
+    private static func resolveOriginal(_ input: String, home: URL, existing: [String],
+                                        fileSystem: ProjectFileSystem) -> Result<URL, AddError> {
         func canonical(_ path: String) -> URL? {
             // A NUL must not be truncated by filesystem APIs into a different path.
             guard !path.contains("\0"), let url = ProjectPath.resolve(path, home: home) else { return nil }
