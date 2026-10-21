@@ -334,3 +334,66 @@ test('mock: glass regions accepts arrays, rejects missing/non-array and extra pa
     { action: 'setGlassRegions', regions: [], extra: true },
   ]) await rejects(mock, message, 'invalid');
 });
+
+test('mock: addProject returns a public project, pushes config and generates stable ASCII ids', async () => {
+  const { mock } = fixture(); const events = []; mock.start(event => events.push(event));
+  for (const [name, id] of [['CS61A-master', 'cs61a-master'], ['My App', 'my-app'], ['操作系统原理实验', 'project'],
+    ['另一中文项目', 'project-2'], ['--a__b--', 'a-b'], ['My-App', 'my-app-2']]) {
+    const project = await mock.handle({ action: 'addProject', path: `~/Desktop/${name}` });
+    assert.deepEqual(project, { id, name, tags: [], apps: ['cursor'], hasReminders: false });
+    assert.equal(events.at(-1).event, 'config');
+    assert.deepEqual(events.at(-1).config.projects.at(-1), project);
+    project.name = 'mutated reply'; events.at(-1).config.projects.at(-1).name = 'mutated event';
+    assert.equal((await mock.handle({ action: 'getConfig' })).config.projects.at(-1).name, name);
+  }
+  mock.stop();
+});
+
+for (const [path, code] of [
+  ['/etc/hosts', 'outside-home'], ['relative', 'outside-home'], ['~', 'outside-home'], ['/Users/me', 'outside-home'],
+  ['~/Desktop/file.txt', 'not-directory'], ['~/Desktop/missing', 'not-found'], ['~/Desktop/不存在', 'not-found'],
+  ['~/Desktop/DesktopShell', 'duplicate'],
+]) test(`mock: project path ${path} returns ${code} without modifying config or pushing`, async () => {
+  const { mock } = fixture(); const events = []; mock.start(event => events.push(event));
+  const before = await mock.handle({ action: 'getConfig' }), count = events.length;
+  await rejects(mock, { action: 'addProject', path }, code);
+  assert.deepEqual(await mock.handle({ action: 'getConfig' }), before); assert.equal(events.length, count); mock.stop();
+});
+
+test('mock: project add validates path payload/length and remove validates ids and extra fields', async () => {
+  const { mock } = fixture();
+  for (const message of [
+    { action: 'addProject' }, { action: 'addProject', path: null }, { action: 'addProject', path: 1 },
+    { action: 'addProject', path: '' }, { action: 'addProject', path: 'x'.repeat(1025) },
+    { action: 'addProject', path: '~/x', extra: null }, { action: 'removeProject' },
+    { action: 'removeProject', projectId: null }, { action: 'removeProject', projectId: 'a/b' },
+    { action: 'removeProject', projectId: 'desktop-shell', path: '~/x' },
+  ]) await rejects(mock, message, 'invalid');
+  const name = '中'.repeat(1022);
+  assert.equal((await mock.handle({ action: 'addProject', path: `~/${name}` })).name, name);
+});
+
+test('mock: same path or same name duplicates; remove returns null and makes the folder addable again', async () => {
+  const { mock } = fixture(); const events = []; mock.start(event => events.push(event));
+  const project = await mock.handle({ action: 'addProject', path: '/Users/test/Folder/' });
+  await rejects(mock, { action: 'addProject', path: '/Users/test/Folder' }, 'duplicate');
+  await rejects(mock, { action: 'addProject', path: '~/Elsewhere/Folder' }, 'duplicate');
+  assert.equal(await mock.handle({ action: 'removeProject', projectId: project.id }), null);
+  assert.equal(events.at(-1).event, 'config');
+  assert.ok(!events.at(-1).config.projects.some(item => item.id === project.id));
+  await rejects(mock, { action: 'removeProject', projectId: project.id }, 'not-found');
+  assert.equal((await mock.handle({ action: 'addProject', path: '/Users/test/Folder' })).id, 'folder');
+  mock.stop();
+});
+
+test('mock: dropFolders emits hover, adds each name, reports first error and finishes without timers', async () => {
+  const { mock, jobs } = fixture(); const events = []; mock.start(event => events.push(event)); events.length = 0;
+  const result = await mock.dropFolders(['Folder A', 'missing', 'Folder B', 'file.txt']);
+  assert.deepEqual(events[0], { event: 'projectDrop', over: true, result: null });
+  assert.deepEqual(result, { added: [{ id: 'folder-a', name: 'Folder A' }, { id: 'folder-b', name: 'Folder B' }], error: 'not-found' });
+  assert.deepEqual(events.at(-1), { event: 'projectDrop', over: false, result });
+  assert.equal(events.filter(event => event.event === 'config').length, 2);
+  assert.equal(jobs.size, 2, 'no extra persistent timers for drops');
+  await assert.rejects(mock.dropFolders([null]), /invalid/);
+  mock.stop(); assert.equal(jobs.size, 0);
+});

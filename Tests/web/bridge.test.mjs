@@ -360,3 +360,51 @@ test('bridge: malformed user.name becomes null', async () => {
     assert.deepEqual(s.get('config').user, { name: null });
   }
 });
+
+test('bridge: config push reuses getConfig normalization and only replaces config', async () => {
+  const r = reply(); const viaReply = fresh();
+  await createBridge(viaReply, { target: {}, native: { postMessage: () => r } }).start();
+  const viaPush = fresh(), before = viaPush.getState();
+  applyEvent(viaPush, { event: 'config', config: r.config });
+  assert.deepEqual(viaPush.get('config'), viaReply.get('config'));
+  assert.notEqual(viaPush.get('config'), r.config);
+  assert.deepEqual({ ...viaPush.getState(), config: null }, before);
+  applyEvent(viaPush, { event: 'config', config: { ...config(), projects: [] } });
+  assert.deepEqual(viaPush.get('config').projects, []);
+});
+
+for (const value of [null, [], {}, { ...config(), character: null }, { ...config(), greetings: null },
+  { ...config(), projects: [null] }, { ...config(), apps: [null] }, { ...config(), projects: Array(1) }]) {
+  test(`bridge: invalid config push ${JSON.stringify(value)} leaves state unchanged`, t => {
+    const warn = t.mock.method(console, 'warn', () => {}); const s = fresh();
+    s.set({ config: config() }); const before = s.getState();
+    applyEvent(s, { event: 'config', config: value });
+    assert.deepEqual(s.getState(), before); assert.equal(warn.mock.callCount(), 1);
+  });
+}
+
+test('bridge: projectDrop validates/clones result and delivers identical event objects separately', () => {
+  const s = fresh(); assert.deepEqual(s.get('projectDrop'), { over: false, result: null });
+  const seen = []; s.subscribe('projectDrop', value => seen.push(value));
+  const event = { event: 'projectDrop', over: false, result: { added: [{ id: 'a_1-X', name: '<folder>' }], error: null } };
+  applyEvent(s, { event: 'projectDrop', over: true, result: null });
+  applyEvent(s, event, now); applyEvent(s, event, now);
+  assert.equal(seen.length, 3); assert.notEqual(seen[1], seen[2]);
+  assert.deepEqual(seen[1], { over: false, result: event.result });
+  assert.notEqual(seen[1].result, event.result); assert.notEqual(seen[1].result.added[0], event.result.added[0]);
+  event.result.added[0].name = 'changed'; assert.equal(s.get('projectDrop').result.added[0].name, '<folder>');
+  applyEvent(s, { event: 'projectDrop', over: false, result: { added: [], error: 'future-code' } });
+  assert.equal(s.get('projectDrop').result.error, 'future-code');
+});
+
+for (const patch of [
+  { over: 1, result: null }, { over: false }, { over: false, result: [] },
+  ...[null, {}, { added: [] }, { added: [], error: 1 }, { added: Array(1), error: null },
+    ...[null, { id: '', name: 'x' }, { id: 'bad/id', name: 'x' }, { id: '中文', name: 'x' }, { id: 'x', name: 1 }]
+      .map(item => ({ added: [{ id: 'ok', name: 'ok' }, item], error: null })),
+  ].filter(value => value !== null).map(result => ({ over: false, result })),
+]) test(`bridge: malformed projectDrop ${JSON.stringify(patch)} is atomic`, t => {
+  const warn = t.mock.method(console, 'warn', () => {}); const s = fresh(); const before = s.getState();
+  applyEvent(s, { event: 'projectDrop', ...patch });
+  assert.deepEqual(s.getState(), before); assert.equal(warn.mock.callCount(), 1);
+});

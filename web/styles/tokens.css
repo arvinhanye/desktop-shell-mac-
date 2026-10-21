@@ -113,6 +113,11 @@
   --glow-voice: 0 0 14px var(--color-ice);               /* 播放语音时头像发光 */
   --glow-related: 0 0 10px color-mix(in srgb, var(--color-highlight) 70%, transparent);  /* 相关应用 */
   --glow-viz: 0 0 6px color-mix(in srgb, var(--color-ice) 55%, transparent);            /* 律动条 */
+  /* 把文件夹拖到项目卡片上时：卡片内侧一道冰蓝细边加柔光（inset，不会被卡片的 overflow 裁掉）。2026-10-21 加 */
+  --glow-drop: inset 0 0 0 1.5px color-mix(in srgb, var(--color-ice) 85%, transparent), inset 0 0 24px color-mix(in srgb, var(--color-ice) 35%, transparent);
+  --drop-fill: color-mix(in srgb, var(--color-ice) 10%, transparent);   /* 拖入提示层的底色 */
+  --drop-dim-opacity: 0.25;                                            /* 拖入时卡片原有内容压暗 */
+  --icon-lg: 28px;                                                     /* 拖入提示里的文件夹图标 */
 
   /* —— 布局：1792 × 1120 点屏幕，安全区域 1792 × 1003；左侧两列组件，右侧 240 留给两列图标 —— */
   --card-padding: var(--space-4);
@@ -137,8 +142,8 @@
   --character-height: 212px;
   --stats-top: 528px;
   --projects-top: 222px;
-  --projects-height: 252px;
-  --todos-top: 490px;         /* 下边停在启动栏上方 --column-gap 处 */
+  --projects-height: 300px;   /* 2026-10-21 由 252 加高：加了"添加项目"输入框，仍能看到 3 行 */
+  --todos-top: 538px;         /* 下边停在启动栏上方 --column-gap 处；2026-10-21 随项目卡片下移 48 */
   --launcher-bottom: 12px;    /* 横跨两列 */
   --launcher-height: 110px;
   --visualizer-center: calc(50% + 264px);   /* 心形中心的横坐标 */

@@ -4,6 +4,7 @@ const parameters = new Map([
   ['openProject', ['projectId']], ['openProjectWith', ['projectId', 'appId']],
   ['launchApp', ['appId']], ['saveUiState', ['avatarId', 'backgroundId']],
   ['addTodo', ['text', 'projectId']], ['setTodoDone', ['todoId', 'done']],
+  ['addProject', ['path']], ['removeProject', ['projectId']],
 ]);
 const accessStates = new Set(['granted', 'denied', 'notDetermined', 'restricted', 'writeOnly']);
 const fail = code => { throw new Error(code); };
@@ -93,6 +94,28 @@ export function createMock({ timers = globalThis, now = () => Date.now(), random
   const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
   const emit = event => { if (receive) receive(structuredClone(event)); };
   const emitTodos = () => emit({ event: 'todos', access: todosAccess, items: todosAccess === 'granted' ? todos.slice(0, 500) : [] });
+  const emitConfig = () => emit({ event: 'config', config });
+  // Mock-only paths stay private, just like the native config projection.
+  const projectPaths = new Map(config.projects.map(project => [project.id, `~/Desktop/${project.name}`]));
+  const addProject = path => {
+    if (typeof path !== 'string' || !path) fail('invalid');
+    let count = 0;
+    for (const _ of segmenter.segment(path)) if (++count > 1024) fail('invalid');
+    const clean = path.trim().replace(/\/+$/, '');
+    if (!/^(~|\/Users\/[^/]+)\/.+/.test(clean)) fail('outside-home');
+    if (/\.[a-z0-9]{1,5}$/i.test(clean)) fail('not-directory');
+    if (/不存在|missing/.test(clean)) fail('not-found');
+    const name = clean.split('/').at(-1);
+    if (config.projects.some(project => projectPaths.get(project.id) === clean || project.name === name)) fail('duplicate');
+    const base = name.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'project';
+    let id = base, suffix = 2;
+    while (config.projects.some(project => project.id === id)) id = `${base}-${suffix++}`;
+    const project = { id, name, tags: [], apps: config.apps.some(app => app.id === 'cursor') ? ['cursor'] : [], hasReminders: false };
+    config.projects.push(project);
+    projectPaths.set(id, clean);
+    emitConfig();
+    return structuredClone(project);
+  };
   const projectFor = id => config.projects.find(project => project.id === id) ?? fail('not-found');
   const appFor = id => config.apps.find(app => app.id === id) ?? fail('not-found');
   const emitStats = () => {
@@ -117,6 +140,19 @@ export function createMock({ timers = globalThis, now = () => Date.now(), random
       switch (message.action) {
         case 'getConfig':
           return structuredClone({ config, media, uiState: ui });
+        case 'addProject':
+          return addProject(message.path);
+        case 'removeProject': {
+          requireID(message.projectId);
+          projectFor(message.projectId);
+          config.projects = config.projects.filter(project => project.id !== message.projectId);
+          projectPaths.delete(message.projectId);
+          // Removing a project changes routing, not the reminders themselves.
+          todos = todos.map(todo => todo.projectId === message.projectId ? { ...todo, projectId: null } : todo);
+          emitTodos();
+          emitConfig();
+          return null;
+        }
         case 'focusInput':
         case 'blurInput':
           return null;
@@ -175,6 +211,21 @@ export function createMock({ timers = globalThis, now = () => Date.now(), random
           return null;
         }
       }
+    },
+    async dropFolders(names) {
+      if (!Array.isArray(names) || ![...names].every(name => typeof name === 'string' && name.length > 0)) fail('invalid');
+      emit({ event: 'projectDrop', over: true, result: null });
+      const result = { added: [], error: null };
+      for (const name of names) {
+        try {
+          const project = addProject(`~/Desktop/${name}`);
+          result.added.push({ id: project.id, name: project.name });
+        } catch (error) {
+          if (result.error === null) result.error = error.message;
+        }
+      }
+      emit({ event: 'projectDrop', over: false, result });
+      return structuredClone(result);
     },
     start(receiver) {
       if (receive) return;
