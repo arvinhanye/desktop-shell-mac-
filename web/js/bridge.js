@@ -8,12 +8,11 @@ const percent = value => Number.isFinite(value) && value >= 0 && value <= 100;
 const nullableString = value => value === null || typeof value === 'string';
 const accessStates = new Set(['granted', 'denied', 'notDetermined', 'restricted', 'writeOnly']);
 
-function normalizeReply(reply) {
-  requireValue(isObject(reply) && isObject(reply.config));
-  const config = reply.config;
+function normalizeConfig(config) {
+  requireValue(isObject(config));
   requireValue(isObject(config.character) && typeof config.character.name === 'string');
   requireValue(['greetings', 'projects', 'apps'].every(key => Array.isArray(config[key])));
-  const projects = config.projects.map(project => {
+  const projects = [...config.projects].map(project => {
     requireValue(isObject(project));
     return {
       ...project,
@@ -22,6 +21,21 @@ function normalizeReply(reply) {
       hasReminders: typeof project.hasReminders === 'boolean' ? project.hasReminders : false,
     };
   });
+  const stringOrNull = value => typeof value === 'string' ? value : null;
+  const apps = [...config.apps].map(app => {
+    requireValue(isObject(app));
+    return { ...app, iconUrl: stringOrNull(app.iconUrl) };
+  });
+  return {
+    ...config, projects, apps,
+    user: { name: stringOrNull(config.user?.name) },
+    character: { ...config.character, motto: stringOrNull(config.character.motto) },
+  };
+}
+
+function normalizeReply(reply) {
+  requireValue(isObject(reply));
+  const config = normalizeConfig(reply.config);
   const mediaItems = items => items
     .filter(item => isObject(item) && typeof item.id === 'string' && typeof item.url === 'string')
     .map(({ id, url }) => ({ id, url }));
@@ -29,18 +43,9 @@ function normalizeReply(reply) {
     ? { avatars: mediaItems(reply.media.avatars), backgrounds: mediaItems(reply.media.backgrounds) }
     : { avatars: [], backgrounds: [] };
   media.voices = Array.isArray(reply.media?.voices) ? mediaItems(reply.media.voices) : [];
-  const stringOrNull = value => typeof value === 'string' ? value : null;
-  const apps = config.apps.map(app => {
-    requireValue(isObject(app));
-    return { ...app, iconUrl: stringOrNull(app.iconUrl) };
-  });
   const ui = isObject(reply.uiState) ? reply.uiState : {};
   return {
-    config: {
-      ...config, projects, apps,
-      user: { name: stringOrNull(config.user?.name) },
-      character: { ...config.character, motto: stringOrNull(config.character.motto) },
-    },
+    config,
     media,
     ui: {
       avatarId: typeof ui.avatarId === 'string' ? ui.avatarId : null,
@@ -72,6 +77,25 @@ export function applyEvent(store, event, now = () => Date.now()) {
     requireValue(isObject(event));
     let patch;
     switch (event.event) {
+      case 'config':
+        patch = { config: normalizeConfig(event.config) };
+        break;
+      case 'projectDrop': {
+        requireValue(typeof event.over === 'boolean');
+        let result = null;
+        if (event.result !== null) {
+          requireValue(isObject(event.result) && Array.isArray(event.result.added) && nullableString(event.result.error));
+          const added = [...event.result.added].map(item => {
+            requireValue(isObject(item) && typeof item.id === 'string' && /^[A-Za-z0-9_-]+$/.test(item.id)
+              && typeof item.name === 'string');
+            return { id: item.id, name: item.name };
+          });
+          result = { added, error: event.result.error };
+        }
+        // A fresh envelope for every receipt makes even identical results observable.
+        patch = { projectDrop: { over: event.over, result } };
+        break;
+      }
       case 'safeArea': {
         const { top, right, bottom, left } = event;
         requireValue([top, right, bottom, left].every(nonnegative));

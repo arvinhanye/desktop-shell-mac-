@@ -66,6 +66,7 @@ export const initialState = {
   audioSpectrum: null,
   phase: 'day',
   selectedProject: null,
+  projectDrop: { over: false, result: null },
   now: null,
   appearanceOpen: false,
   voiceRequest: 0,

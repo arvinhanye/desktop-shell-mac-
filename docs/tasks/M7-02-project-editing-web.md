@@ -1,6 +1,6 @@
 # M7-02: 项目卡片的添加输入框、移除按钮和拖入提示（网页）
 
-- **状态**：todo
+- **状态**：review
 - **里程碑**：M7
 - **依赖**：无。和 M7-01 互不依赖：本任务用 mock 开发，Swift 端的动作在 M7-01 里做。M7-03 依赖本任务
 - **分支**：task/M7-02
@@ -140,8 +140,21 @@
 ## 交付记录
 
 - **改动摘要**：
+  - 从 `origin/main` 的 `0d00352` 建立 `task/M7-02`。新增路径输入框、二次确认移除按钮、拖入提示层和空列表文案，样式按定稿同步，只更新指定的 6 个 token。
+  - `bridge.js` 复用配置校验处理 `config`，严格校验 `projectDrop` 并为每次接收创建独立对象，确保相同结果连续推送仍通知组件；初始值放在 `store.js` 的 `initialState`。
+  - 组件只等待配置推送更新项目，覆盖回复早于/晚于推送两种顺序；清理计时器、监听和迟到回复，保留项目选择、应用高亮与待办联动。
+  - mock 增删项目、生成 id、投射公开配置、重新映射待办，并支持测试用 `dropFolders`。
 - **自测结果**：
+  - 基线 PASS：`scripts/test-web.sh` 421/421。
+  - RED：先添加新测试再实现，467 项中 27 项按预期失败（旧组件和 transport 尚无 M7 行为），440 项通过。
+  - 最终全量 PASS：`scripts/test-web.sh` 468/468，0 FAIL / 0 SKIP。此前唯一失败为 store 固定字段清单缺少 `projectDrop`；经用户确认仅补该项后重新执行全量通过。
+  - 项目组件 28/28 PASS；独立只读审查运行 projects / bridge / mock / linkage 合计 202/202 PASS，未发现阻塞的新缺陷。
+  - 项目 CSS 定稿 `diff -B` 无输出；6 个 token 数值和注释与定稿一致；`--avatar-ring` 数量为 0；`git diff --check` PASS。未改 `linkage.test.mjs`。
+  - 浏览器 mock 实测：`~/Desktop/test` 回车添加、连续两次点 × 移除、`/etc/hosts` 显示指定范围错误，均 PASS；控制台 error 为 0，仅有预期 `outside-home` 警告。截图 `/tmp/desktop-shell-m7-02-browser.jpg`。本地预览启动曾受 sandbox 的端口限制，获环境批准后启动成功。
+  - 未运行原生应用、未修改真实配置或磁盘项目。原生拖入在 M7-03 验证；完整视觉定稿对照仍由 Claude Code 复验。
 - **疑问 / 偏离**：
+  - 2026-10-21 用户明确批准范围扩展“同意，仅补这一项”：仅在 `Tests/web/store.test.mjs` 第 6 行的初始字段预期增加 `projectDrop`，未作其他改动。最终改动范围检查通过（任务允许文件加此单行例外），交付状态为 `review`；只提交并推送 `task/M7-02`，不合并 `main`。
+  - 当前 `main.js` 的 bridge/mock 不是 window 全局入口，因此按任务明确允许的分支仅在测试使用 `mock.dropFolders`，没有新增全局调试 API。helper 同步发送 hover 和结果，自动测试覆盖状态变化，不将它计为浏览器可见拖入动画验证。
 
 <!-- ===== 以下由 Claude Code 填写 ===== -->
 
