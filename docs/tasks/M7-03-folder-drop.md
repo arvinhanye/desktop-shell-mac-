@@ -1,6 +1,6 @@
 # M7-03: 把文件夹拖到项目卡片上添加（原生拖放）
 
-- **状态**：review
+- **状态**：done
 - **里程碑**：M7
 - **依赖**：M7-01（`AppState.addProject`、`PageEvent` 的写法）和 M7-02（`data-drop`、`projectDrop` 的网页处理）都合并到 `main` 之后再开始
 - **分支**：task/M7-03
@@ -156,5 +156,32 @@
 
 ## 审查记录
 
-- **结论**：
-- **意见**：
+- **结论**：通过（2026-10-21，Claude Code），合并到 `main`。M7 的桌面验收（含 M7-01、M7-02）在这里一起完成，M7 完成。
+- **可执行的检查**（在 `3e77259` 的临时检出里实际运行）：
+  - `swift build`：0 个警告。
+  - `scripts/test.sh`：254/254 通过。
+  - `scripts/test-web.sh`：474/474 通过。
+  - `grep -n "\.move" Sources/DesktopShell/WebContainer.swift`：没有输出。
+  - 改动范围：任务单允许的文件，加上用户同意的 `glass-regions.test.mjs` 一行（入口测试里隔离 `drop-regions.js`）。
+- **代码核对**：
+  - **拖放方法**：`FileDropWebView` 改写了全部拖放方法，不调用 `super`。只有满足三个条件才接受，返回 `.copy`：拖放剪贴板里有文件 URL、目标是本窗口、光标在拖入区域里。路径只交给 `AppState.addProject`，网页只收到 `id` / `name`。
+  - **点击穿透**：`HitTestController` 按下时记下 `changeCount`。按住期间只有拖文件才按拖入区域切换，普通拖动和框选保持原状态，没有轮询。
+  - **清理**：页面重新加载、窗口关闭、区域被清空时，都会撤掉悬停提示。
+- **桌面验收**（主仓库的 `build/DesktopShell.app`，07:44:59 启动；先备份了 `config.json`；用户操作，Claude Code 对照日志、`config.json` 和磁盘）：
+
+  | 验收项 | 证据 | 结果 |
+  |---|---|---|
+  | 输入框添加 | 08:04:00 `added id=cs61a-master path=~/Desktop/CS61A-master`；`config.json` 多了这一项，`apps` 为 `["cursor"]`、`tags` 为空 | 通过 |
+  | 用 Cursor 打开新项目 | 08:04:14 `openProjectWith cs61a-master cursor ok` | 通过 |
+  | 输入框报错 | `not-found`、`duplicate`、`not-directory` 都有日志。`/etc`：用户在英文输入法下打，确认显示"只能添加个人文件夹（~）里的文件夹"（Claude Code 另用这次的代码直接核对，`/etc` → `outsideHome`） | 通过 |
+  | 一次拖两个文件夹 | 08:20:30 `drop: folders=2 added=2`（`6.096 introduction to c++` → id `6-096-introduction-to-c`；纯中文名 `我的思想报告` → id `project`），"已添加 2 个项目" | 通过 |
+  | 拖一个文件夹 | 08:20:53 `added id=2026 path=~/Desktop/2026_糖尿病_项目` | 通过 |
+  | 拖一个文件 | 08:20:41 `rejected code=not-directory`，`drop: folders=1 added=0` | 通过 |
+  | 被拖的文件夹不动 | 三个被拖的文件夹都还在桌面原处 | 通过 |
+  | 穿过卡片、框选 | 用户目测照常 | 通过 |
+  | 移除 | 08:23:11 `removed id=project`、08:23:18 `removed id=2026`；`config.json` 里没有了，两个文件夹都还在 | 通过 |
+  | 收尾 | 用户决定保留当前配置（DesktopShell、CS61A-master、6.096 introduction to c++），不恢复备份 | — |
+
+- **意见**（都另开了任务，不阻塞本任务）：
+  - **复制粘贴**：用户发现输入框不能复制粘贴。原因是应用没有"编辑"菜单，⌘V 等快捷键没有人分派，从 M3-08 起就这样。另开 M7-04 修。
+  - **全角符号**：用中文输入法打路径时，容易打出全角的"～""／"，结果提示"找不到这个文件夹"，容易误导。用户同意修：路径开头的全角符号当成半角处理。另开 M7-05。
