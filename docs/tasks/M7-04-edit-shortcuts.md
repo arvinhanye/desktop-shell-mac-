@@ -130,5 +130,22 @@ enum EditMenu {
 
 ## 审查记录
 
-- **结论**：
-- **意见**：
+- **审查者**：Codex（独立会话，2026-10-21；未参与实现）
+- **审查对象**：`main...task/M7-04`，基线 `00268d0`，实现提交 `4d19d6d`。
+- **结论**：通过。代码审查、自动复验和用户桌面手动验收均通过，未发现需退回的缺陷。用户已明确同意提交审查记录、合并到 `main` 并推送 `origin`。
+- **复验结果**：
+  - 在独立临时检出中执行，未改业务代码、未启动临时应用、未操作登录项。
+  - `swift build` PASS，无编译错误或警告。
+  - `scripts/test.sh` PASS：256 tests / 28 suites。
+  - `scripts/test-web.sh` PASS：474/474，0 FAIL / 0 SKIP。
+  - `scripts/bundle.sh` PASS：release 构建、plist 校验、固定证书签名和 designated requirement 验证均成功。
+  - `git diff --check` 和文件范围检查 PASS：4 个变更文件均在允许范围内，任务需求部分未改动。
+  - 审阅覆盖 4/4 文件，0 跳过。OCR delegate 用于文件与规则解析；另行完整检查其默认排除的测试和任务单。菜单顺序、selector、快捷键、修饰键、nil target、MainActor 隔离及启动接线符合任务要求；状态栏菜单、Bridge 白名单、网页和窗口焦点逻辑保持原样。
+- **桌面验收与证据**：
+  - 用户针对完整清单回复“通过”：项目和待办输入框 ⌘V；⌘A / ⌘C / ⌘X / ⌘Z / ⇧⌘Z；跨应用复制粘贴；中文拼音候选框和上屏；失焦后不误贴；Esc 交还键盘；前台应用菜单栏保持原样。
+  - 审查者补充核对：运行日志显示加载主仓库 `/Users/arvinhan/Desktop/desktop-shell/build/DesktopShell.app/Contents/Resources/web`，同一进程记录了 5 组 `focusInput ok` / `blurInput ok`。日志仅佐证运行来源和焦点消息，快捷键内容及中文候选框结果以用户实测为依据。
+  - 主仓库应用二进制含 `EditMenu.makeMainMenu`，`LSUIElement=true`，designated requirement 使用既定固定证书。沙盒内签名校验曾返回 `CSSMERR_TP_NOT_TRUSTED`；在正常钥匙串访问环境重验通过（`valid on disk` / `satisfies its Designated Requirement`），未修改证书或信任设置。
+  - 主菜单方案桌面验收通过，无需第 3 节后备分派。
+- **流程记录**：
+  - 首次提交并推送命令因授权确认被权限审核拦截，未执行；用户随后明确同意提交、合并和推送。获取远端后确认 `main` 与 `origin/main`、`task/M7-04` 与对应远端分支分别一致。
+  - 自动复验日志：`/private/tmp/m7-04-review-build.log`、`/private/tmp/m7-04-review-tests.log`、`/private/tmp/m7-04-review-web.log`、`/private/tmp/m7-04-review-bundle.log`。
