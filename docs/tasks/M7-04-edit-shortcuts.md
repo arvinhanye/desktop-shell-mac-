@@ -1,6 +1,6 @@
 # M7-04: 输入框支持复制、粘贴等编辑快捷键
 
-- **状态**：review
+- **状态**：done
 - **里程碑**：M7
 - **依赖**：无。只改 `AppDelegate.swift` 和一个新文件，和 M7-03 的文件不冲突，前后都行
 - **分支**：task/M7-04
@@ -148,4 +148,5 @@ enum EditMenu {
   - 主菜单方案桌面验收通过，无需第 3 节后备分派。
 - **流程记录**：
   - 首次提交并推送命令因授权确认被权限审核拦截，未执行；用户随后明确同意提交、合并和推送。获取远端后确认 `main` 与 `origin/main`、`task/M7-04` 与对应远端分支分别一致。
+  - 审查记录提交为 `1d23f8b`，已按 `--no-ff` 合并到 `main`。合并结果的业务代码、测试和脚本与已审任务分支一致；再次执行 `scripts/test.sh` 256/256 PASS、`scripts/test-web.sh` 474/474 PASS，状态设为 `done`。合并后复验日志为 `/private/tmp/m7-04-merged-tests.log` 和 `/private/tmp/m7-04-merged-web.log`。
   - 自动复验日志：`/private/tmp/m7-04-review-build.log`、`/private/tmp/m7-04-review-tests.log`、`/private/tmp/m7-04-review-web.log`、`/private/tmp/m7-04-review-bundle.log`。
