@@ -33,6 +33,8 @@ final class WidgetWindow: NSPanel {
     override var canBecomeMain: Bool { false }
     private(set) var safeAreaInsets = SafeAreaInsets(top: 0, right: 0, bottom: 0, left: 0)
     private(set) var hitRegions: [CGRect] = []
+    private(set) var dropRegions: [CGRect] = []
+    var onDropRegionsChanged: (() -> Void)?
     var onHitRegionsChanged: (() -> Void)?
     var onPageLoaded: (() -> Void)? {
         get { webContainer.onPageLoaded }
@@ -97,6 +99,14 @@ final class WidgetWindow: NSPanel {
         onHitRegionsChanged?()
     }
 
+    func setDropRegions(_ regions: [CGRect]) {
+        dropRegions = regions
+        webContainer.refreshDropHover()
+        onDropRegionsChanged?()
+    }
+
+    func cancelFileDrop() { webContainer.cancelFileDrop() }
+
     func setGlassRegions(_ regions: [GlassRegion]) {
         glassLayer.update(regions)
         if glassRegionCount != regions.count {
@@ -113,6 +123,8 @@ final class WidgetWindow: NSPanel {
 
     override func close() {
         onHitRegionsChanged = nil
+        onDropRegionsChanged = nil
+        setDropRegions([])
         setGlassRegions([])
         webContainer.stop()
         super.close()

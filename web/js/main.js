@@ -1,6 +1,7 @@
 import { store } from './store.js';
 import { createBridge } from './bridge.js';
 import { mountWidgets } from './widgets.js';
+import { installDropRegions } from './drop-regions.js';
 import { installHitRegions } from './hit-regions.js';
 import { installGlassRegions } from './glass-regions.js';
 import { installKeyboardFocus } from './keyboard-focus.js';
@@ -12,9 +13,11 @@ document.addEventListener('dragstart', event => {
   if (!event.target.closest?.('input, textarea, [contenteditable="true"]')) event.preventDefault();
 });
 const hitRegions = installHitRegions({ send: regions => bridge.send('setHitRegions', { regions }) });
+const dropRegions = installDropRegions({ send: regions => bridge.send('setDropRegions', { regions }) });
 store.subscribe('safeArea', insets => {
   for (const edge of ['top', 'right', 'bottom', 'left']) document.documentElement.style.setProperty(`--safe-${edge}`, `${insets[edge]}px`);
   hitRegions.schedule();
+  dropRegions.schedule();
 }, { immediate: true });
 store.subscribe('phase', phase => {
   if (['morning', 'day', 'evening', 'night'].includes(phase)) document.documentElement.dataset.phase = phase;

@@ -124,6 +124,7 @@ test('glass: main installs only natively, enables translucent tokens only after 
       './bridge.js': 'export const createBridge = () => globalThis.__glassMainFixture.bridge;',
       './widgets.js': 'export const mountWidgets = async () => {};',
       './hit-regions.js': 'export const installHitRegions = () => ({schedule(){}});',
+      './drop-regions.js': 'export const installDropRegions = () => ({schedule(){}});',
       './keyboard-focus.js': 'export const installKeyboardFocus = () => {};',
     };
     const entryURL = new URL(`../../web/js/main.js?glass-test=${mode}`, import.meta.url).href;

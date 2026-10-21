@@ -212,3 +212,31 @@ extension PageEventTests {
         #expect(replay.last?["paused"] as? Bool == true)
     }
 }
+
+extension PageEventTests {
+    @Test("projectDrop 悬停和结果均可 JSON 序列化，只有公开字段，不进入重载缓存")
+    func projectDrop() throws {
+        let project = AppConfig.Project(id: "folder", name: "文件夹", path: "/private/source", tags: [], apps: [])
+        let outcome = FileDropTracking.dropOutcome(results: [.success(project), .failure(.duplicate)])
+        for event in [PageEvent.projectDrop(over: true), PageEvent.projectDrop(over: false),
+                      PageEvent.projectDrop(over: false, result: outcome),
+                      PageEvent.projectDrop(over: false, result: FileDropTracking.dropOutcome(results: []))] {
+            #expect(Set(event.keys) == ["event", "over", "result"])
+            #expect(event["event"] as? String == "projectDrop")
+            #expect(event["over"] is Bool)
+            #expect(JSONSerialization.isValidJSONObject(event))
+            let data = try JSONSerialization.data(withJSONObject: event)
+            #expect(!String(decoding: data, as: UTF8.self).contains("/private/source"))
+            var cache = PageEventCache(); cache.remember(event)
+            #expect(cache.replay(safeArea: .init(top: 0, right: 0, bottom: 0, left: 0)).count == 1)
+        }
+        #expect(PageEvent.projectDrop(over: true)["result"] is NSNull)
+        let result = try #require(PageEvent.projectDrop(over: false, result: outcome)["result"] as? [String: Any])
+        #expect(Set(result.keys) == ["added", "error"])
+        #expect(result["error"] as? String == "duplicate")
+        let added = try #require(result["added"] as? [[String: String]])
+        #expect(added == [["id": "folder", "name": "文件夹"]])
+        let empty = try #require(PageEvent.projectDrop(over: false, result: FileDropTracking.dropOutcome(results: []))["result"] as? [String: Any])
+        #expect(empty["error"] is NSNull && (empty["added"] as? [[String: String]]) == [])
+    }
+}

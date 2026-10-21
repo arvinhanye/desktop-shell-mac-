@@ -97,6 +97,17 @@ final class Bridge: NSObject, WKScriptMessageHandlerWithReply {
             }
             window.setGlassRegions(GlassRegions.clip(regions, viewport: webView.bounds.size))
             replyHandler(nil, nil)
+        case .success(.setDropRegions(let values)):
+            guard let window, let webView = message.webView else {
+                reject(.failed, action: action, replyHandler: replyHandler)
+                return
+            }
+            guard let regions = HitTesting.parseRegions(values, viewport: webView.bounds.size) else {
+                reject(.invalid, action: action, replyHandler: replyHandler)
+                return
+            }
+            window.setDropRegions(regions)
+            replyHandler(nil, nil)
         case .success(.setHitRegions(let values)):
             guard let window, let webView = message.webView else {
                 reject(.failed, action: action, replyHandler: replyHandler)

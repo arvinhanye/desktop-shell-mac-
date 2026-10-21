@@ -2,7 +2,7 @@ import WebKit
 
 @MainActor
 final class WebContainer: NSObject, WKNavigationDelegate, WKUIDelegate {
-    let webView: WKWebView
+    let webView: FileDropWebView
     private let bridge: Bridge
     var onPageLoaded: (() -> Void)?
     private var pageGeneration = UUID()
@@ -17,8 +17,11 @@ final class WebContainer: NSObject, WKNavigationDelegate, WKUIDelegate {
             forURLScheme: "shell"
         )
         configuration.userContentController.addScriptMessageHandler(WeakScriptMessageHandler(bridge), contentWorld: .page, name: "shell")
-        webView = WKWebView(frame: .zero, configuration: configuration)
+        webView = FileDropWebView(frame: .zero, configuration: configuration)
         super.init()
+        webView.addProject = { [appState] path in appState.addProject(path: path) }
+        webView.sendDrop = { [weak self] event in self?.send(event) }
+        webView.registerForDraggedTypes([.fileURL])
 
         webView.setValue(false, forKey: "drawsBackground")
         webView.underPageBackgroundColor = .clear
@@ -32,6 +35,7 @@ final class WebContainer: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     func bind(to window: WidgetWindow) {
         bridge.window = window
+        webView.dropWindow = window
         reload()
     }
 
@@ -43,7 +47,12 @@ final class WebContainer: NSObject, WKNavigationDelegate, WKUIDelegate {
         }
     }
 
+    func refreshDropHover() { webView.refreshDropHover() }
+    func cancelFileDrop() { webView.cancelFileDrop() }
+
     func reload() {
+        bridge.window?.setDropRegions([])
+        webView.cancelFileDrop()
         resetDeliveryLog()
         webView.load(URLRequest(url: URL(string: "shell://app/index.html")!))
     }
@@ -55,6 +64,7 @@ final class WebContainer: NSObject, WKNavigationDelegate, WKUIDelegate {
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         bridge.window?.setGlassRegions([])
+        bridge.window?.setDropRegions([])
         resetDeliveryLog()
     }
 
@@ -80,6 +90,10 @@ final class WebContainer: NSObject, WKNavigationDelegate, WKUIDelegate {
     }
 
     func stop() {
+        webView.cancelFileDrop()
+        webView.dropWindow = nil
+        webView.addProject = nil
+        webView.sendDrop = nil
         onPageLoaded = nil
         resetDeliveryLog()
         webView.stopLoading()
@@ -116,4 +130,69 @@ final class WebContainer: NSObject, WKNavigationDelegate, WKUIDelegate {
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         Log.error("DesktopShell: navigation failed: \(String(describing: error))")
     }
+}
+
+// Never pass external drags to WebKit: it would otherwise navigate to the file
+// or deliver its path to page JavaScript. Only public project summaries leave here.
+@MainActor
+final class FileDropWebView: WKWebView {
+    weak var dropWindow: WidgetWindow?
+    var addProject: ((String) -> Result<AppConfig.Project, BridgeError>)?
+    var sendDrop: (([String: Any]) -> Void)?
+    private var isOver = false
+
+    private func accepts(_ sender: NSDraggingInfo) -> Bool {
+        guard let window = dropWindow, sender.draggingDestinationWindow === window,
+              addProject != nil,
+              sender.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) else { return false }
+        return FileDropTracking.isInDropRegion(mouse: window.convertPoint(toScreen: sender.draggingLocation),
+            windowFrame: window.frame, regions: window.dropRegions)
+    }
+
+    private func updateHover(_ sender: NSDraggingInfo) -> NSDragOperation {
+        let over = accepts(sender)
+        if over != isOver {
+            isOver = over
+            sendDrop?(PageEvent.projectDrop(over: over))
+        }
+        return over ? .copy : []
+    }
+
+    func cancelFileDrop() {
+        guard isOver else { return }
+        isOver = false
+        sendDrop?(PageEvent.projectDrop(over: false))
+    }
+
+    func refreshDropHover() {
+        guard let window = dropWindow,
+              FileDropTracking.isInDropRegion(mouse: NSEvent.mouseLocation, windowFrame: window.frame, regions: window.dropRegions) else {
+            cancelFileDrop()
+            return
+        }
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation { updateHover(sender) }
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation { updateHover(sender) }
+    override func draggingExited(_ sender: NSDraggingInfo?) { cancelFileDrop() }
+    override func draggingEnded(_ sender: NSDraggingInfo) { cancelFileDrop() }
+    override func wantsPeriodicDraggingUpdates() -> Bool { false }
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool { updateHover(sender) == .copy }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard accepts(sender), let addProject,
+              let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self],
+                options: [.urlReadingFileURLsOnly: true]) as? [URL], !urls.isEmpty else {
+            cancelFileDrop()
+            return false
+        }
+        let results = urls.map { addProject($0.path) }
+        let outcome = FileDropTracking.dropOutcome(results: results)
+        isOver = false
+        sendDrop?(PageEvent.projectDrop(over: false, result: outcome))
+        Log.notice("DesktopShell drop: folders=\(urls.count) added=\(outcome.added.count) rejected=\(urls.count - outcome.added.count)")
+        return true
+    }
+
+    override func concludeDragOperation(_ sender: NSDraggingInfo?) { cancelFileDrop() }
 }

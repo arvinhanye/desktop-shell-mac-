@@ -36,6 +36,7 @@ enum BridgeRequest: Equatable {
     case addTodo(text: String, projectId: String?)
     case setTodoDone(id: String, done: Bool)
     case setHitRegions([[Double]])
+    case setDropRegions([[Double]])
     case setGlassRegions([GlassRegion])
     case openProject(String)
     case addProject(path: String)
@@ -105,13 +106,15 @@ enum BridgeRequest: Equatable {
             guard Set(body.keys) == ["action", "regions"],
                   let regions = GlassRegions.parse(body["regions"]) else { return .failure(.invalid) }
             return .success(.setGlassRegions(regions))
-        case "setHitRegions":
+        case "setHitRegions", "setDropRegions":
             // Validate with the existing parser, but retain raw coordinates until the
             // receiving web view's actual viewport is available for clipping.
             guard Set(body.keys) == ["action", "regions"],
                   HitTesting.parseRegions(body["regions"], viewport: .zero) != nil,
-                  let rows = body["regions"] as? [[NSNumber]] else { return .failure(.invalid) }
-            return .success(.setHitRegions(rows.map { $0.map(\.doubleValue) }))
+                  let rows = body["regions"] as? [[NSNumber]],
+                  action != "setDropRegions" || rows.count <= 8 else { return .failure(.invalid) }
+            let values = rows.map { $0.map(\.doubleValue) }
+            return .success(action == "setDropRegions" ? .setDropRegions(values) : .setHitRegions(values))
         default:
             return .failure(.unknownAction)
         }
@@ -180,6 +183,14 @@ enum ConfigReply {
 }
 
 enum PageEvent {
+    static func projectDrop(over: Bool, result: FileDropTracking.Outcome? = nil) -> [String: Any] {
+        let payload: Any = result.map { outcome -> [String: Any] in
+            ["added": outcome.added.map { ["id": $0.id, "name": $0.name] },
+             "error": outcome.error.map { $0.rawValue as Any } ?? NSNull()]
+        } ?? NSNull()
+        return ["event": "projectDrop", "over": over, "result": payload]
+    }
+
     static func config(_ config: AppConfig, iconIDs: Set<String>) -> [String: Any] {
         ["event": "config", "config": ConfigReply.makeConfig(config, iconIDs: iconIDs)]
     }
