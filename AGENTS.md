@@ -146,6 +146,7 @@
   - 网页通过 bridge 动作 `setHitRegions` 上报所有可交互组件的矩形（CSS 像素，相对网页左上角，组件布局变化时重新上报）。
   - Swift 用 `NSEvent` 的全局和本地监听（鼠标移动、拖动、松开）跟踪光标：光标在某个区域内时 `WidgetWindow.ignoresMouseEvents = false`，否则为 `true`，点击落到访达图标上。不需要任何系统权限。
   - **按住鼠标期间不切换**（`NSEvent.pressedMouseButtons != 0`），松开后再重新判断，避免打断拖动和框选。
+  - **例外：拖文件时**（M7，2026-10-21 定）：按下鼠标时记下拖放剪贴板（`NSPasteboard(name: .drag)`）的 `changeCount`；按住期间如果它变了、并且里面有文件 URL，就说明用户在拖文件，这时光标进入网页上报的"拖入区域"（`setDropRegions`）就让 WidgetWindow 接收鼠标，离开就恢复穿透。框选、拖窗口这类拖动不会改拖放剪贴板，照旧不切换。2026-10-21 拖入探针实测：桌面文件夹拖进来 3/3 收到；拖动期间全局鼠标事件照常到达（每次 28–86 个），不需要轮询；框选多次都没有被当成拖文件；被拖的文件夹都留在原处。
 - 点在组件之外的空白处：交给访达（选择图标、框选、右键菜单），我们不做任何事。**点击语音改为点击角色卡头像触发**。
 - **隐藏桌面文件**（菜单栏勾选项，用来单纯欣赏壁纸）：把 VideoWindow 升到图标层 **+3**（与 WidgetWindow 同层，排在它下面，图标和系统小组件一起被盖住），VideoWindow **始终 `ignoresMouseEvents = true`**；同时关闭点击穿透，让最上面的 WidgetWindow **接住全部点击**，空白处的点击落在网页透明背景上，什么都不发生，不会点到看不见的图标。取消时恢复图标层 −1 并重新打开点击穿透。**不修改访达设置、不重启访达**。选择保存在 `ui.json` 的 `desktopIconsHidden`，重启后保持。（2026-10-17 实测教训：同层窗口被点击时 macOS 会把它提到同层最前面。让 VideoWindow 接收点击会盖住组件；点击后再重排又会闪烁。所以 VideoWindow 永远不接收点击。）网页要禁用右键菜单（`contextmenu` 事件 `preventDefault`），否则空白处右键会弹出 WKWebView 自带的菜单。
 - 需要输入文字的组件（待办输入框等）：WidgetWindow 的 `canBecomeKey` 只在网页文本输入框获得焦点期间为 `true`。网页在文本输入框获得焦点时发 `focusInput`，Swift 调用 `makeKey()` 并把网页设为第一响应者（不激活应用）；失去焦点或按 Esc 时发 `blurInput`，Swift 恢复为不能成为 key，如果仍是 key window 就调用 `NSApp.deactivate()`，键盘回到原来的应用。**不调用 `NSApp.activate`。**
@@ -175,7 +176,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 
 **通信方式**（M3 定，2026-10-17）：
 
-- 网页 → Swift：Swift 用 `WKScriptMessageHandlerWithReply` 注册，`postMessage` 返回 Promise。每条消息 Swift 都回复且只回复一次：成功时 resolve 为回复值（多数动作是 `null`），失败时 reject，错误的 `message` 是以下错误码之一：`untrusted`（来源不对）、`invalid`（格式不对）、`unknown-action`（不在白名单或尚未实现）、`not-found`（id 在配置或素材里查不到）、`failed`（系统调用失败）。
+- 网页 → Swift：Swift 用 `WKScriptMessageHandlerWithReply` 注册，`postMessage` 返回 Promise。每条消息 Swift 都回复且只回复一次：成功时 resolve 为回复值（多数动作是 `null`），失败时 reject，错误的 `message` 是以下错误码之一：`untrusted`（来源不对）、`invalid`（格式不对）、`unknown-action`（不在白名单或尚未实现）、`not-found`（id 在配置或素材里查不到，或要添加的路径不存在）、`failed`（系统调用失败）；`addProject` 另有 `not-directory`（不是文件夹）、`outside-home`（不在个人目录里）、`duplicate`（已经是项目了）。
 - 除 `action` 外**只允许下表列出的参数**，多出任何键都算 `invalid`；所有 id 参数必须是只含字母、数字、`_`、`-` 的非空字符串。
 - Swift → 网页：用 `callAsyncJavaScript("window.shell?.receive?.(event)", arguments: ["event": …])` 传参，**不拼接 JS 字符串**。事件是平铺的对象，`event` 字段是事件名，例如 `{event: "paused", paused: true}`。
 - 每次页面加载完成（含重新加载、新接入的屏幕），Swift 给该页面重推 `safeArea`、`paused`、`uiState`、`systemStats`、`todos` 的最新值。
@@ -195,11 +196,16 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 | `focusInput` / `blurInput` | — | 网页的文本输入框获得 / 失去焦点时发送。`focusInput`：该窗口允许成为 key window 并 `makeKey()`，不激活应用；`blurInput`：恢复为不能成为 key，如果仍是 key window 就 `NSApp.deactivate()`。做法见"窗口要求"和"技术探针" |
 | `setHitRegions` | `regions`：`[[x, y, w, h], …]`，CSS 像素，相对网页左上角 | 整体替换该窗口的可交互区域，用于点击穿透判断。只接受有限数值，最多 64 个，宽高必须为正，超出窗口的部分裁掉；格式不对就整条拒绝并记录日志 |
 | `setGlassRegions` | `regions`：`[[x, y, w, h, radius], …]`，CSS 像素，相对网页左上角 | 整体替换该窗口毛玻璃的位置（2026-10-18 增加）。校验同 `setHitRegions`，另外 `radius` 必须在 0 到宽高较小值的一半之间 |
+| `addProject` | `path`（非空字符串，最多 1024 个字符） | 把一个文件夹加成项目（M7，2026-10-21 增加）。**这是唯一允许传路径的动作**，见"安全要求"。Swift 展开 `~`、标准化、解析符号链接后核对：存在（否则 `not-found`）、是文件夹（否则 `not-directory`）、在个人目录（`~`）里且不是 `~` 本身（否则 `outside-home`）、还没有项目指向同一个文件夹（否则 `duplicate`）。新项目：`name` 是文件夹名，`id` 由名字生成（见"配置文件示例"），`tags` 为空，`apps` 为 `["cursor"]`（配置里没有 `cursor` 就为空），没有 `remindersList`。写回 `config.json` 后回复新项目（格式同 `getConfig` 里的一项），并向所有页面推送 `config` |
+| `removeProject` | `projectId` | 从 `config.json` 的 `projects` 里去掉这一项（M7）。**只改配置，绝不删除、移动磁盘上的文件夹**。查不到 → `not-found`。成功后回复 `null` 并推送 `config` |
+| `setDropRegions` | `regions`：`[[x, y, w, h], …]`，CSS 像素，相对网页左上角 | 整体替换该窗口接收文件夹拖入的区域（M7；目前只有项目卡片）。校验同 `setHitRegions`，最多 8 个 |
 
 **安全要求**：
 
 - Bridge 只处理来自 `shell://app` **主框架**的消息（校验 `message.frameInfo.isMainFrame`，以及 `securityOrigin` 的 scheme 为 `shell`、host 为 `app`），其他来源一律忽略并记录日志。
 - 网页**只传 id，不传路径或 bundle id**。真实路径和应用由 Swift 从 `config.json` 里查。这样即使网页被塞了坏代码，也只能打开配置里列出的东西。不提供任何执行 shell 命令的动作。
+- **唯一的例外是 `addProject` 的 `path`**（2026-10-21 用户同意）：用户在输入框里粘贴的路径要经过网页。范围用核对来限制：只能是个人目录里已经存在的文件夹，加进来以后能做的事和其他项目一样（在访达或配置里的应用里打开），不能执行、删除、移动任何东西。日志不写路径以外的用户内容，路径本身只在添加成功时写一行。
+- **拖入文件夹时路径不经过网页**：由 Swift 原生接住拖放（WKWebView 的拖放方法在 Swift 里改写，网页拿不到文件路径），拖放操作用"复制"（`NSDragOperation.copy`），访达不会移动被拖的文件夹。网页只收到推送事件 `projectDrop`（是否悬停、添加结果）。
 - URL 约定（同一个源）：`shell://app/<path>` 对应 `web/<path>`，`shell://app/media/<path>` 对应 `media/<path>`。
 - `shell://` URL scheme 处理器**只能读取两个根目录**：应用内的 `web/` 和运行时素材目录 `media/`。路径先标准化，再确认仍在根目录之内；包含 `..`、绝对路径、符号链接指向根目录之外的请求一律返回 404。
 
@@ -213,6 +219,8 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 | `uiState` | `avatarId`, `backgroundId`（为空时是 `null`）, `voiceEnabled` | 启动时、菜单栏切换语音开关时、外观保存后 |
 | `todos` | `access`（`granted` / `denied` / `notDetermined` / `restricted` / `writeOnly`）、`items: [{id, text, done, projectId, due}]`：所有列表的未完成提醒加上今天完成的；`projectId` 由列表对应的项目得出，没有就是 `null`；`due` 为 `{date: "YYYY-MM-DD", time: "HH:mm" 或 null}` 或 `null` | 启动时、提醒事项有变化时（含 iPhone 同步过来的改动） |
 | `audioSpectrum` | `bands`：每侧 12 个 0–1 的数值（左右两侧共用一组，由网页镜像显示） | 有声音时约 23 次/秒（48 kHz 时每 2048 帧一次）；静音、暂停或没有应用在放声音时不推送 |
+| `config` | `config`：格式同 `getConfig` 回复里的 `config` | 增删项目以后（M7）。菜单"重新加载"照旧是整页重新加载，不发这个事件 |
+| `projectDrop` | `over`：文件拖到拖入区域上方时为 `true`，离开或松开后为 `false`；`result`：拖放结束时为 `{added: [{id, name}], error}`（`error` 是第一个失败的错误码，没有失败就是 `null`），其余时候为 `null` | 拖入时（M7）。只发给正在被拖入的那块屏幕的页面 |
 
 电量用 IOKit（`IOPSCopyPowerSourcesInfo`），CPU 和内存用 `host_statistics` / `host_statistics64`。
 
@@ -252,6 +260,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 - 项目的 `remindersList`（可选）是系统提醒事项里一个列表的名字，按名字精确匹配；找不到时记录日志，当作没有配置。同名列表有多个时取第一个并记录日志。
 - `greetings` 按整点 `from` 升序排列，取不大于当前小时的最后一项；问候显示为 `"<title>，<user.name>"`，名字用强调色；没有 `user.name` 时只显示 `title`（2026-10-18 改定，原来是角色名）。默认文案取自美化包 `Skins/Ageo` 的配置。
 - `character.motto`（签名）显示在角色卡上名字的右边，可选，没有就不显示。
+- **在桌面上增删项目**（M7，2026-10-21 定）：项目卡片可以用输入框粘贴路径或把文件夹拖进来添加，行尾的 × 点两次从列表移除。这是应用唯一会改写 `config.json` 的地方：每次先从磁盘重新读一遍（不做启动时的过滤和排序），只增删 `projects` 里的一项，再整体写回（`prettyPrinted`、`sortedKeys`、`withoutEscapingSlashes`，原子写入）。读不出来（文件损坏）就拒绝，不覆盖用户的文件。手写在 `config.json` 里、结构体不认识的键会在写回时丢掉。新项目的 `path` 在个人目录里时写成 `~/…`。`id` 由文件夹名生成：ASCII 字母和数字转小写，其余字符变成 `-`，连续的 `-` 合并、去掉首尾的 `-`；结果为空（例如纯中文名）就用 `project`；和已有 id 重复时依次加 `-2`、`-3`…。增删以后提醒事项按新的项目对应关系重新推送 `todos`。
 - 同目录下的其他数据文件：`ui.json`（当前头像、背景图、语音开关、是否隐藏桌面文件）。待办存在系统提醒事项里，不另存文件。`ui.json` 由应用自己管理，缺少的字段用默认值，损坏时记录日志并使用默认值。
 
 ### 运行时素材目录
@@ -275,7 +284,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 视觉主题复刻《鸣潮》爱弥斯美化包（作者 Dr_Black），按 Mac 的实际情况调整。第一版共八个组件和两项功能：
 
 1. **时钟**：以大号衬线体的星期和日期为主（Mac 菜单栏已经显示时间）。同时负责计算当前时段，写入 `store.phase`：早晨 6–12 点、白天 12–18 点、傍晚 18–21 点、夜晚 21–6 点。
-2. **项目卡片**：列出 `config.projects`。点击卡片会选中它（写入 `store.selectedProject`）；每个项目有"访达"和"用 <应用> 打开"两个按钮（应用取项目 `apps` 里的第一个，例如 Cursor；没有就只有"访达"，M3.5 定）。
+2. **项目卡片**：列出 `config.projects`。点击卡片会选中它（写入 `store.selectedProject`）；每个项目有"访达"和"用 <应用> 打开"两个按钮（应用取项目 `apps` 里的第一个，例如 Cursor；没有就只有"访达"，M3.5 定）。M7 起可以在卡片上添加项目（输入框粘贴路径，或把文件夹拖到卡片上）和移除项目（只改配置）。
 3. **应用启动栏**：列出 `config.apps`，点击启动。
 4. **待办（系统提醒事项）**（2026-10-17 改定，原方案是自己存 `todos.json`）：直接读写系统"提醒事项"，和 iPhone 同步。显示所有列表的未完成提醒和今天完成的提醒，带到期时间的显示到期时间。可勾选完成、可新增（第一版只填文字，到期时间在 iPhone 上加），**不能删除**。项目通过配置里的 `remindersList` 对应一个列表。没有授权时显示提示，告诉用户去"系统设置 → 隐私与安全性 → 提醒事项"里允许。
 5. **系统状态**：电量、CPU、内存，外加一条 CPU 历史折线。
@@ -371,6 +380,8 @@ desktop-shell/
 │   ├── SpectrumAnalyzer.swift     # 采样 → 12 个 0–1 柱高（FFT、平滑、分频段；纯计算）
 │   ├── PlaybackMonitor.swift      # 监听有没有别的应用在放声音
 │   ├── LaunchAtLogin.swift        # 开机自启：SMAppService 状态 → 菜单勾选、点击动作（M6）
+│   ├── ProjectEditing.swift       # 增删项目：路径核对、id 生成、改写 config.json（M7，纯函数为主）
+│   ├── FileDropTracking.swift     # 判断是否在拖文件、拖入区域命中（M7，纯函数）
 │   └── ConfigStore.swift          # 读写 JSON
 ├── web/
 │   ├── index.html
@@ -382,6 +393,7 @@ desktop-shell/
 │   ├── js/mock.js                 # mock 数据和模拟事件（含 audioSpectrum）
 │   ├── js/widgets.js              # 组件注册与挂载
 │   ├── js/hit-regions.js          # 自动上报点击区域
+│   ├── js/drop-regions.js         # 自动上报拖入区域（带 data-drop 的元素，M7）
 │   ├── js/glass-regions.js        # 自动上报毛玻璃区域（底板和弹层）
 │   ├── js/scroll-hints.js         # 可滚动列表上下边缘的淡出提示
 │   ├── js/media.js                # 按 store.ui 选出头像、背景图的地址（角色卡、启动栏、外观面板共用）
@@ -485,6 +497,7 @@ desktop-shell/
 - **M5 联动**（2026-10-18 改定，原来是"实现并逐条验证"）：联动已在 M4 各组件里实现；M5 到桌面上按"联动规则"表逐条验证，发现问题再修补。
 - **M5.5 系统音频律动**：`AudioSpectrum.swift` 捕获系统声音、做频谱分析，推送 `audioSpectrum`，接上 M4 的律动组件；暂停和没有应用在放声音时不开捕获，静音时不推送；初始参数采用 Lano-Visualizer 的取值。
 - **M6 开机自启**：用 `SMAppService` 实现开机自启（在菜单栏里提供开关）。
+- **M7 项目管理**（2026-10-21 用户提出）：在桌面上添加项目（输入框粘贴路径、把文件夹拖到项目卡片上）和从列表移除项目（只改配置）。设计见 `docs/design/`（2026-10-21 定稿），规则见"配置文件示例""Bridge 接口""窗口要求"里标着 M7 的部分。
 
 ## 后续想法
 
@@ -527,7 +540,7 @@ desktop-shell/
 
 ## 不要做的事
 
-- 不做终端、不做文件管理器、不做任何删除或移动文件的功能；不删除系统提醒事项。
+- 不做终端、不做文件管理器、不做任何删除或移动文件的功能；不删除系统提醒事项。（M7 的"移除项目"只改 `config.json`，不碰文件夹。）
 - 不开放执行 shell 命令的 bridge 动作。
 - 不引入前端框架和构建工具，除非组件数量明显增加且用户同意。
 - 不修改用户的系统设置。

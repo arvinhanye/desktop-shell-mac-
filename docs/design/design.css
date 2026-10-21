@@ -128,6 +128,13 @@
 /* ==================== web/widgets/projects.css ==================== */
 [data-widget="projects"] { left: var(--column-2); top: var(--projects-top); width: var(--column-width); height: var(--projects-height); }
 .projects-card { display: flex; flex-direction: column; height: 100%; }
+.project-add { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); margin-bottom: var(--space-2); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-sm); background: var(--color-input-bg); }
+.project-add input { flex: 1; min-width: 0; border: 0; outline: none; background: none; color: var(--color-text); font: inherit; }
+.project-add input::placeholder { color: var(--color-text-faint); }
+.project-add:focus-within { border-color: var(--color-focus-ring); }
+.project-hint { margin: 0 0 var(--space-2); font-size: var(--text-sm); color: var(--color-text-faint); }
+.project-hint:empty { display: none; }
+.project-hint.error { color: var(--color-danger); }
 .project-list { display: grid; align-content: start; gap: var(--space-2); flex: 1; min-height: 0; }
 .project {
   position: relative; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: var(--space-2);
@@ -140,7 +147,16 @@
 .project.selected::before { content: ""; position: absolute; left: calc(-1 * var(--border-width)); top: var(--space-2); bottom: var(--space-2); width: var(--selected-bar-width); background: var(--color-selected-border); }
 .project-name { font-size: var(--text-lg); }
 .project-tags { display: flex; gap: var(--space-1); margin-top: var(--space-half); }
-.project-actions { display: flex; gap: var(--space-1); }
+.project-actions { display: flex; align-items: center; gap: var(--space-1); }
+.project-remove { display: grid; place-items: center; padding: var(--space-half) var(--space-1); border: var(--border-width) solid transparent; border-radius: var(--radius-sm); background: none; color: var(--color-text-faint); font-size: var(--text-sm); opacity: 0; transition: opacity var(--duration-fast) var(--ease-standard); }
+.project:hover .project-remove, .project:focus-within .project-remove, .project-remove.confirm { opacity: 1; }
+.project-remove:hover { color: var(--color-text); }
+.project-remove svg { width: var(--icon-sm); height: var(--icon-sm); display: block; }
+.project-remove.confirm { color: var(--color-danger); border-color: color-mix(in srgb, var(--color-danger) 50%, transparent); }
+.project-drop { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2); border-radius: inherit; background: var(--drop-fill); box-shadow: var(--glow-drop); color: var(--color-ice); font-size: var(--text-md); pointer-events: none; }
+.project-drop svg { width: var(--icon-lg); height: var(--icon-lg); }
+.projects-card.drop-target .project-drop { display: flex; }
+.projects-card.drop-target .card-head, .projects-card.drop-target .project-add, .projects-card.drop-target .project-hint, .projects-card.drop-target .project-list { opacity: var(--drop-dim-opacity); }
 
 /* ==================== web/widgets/todos.css（系统提醒事项） ==================== */
 [data-widget="todos"] { left: var(--column-2); top: var(--todos-top); bottom: calc(var(--launcher-bottom) + var(--launcher-height) + var(--column-gap)); width: var(--column-width); }

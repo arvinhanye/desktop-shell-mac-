@@ -75,8 +75,14 @@
 
         <section class="widget" data-widget="projects" aria-label="项目">
           <div class="card projects-card">
-            <div class="card-head"><h2 class="card-title">项目</h2></div>
+            <div class="card-head"><h2 class="card-title">项目</h2><span class="card-meta" id="project-meta"></span></div>
+            <label class="project-add"><span aria-hidden="true">＋</span><input id="project-input" type="text" placeholder="粘贴文件夹路径，或把文件夹拖进来" spellcheck="false" autocomplete="off"></label>
+            <p class="project-hint" id="project-hint"></p>
             <div class="project-list scroll-list" id="project-list"></div>
+            <div class="project-drop" aria-hidden="true">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" d="M3 6.5A1.5 1.5 0 0 1 4.5 5h4.6l2 2.2h8.4A1.5 1.5 0 0 1 21 8.7v9.8a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5Z"/><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" d="M12 10.5v6M9 13.5h6"/></svg>
+              <span>松开，添加为项目</span>
+            </div>
           </div>
         </section>
 
@@ -127,7 +133,7 @@
 
   <aside class="controls" aria-label="效果图控制">
     <div class="group"><span class="label">时段</span><button data-phase="morning">早晨</button><button data-phase="day">白天</button><button data-phase="evening">傍晚</button><button data-phase="night">夜晚</button></div>
-    <div class="group"><span class="label">状态</span><button id="toggle-select">选中项目</button><button id="toggle-lowbat">电量低</button><button id="toggle-paused">暂停</button><button id="toggle-denied">提醒事项未授权</button><button id="toggle-appearance">外观面板</button><button id="toggle-voice">播放语音</button></div>
+    <div class="group"><span class="label">状态</span><button id="toggle-select">选中项目</button><button id="toggle-lowbat">电量低</button><button id="toggle-paused">暂停</button><button id="toggle-denied">提醒事项未授权</button><button id="toggle-appearance">外观面板</button><button id="toggle-voice">播放语音</button><button id="toggle-drop">拖入项目</button></div>
     <div class="group"><span class="label">视图</span><button id="toggle-icons" aria-pressed="true">桌面图标</button><button id="toggle-actual">实际尺寸</button></div>
   </aside>
 </body>

@@ -43,7 +43,7 @@
 | 外观 | `avatarId` 为 `null` 或找不到 | 用 `media.avatars` 的第一张（按 id 排序后是 `1`）；一张都没有就不显示头像图 |
 | 外观 | `backgroundId` 为 `null` 或找不到 | 角色卡、启动栏不显示背景图（"恢复默认"就是这个效果） |
 | 项目卡片 | 打开失败（`openProject` / `openProjectWith` 被拒） | 卡片标题右边的 `.card-meta` 显示"没能打开"，3 秒后清空 |
-| 项目卡片 | `config.projects` 为空 | 列表里一行 `<p class="card-meta">`："还没有项目，在 config.json 的 projects 里添加" |
+| 项目卡片 | `config.projects` 为空 | 列表里一行 `<p class="card-meta">`："还没有项目，在 config.json 的 projects 里添加"（M7 起改成"还没有项目，在上面粘贴文件夹路径，或把文件夹拖进来"） |
 | 待办 | 还没收到第一次 `todos` 推送（`todosAccess` 为 `unknown`） | 输入框隐藏，列表空，不显示文字 |
 | 待办 | `notDetermined` | 输入框隐藏；`li.todo-denied`：`<strong>正在等待提醒事项权限</strong>在弹出的对话框里点「允许」` |
 | 待办 | `denied` / `restricted` / `writeOnly` | 输入框隐藏；`li.todo-denied`：`<strong>还不能读取提醒事项</strong>到「系统设置 → 隐私与安全性 → 提醒事项」里允许 DesktopShell`（效果图原文） |
@@ -51,6 +51,11 @@
 | 系统状态 | 还没收到 `systemStats`，或某项数值缺失 | 数值显示"—"，进度条为空，折线不画 |
 | 系统状态 | 电量 `level` 为 `null`（没有电池） | 电量数值"—"，小字为空，进度条为空 |
 | 系统状态 | 电量的小字 | 用电池："% 用电池"；接电源并在充电："% 充电中"；接电源没在充电："% 电源"（效果图原文是"用电池""电源"） |
+| 项目卡片（M7） | 添加成功（输入框回车或拖入） | 清空输入框；`#project-meta`（标题右边的 `.card-meta`）显示"已添加「名字」"，3 秒后清空；新项目排在列表最后，列表滚到底 |
+| 项目卡片（M7） | 添加被拒 | `.project-hint.error` 显示：`not-found` →"找不到这个文件夹"；`not-directory` →"这不是文件夹"；`outside-home` →"只能添加个人文件夹（~）里的文件夹"；`duplicate` →"这个文件夹已经是项目了"；其他错误 →"没能添加，请再试一次"。输入框内容变化或下一次添加成功后清除 |
+| 项目卡片（M7） | 一次拖入多个文件夹 | 逐个添加；成功的合并成一条"已添加 N 个项目"（只有一个时用"已添加「名字」"）；有失败的，`.project-hint.error` 显示第一个失败的原因 |
+| 项目卡片（M7） | 移除 | 行尾 `.project-remove`（×）第一次点：加 `.confirm`、文字换成"移除？"，3 秒内再点才移除，否则恢复成 ×；同一时间只有一行在确认状态；点它不会选中这一行。移除成功：`#project-meta` 显示"已移除「名字」，文件夹没有动"，3 秒后清空；被拒：`#project-meta` 显示"没能移除"，3 秒后清空 |
+| 项目卡片（M7） | 文件夹拖到卡片上方 | 卡片加 `.drop-target`，显示 `.project-drop`（"松开，添加为项目"）；离开或松开后去掉 |
 | 外观面板 | 保存失败（`saveUiState` 被拒） | 面板右上角按钮左边加一个 `.card-meta`，显示"保存失败，请再试一次"，3 秒后清空。**没有错误时这个元素设成 `hidden`**：空着也会多占一个间距、打乱标题和按钮的基线对齐（M4-07 审查时发现）；显示错误的 3 秒里按钮下移约 6 像素，可以接受 |
 
 ## 组件的共同写法（M4）
@@ -79,7 +84,8 @@ M4-03 到 M4-08 的每个组件都照这里写，任务单里不再重复。
 
 | 键 | 谁写 | 谁读 | 说明 |
 |---|---|---|---|
-| `ready`、`config`、`media`、`ui`、`todos`、`todosAccess`、`safeArea`、`paused`、`systemStats`、`audioSpectrum` | `bridge.js`（`getConfig` 回复和 Swift 推送） | 各组件、`main.js` | 组件**不写**这些键。换外观靠 `saveUiState`，之后 Swift 推送 `uiState` 更新 `ui` |
+| `ready`、`config`、`media`、`ui`、`todos`、`todosAccess`、`safeArea`、`paused`、`systemStats`、`audioSpectrum` | `bridge.js`（`getConfig` 回复和 Swift 推送） | 各组件、`main.js` | 组件**不写**这些键。换外观靠 `saveUiState`，之后 Swift 推送 `uiState` 更新 `ui`；增删项目后 Swift 推送 `config` 更新 `config`（M7） |
+| `projectDrop` | `bridge.js`（Swift 推送的 `projectDrop` 事件，M7） | 项目卡片 | `{ over: 布尔值, result: null 或 { added: [{id, name}], error: 错误码或 null } }`；`over` 为真时卡片显示拖入提示；`result` 只在一次拖放结束时带上，组件据此显示"已添加…"或错误提示 |
 | `phase` | 时钟 | `main.js`（设 `<html data-phase>`） | `morning` / `day` / `evening` / `night` |
 | `now` | 时钟 | 问候语、待办 | 当前这一分钟开始时的时间戳（毫秒），每分钟写一次；初始 `null`，读的一方遇到 `null` 按当前时间算 |
 | `selectedProject` | 项目卡片 | 待办、启动栏 | 项目 id 或 `null` |

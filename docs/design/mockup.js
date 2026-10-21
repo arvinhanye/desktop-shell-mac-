@@ -168,11 +168,72 @@ function renderProjects() {
       b.addEventListener('click', event => event.stopPropagation());
       actions.append(b);
     }
+    actions.append(removeButton(project));
     row.addEventListener('click', () => selectProject(project.id));
     list.append(row);
   }
   updateScrollHints(list);
 }
+
+// —— 添加和移除项目（2026-10-21）：输入框粘贴路径回车添加；把文件夹拖到卡片上添加；行尾 × 点两次移除（只改配置，不动文件夹） ——
+const REMOVE_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>';
+let confirmTimer = null;
+function removeButton(project) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'project-remove'; b.title = '从列表移除（不会删除文件夹）'; b.setAttribute('aria-label', `移除 ${project.name}`);
+  b.innerHTML = REMOVE_ICON;
+  b.addEventListener('click', event => {
+    event.stopPropagation();
+    if (!b.classList.contains('confirm')) {
+      // 第一次点：变成"移除？"，3 秒内再点一次才移除；同一时间只有一行处在确认状态
+      document.querySelectorAll('.project-remove.confirm').forEach(other => { other.classList.remove('confirm'); other.innerHTML = REMOVE_ICON; });
+      b.classList.add('confirm'); b.textContent = '移除？';
+      clearTimeout(confirmTimer);
+      confirmTimer = setTimeout(() => { b.classList.remove('confirm'); b.innerHTML = REMOVE_ICON; }, 3000);
+      return;
+    }
+    clearTimeout(confirmTimer);
+    config.projects = config.projects.filter(p => p.id !== project.id);
+    if (state.selectedProject === project.id) state.selectedProject = null;
+    flashMeta(`已移除「${project.name}」，文件夹没有动`);
+    renderProjects(); renderTodos(); renderLauncher();
+  });
+  return b;
+}
+let metaTimer = null;
+function flashMeta(text) {
+  $('project-meta').textContent = text;
+  clearTimeout(metaTimer); metaTimer = setTimeout(() => { $('project-meta').textContent = ''; }, 3000);
+}
+function setProjectHint(text, error = false) { $('project-hint').textContent = text; $('project-hint').classList.toggle('error', error); }
+// 效果图里没有真的文件系统，用几条规则模拟 Swift 的核对结果
+function mockAddProject(path) {
+  const clean = path.trim().replace(/\/+$/, '');
+  if (!clean) return;
+  if (!/^(~|\/Users\/[^/]+)(\/|$)/.test(clean)) return setProjectHint('只能添加个人文件夹（~）里的文件夹', true);
+  if (/\.[a-z0-9]{1,5}$/i.test(clean)) return setProjectHint('这不是文件夹', true);
+  if (/不存在|missing/.test(clean)) return setProjectHint('找不到这个文件夹', true);
+  const name = clean.split('/').pop() || clean;
+  if (config.projects.some(p => p.path === clean || p.name === name)) return setProjectHint('这个文件夹已经是项目了', true);
+  config.projects.push({ id: `p${Date.now()}`, name, path: clean, tags: [], apps: ['cursor'], hasReminders: false });
+  setProjectHint(''); flashMeta(`已添加「${name}」`);
+  $('project-input').value = '';
+  renderProjects(); renderLauncher();
+  const list = $('project-list'); list.scrollTop = list.scrollHeight; updateScrollHints(list);
+}
+$('project-input').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.isComposing) mockAddProject(event.target.value); });
+$('project-input').addEventListener('input', () => setProjectHint(''));
+// 拖入：效果图在浏览器里只拿得到文件夹的名字；正式版由 Swift 原生接住拖放，路径不经过网页
+const projectsCard = document.querySelector('.projects-card');
+const setDropTarget = on => { projectsCard.classList.toggle('drop-target', on); press('toggle-drop', on); };
+projectsCard.addEventListener('dragover', event => { event.preventDefault(); setDropTarget(true); });
+projectsCard.addEventListener('dragleave', event => { if (!projectsCard.contains(event.relatedTarget)) setDropTarget(false); });
+projectsCard.addEventListener('drop', event => {
+  event.preventDefault(); setDropTarget(false);
+  const name = event.dataTransfer.files[0]?.name;
+  if (name) mockAddProject(`~/Desktop/${name}`);
+});
+$('toggle-drop').addEventListener('click', () => setDropTarget(!projectsCard.classList.contains('drop-target')));
 function selectProject(id) {
   state.selectedProject = state.selectedProject === id ? null : id;
   $('toggle-select').setAttribute('aria-pressed', String(Boolean(state.selectedProject)));
