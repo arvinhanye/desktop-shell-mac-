@@ -50,8 +50,9 @@ export default {
       choice(lists, '保持当前关联', !Object.hasOwn(draft,'reminderListOptionId'), false, () => { delete draft.reminderListOptionId; });
       choice(lists, '不关联（使用默认列表）', draft.reminderListOptionId === null, false, () => { draft.reminderListOptionId = null; });
       options.lists.forEach((list, index) => {
-        const occupied = list.assignedProjectId !== null && list.assignedProjectId !== current;
-        const suffix = !list.canWrite ? ' · 只读' : occupied ? ' · 已占用' : '';
+        const shared = options.binding.status === 'shared' && options.binding.optionId === list.id;
+        const occupied = shared || (list.assignedProjectId !== null && list.assignedProjectId !== current);
+        const suffix = !list.canWrite ? ' · 只读' : shared ? ' · 共享占用' : occupied ? ' · 已占用' : '';
         const linked = options.binding.optionId === list.id ? ' · 当前' : '';
         choice(lists, `${list.title} · ${list.source} · ${index + 1}${suffix}${linked}`, draft.reminderListOptionId === list.id,
           !list.canWrite || occupied || options.access !== 'granted', () => { draft.reminderListOptionId = list.id; });

@@ -119,3 +119,18 @@ test('mock: disappeared list no longer owns existing reminder snapshots', async 
     assert.ok(items.filter(i=>['t1','t2','t12','t13'].includes(i.id)).every(i=>i.projectId===null));
   } finally {mock.stop();browser.assertClean();}
 });
+
+test('editor: shared current list is disabled even for first owner; keeping binding allows other edits', async () => {
+  const reply=options('a'); reply.binding={status:'shared',optionId:'list-1'};
+  reply.lists[0].assignedProjectId='a';
+  const f=fixture(async action=>action==='getProjectEditOptions'?reply:null);
+  const stop=editor.mount(f.host,f);f.store.set({editingProjectId:'a'});await flush();
+  const shared=byClass(f.host,'project-editor-option').find(n=>n.textContent.includes('<b>Same</b>'));
+  assert.equal(shared.disabled,true);assert.match(shared.textContent,/共享占用/);
+  await shared.emit('click');
+  const keep=byClass(f.host,'project-editor-option').find(n=>n.textContent==='保持当前关联');
+  assert.equal(keep.disabled,false);assert.equal(keep.getAttribute('aria-pressed'),'true');
+  const name=one(f.host,'project-editor-name');name.value='Changed';await name.emit('input');await one(f.host,'project-editor-save').emit('click');
+  assert.deepEqual(f.calls.at(-1),{action:'updateProject',payload:{projectId:'a',name:'Changed'}});
+  stop();f.assertClean();
+});
