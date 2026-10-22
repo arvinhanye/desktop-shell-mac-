@@ -1,6 +1,6 @@
 # M8-02: 项目管理模式与编辑面板
 
-- **状态**：todo
+- **状态**：review
 - **里程碑**：M8
 - **依赖**：M8-01 本地实现与自查通过
 - **分支**：task/M8-02（接续 M8-01，记录起点 SHA）
@@ -29,14 +29,14 @@
 
 ## 实施步骤与自动验收
 
-- [ ] RED：`project-editor.test.mjs` 的 name 长度断言：空白非法，100 字素有效、101 非法，家庭 emoji 算 1；`projectEditPatch` 未更改返回空对象，解除提醒返回 null，保持绑定不发送字段。
-- [ ] RED：projects 测试断言管理按钮不选中项目；上移只发一次最新完整 projectIds，首尾禁用；失败原序保留；项目打开/拖入/移除既有测试不退化。
-- [ ] RED：编辑器挂载测试断言草稿取消、保存失败保留、未知/恶意标题仅 textContent、迟到 options 回复无效、远端删除关闭、非文本按钮不调用 focusInput。
-- [ ] RED：mock/bridge/linkage 测试覆盖 M8-01 完整选项响应、null 清除、更新后 config 与 todos 同步、权限与只读错误；使用真实 store/widget 组合。
-- [ ] 运行 `node --test Tests/web/project-editor.test.mjs Tests/web/projects.test.mjs Tests/web/mock.test.mjs Tests/web/bridge.test.mjs`，记录预期 RED。
-- [ ] GREEN：实现面板、管理模式、mock 与样式 token；仅在用户打开面板时取选项，不轮询。
-- [ ] GREEN：`scripts/test-web.sh`、`scripts/test.sh`、`swift build`、`git diff --check`；检查源码没有路径/bundle ID 进入新增 DOM/请求。
-- [ ] 在本地浏览器 mock 中检查滚动、长名称、同名选项、错误和面板互斥；随后子代理只读自查并记录本地提交。
+- [x] RED：`project-editor.test.mjs` 的 name 长度断言：空白非法，100 字素有效、101 非法，家庭 emoji 算 1；`projectEditPatch` 未更改返回空对象，解除提醒返回 null，保持绑定不发送字段。
+- [x] RED：projects 测试断言管理按钮不选中项目；上移只发一次最新完整 projectIds，首尾禁用；失败原序保留；项目打开/拖入/移除既有测试不退化。
+- [x] RED：编辑器挂载测试断言草稿取消、保存失败保留、未知/恶意标题仅 textContent、迟到 options 回复无效、远端删除关闭、非文本按钮不调用 focusInput。
+- [x] RED：mock/bridge/linkage 测试覆盖 M8-01 完整选项响应、null 清除、更新后 config 与 todos 同步、权限与只读错误；使用真实 store/widget 组合。
+- [x] 运行 `node --test Tests/web/project-editor.test.mjs Tests/web/projects.test.mjs Tests/web/mock.test.mjs Tests/web/bridge.test.mjs`，记录预期 RED。
+- [x] GREEN：实现面板、管理模式、mock 与样式 token；仅在用户打开面板时取选项，不轮询。
+- [x] GREEN：`scripts/test-web.sh`、`scripts/test.sh`、`swift build`、`git diff --check`；检查源码没有路径/bundle ID 进入新增 DOM/请求。
+- [x] 在本地浏览器 mock 中检查滚动、长名称、同名选项、错误和面板互斥；随后子代理只读自查并记录本地提交。
 
 ## 用户手动验证
 
@@ -47,9 +47,9 @@
 
 ## 交付记录
 
-- **改动摘要**：尚未实施。
-- **自测结果**：尚未执行。
-- **疑问 / 偏离**：无。
+- **改动摘要**：增加管理模式与独立编辑面板，支持名称、默认应用、列表保持/解绑/选择和上下移；失败草稿保留、面板互斥、关闭还焦点、远端删除提示与异步版本保护。mock 使用独立列表ID/token及外部变化控制。起点 `17e3f5f524e375dae832c4c81975746fe0407951`。
+- **自测结果**：PASS：网页 492/492，Swift 275/275，swift build，git diff --check。浏览器 mock 实测中文改名、Safari 默认应用、同名本地列表选择保存并重开核实；小视口面板滚动与只读/占用禁用已检查。截图 `/private/tmp/desktop-shell-m8-planning/m8-02-editor.png`。自查的退出管理后排序失败漏刷新、撤权后旧选项不失效以及 mock 列表删除后旧待办归属残留三项均先 RED 后修复；配置版本保护阻止旧刷新覆盖新推送。真实签名应用焦点、跨屏与提醒写入仍为 SKIP。
+- **疑问 / 偏离**：沿用原有日常悬停移除入口；管理模式替换打开按钮为编辑/排序并显示移除。新增面板测试复用 linkage-browser；store字段和组件注册清单按新契约更新，保留原断言强度。M4-11 设计差异保持。
 
 ## 审查记录
 

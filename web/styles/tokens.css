@@ -226,3 +226,6 @@
   --color-accent: var(--color-sakura);
   --color-text-muted: rgb(214 220 244 / 0.74);
 }
+
+/* M8 project preferences */
+:root { --editor-width: 560px; --control-disabled-opacity: 0.45; }

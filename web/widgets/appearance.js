@@ -120,7 +120,7 @@ export default {
     reset.addEventListener('click', resetAppearance);
     overlay.addEventListener('click', clickOverlay);
     const subscriptions = [
-      store.subscribe('appearanceOpen', open => { if (!disposed) overlay.hidden = !open; }, { immediate: true }),
+      store.subscribe('appearanceOpen', open => { if (!disposed) { overlay.hidden = !open; if (open) store.set({ editingProjectId: null, layoutOpen: false }); } }, { immediate: true }),
       store.subscribe('media', renderMedia, { immediate: true }),
       store.subscribe('ui', updateSelection, { immediate: true }),
     ];

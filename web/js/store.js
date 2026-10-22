@@ -69,6 +69,8 @@ export const initialState = {
   projectDrop: { over: false, result: null },
   now: null,
   appearanceOpen: false,
+  editingProjectId: null,
+  layoutOpen: false,
   voiceRequest: 0,
   voicePlaying: false,
 };

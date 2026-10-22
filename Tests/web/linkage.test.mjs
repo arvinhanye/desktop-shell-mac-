@@ -9,7 +9,7 @@ import { createBrowser, descendants, byClass, one } from './helpers/linkage-brow
 // main.js requires a real document and has top-level await: inspect its wiring,
 // but mount the real modules below, synchronously in the documented page order.
 const mainSource = await readFile(new URL('../../web/js/main.js', import.meta.url), 'utf8');
-const widgetNames = ['clock', 'greeting', 'projects', 'launcher', 'todos', 'stats', 'character', 'appearance', 'voice', 'visualizer'];
+const widgetNames = ['clock', 'greeting', 'projects', 'launcher', 'todos', 'stats', 'character', 'appearance', 'project-editor', 'voice', 'visualizer'];
 const registered = [...(mainSource.match(/const WIDGETS\s*=\s*\[([^\]]+)\]/)?.[1] ?? '').matchAll(/'([^']+)'/g)]
   .map(match => match[1]);
 assert.deepEqual(registered, widgetNames, 'the fixture must include every main.js widget in page order');
