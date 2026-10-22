@@ -87,7 +87,7 @@ struct RemindersStoreTests {
         var updates: [(String, Bool)] = []
         var writeError: BridgeError?
         func requestAccess(_ completion: @escaping @MainActor (Bool) -> Void) { requests += 1; permission = completion }
-        func lists() -> [(id: String, title: String)] { calendars }
+        func lists() -> [ReminderListSnapshot] { calendars.map { .init(id: $0.id, title: $0.title, sourceTitle: "Test", canWrite: true) } }
         func defaultListID() -> String? { defaultID }
         func refresh() { refreshes += 1 }
         func fetch(completedSince: Date?, completion: @escaping @MainActor ([ReminderSnapshot]?) -> Void) { reads.append((completedSince, completion)) }
@@ -194,6 +194,17 @@ struct RemindersStoreTests {
         #expect(f.events.count == 1)
         #expect((f.events.last?["items"] as? [[String: Any]])?.first?["projectId"] is NSNull)
     }
+    @Test("编辑项目绑定淘汰旧查询且按新归属推送")
+    func projectEditInvalidatesReads() throws {
+        let f = try Fixture(); defer { f.cleanup() }; f.store.start()
+        _ = try f.state.updateProject(projectId: f.state.config.projects[0].id,
+            name: nil, appId: nil, reminderListOption: .clear).get()
+        try #require(f.backend.reads.count == 4)
+        try f.complete(0, open: [f.item]); #expect(f.events.isEmpty)
+        try f.complete(2, open: [f.item]); #expect(f.events.count == 1)
+        #expect((f.events.last?["items"] as? [[String: Any]])?.first?["projectId"] is NSNull)
+    }
+
     @Test("事件变化防抖零点五秒，旧回调无效，日期变更立即读取")
     func debounceAndDayChange() throws {
         let f = try Fixture(); defer { f.cleanup() }; f.store.start(); try f.complete()

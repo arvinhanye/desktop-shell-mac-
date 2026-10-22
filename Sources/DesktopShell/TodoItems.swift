@@ -23,21 +23,21 @@ enum TodoItems {
     static func listToProject(projects: [AppConfig.Project], lists: [(id: String, title: String)]) -> [String: String] {
         var result: [String: String] = [:]
         for project in projects {
-            guard let title = project.remindersList,
-                  !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
-            let matches = lists.filter { $0.title == title }.sorted { $0.id < $1.id }
-            guard let list = matches.first else {
-                Log.notice("DesktopShell reminders: list-missing project=\(project.id)")
-                continue
-            }
-            if matches.count > 1 { Log.notice("DesktopShell reminders: list-ambiguous project=\(project.id)") }
-            guard result[list.id] == nil else {
+            guard let listID = boundListID(project, lists: lists) else { continue }
+            guard result[listID] == nil else {
                 Log.notice("DesktopShell reminders: list-shared project=\(project.id)")
                 continue
             }
-            result[list.id] = project.id
+            result[listID] = project.id
         }
         return result
+    }
+
+    static func boundListID(_ project: AppConfig.Project, lists: [(id: String, title: String)]) -> String? {
+        if let id = project.remindersListId { return lists.first { $0.id == id }?.id }
+        guard let title = project.remindersList,
+              !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return lists.filter { $0.title == title }.sorted { $0.id < $1.id }.first?.id
     }
 
     static func due(_ components: DateComponents?) -> TodoItem.Due? {
