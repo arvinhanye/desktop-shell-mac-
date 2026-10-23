@@ -166,7 +166,7 @@
 - **TerminalPanel**（M8，2026-10-23 定，做法见"终端面板探针"）：全局只有一个。层级 `.floating`，在普通窗口之上；不激活应用的 `NSPanel`，显示期间可以成为 key window；`collectionBehavior` 是 `[.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]`，全屏应用上面也能呼出。内容视图里先放一层 `NSVisualEffectView`（`.hudWindow`、圆角同组件底板），上面是透明的 WKWebView，铺满面板。
   - **位置**：每次显示时放到**鼠标所在那块屏幕**：取 `visibleFrame`，左右各缩 16、离顶 8，高 45%；"放大"后上下各留 8，铺满。放大状态在收起后保留，退出应用后恢复成不放大。
   - **显示 / 收起**：快捷键在两者之间切换；终端入口（组件页的 `openTerminal`）只负责显示；面板标题栏的"收起"按钮只负责收起。**Esc 不收起**（vim、codex 要用），点别的应用也不自动收起。滑下和收起做一个窗口动画（约 160 ms，见 `--duration-terminal`）。
-  - **键盘**：显示时 `orderFrontRegardless()` → `makeKey()` → `makeFirstResponder(webView)`，并让网页把焦点给 xterm；收起时 `orderOut`，如果 `NSApp.isActive` 就 `NSApp.deactivate()`。**不调用 `NSApp.activate`。**
+  - **键盘**：显示时 `orderFrontRegardless()` → `makeKey()` → `makeFirstResponder(webView)`，并推送 `terminalState`（`visible: true`）让网页把焦点给 xterm；收起时 `orderOut`，如果 `NSApp.isActive` 就 `NSApp.deactivate()`。**不调用 `NSApp.activate`。**
   - 点击不穿透：面板整块都接收鼠标。
 - 点在组件之外的空白处：交给访达（选择图标、框选、右键菜单），我们不做任何事。**点击语音改为点击角色卡头像触发**。
 - **隐藏桌面文件**（菜单栏勾选项，用来单纯欣赏壁纸）：把 VideoWindow 升到图标层 **+3**（与 WidgetWindow 同层，排在它下面，图标和系统小组件一起被盖住），VideoWindow **始终 `ignoresMouseEvents = true`**；同时关闭点击穿透，让最上面的 WidgetWindow **接住全部点击**，空白处的点击落在网页透明背景上，什么都不发生，不会点到看不见的图标。取消时恢复图标层 −1 并重新打开点击穿透。**不修改访达设置、不重启访达**。选择保存在 `ui.json` 的 `desktopIconsHidden`，重启后保持。（2026-10-17 实测教训：同层窗口被点击时 macOS 会把它提到同层最前面。让 VideoWindow 接收点击会盖住组件；点击后再重排又会闪烁。所以 VideoWindow 永远不接收点击。）网页要禁用右键菜单（`contextmenu` 事件 `preventDefault`），否则空白处右键会弹出 WKWebView 自带的菜单。
@@ -237,7 +237,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 |---|---|---|
 | `terminalOutput` | `data`：PTY 输出的原始字节，base64 | 有输出时。读到的数据合并后最多每 16 ms 推一次 |
 | `terminalExited` | `status`：shell 的退出状态 | shell 退出时。页面在屏幕上打一行暗色的"[shell 已退出，按任意键重新开始]" |
-| `terminalState` | `maximized`、`hotkey`（显示用的文字） | 页面加载完成时、放大状态变化时 |
+| `terminalState` | `visible`（面板是否显示）、`maximized`、`hotkey`（显示用的文字）、`shell`（shell 的名字，例如 `zsh`，标题栏在程序没有设标题时显示它） | 页面加载完成时、面板显示和收起时、放大状态变化时。`visible` 变成 `true` 时页面把焦点给 xterm，变成 `false` 时让 xterm 失焦（否则以后应用被激活时 WebKit 会把焦点恢复过去） |
 
 **终端会话**（M8）：
 
@@ -245,6 +245,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 - 全局只有一个会话。第一次显示面板时才启动；收起面板时进程照常运行；shell 退出后不自动重开，等下一次按键（见 `terminalInput`）。退出应用时给 shell 发 `SIGHUP`。
 - 新开会话时用上一次的行列数，不用 80 × 24（探针里出过这个错）。
 - 省电规则里的暂停不影响终端：不暂停 shell，不丢输出。
+- 菜单栏"重新加载"也重新加载终端页；会话不受影响，页面发来 `terminalReady` 后重推最近的输出。
 
 **安全要求**：
 
