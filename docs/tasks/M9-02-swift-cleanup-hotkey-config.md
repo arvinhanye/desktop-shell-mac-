@@ -1,8 +1,8 @@
-# M9-02: 去掉 launchApp 和应用图标导出，配置里加终端快捷键（Swift）
+# M9-02: 去掉 launchApp、openProjectWith、apps 和应用图标导出，配置里加终端快捷键（Swift）
 
 - **状态**：todo
 - **里程碑**：M9
-- **依赖**：无。和 M9-01、M9-03、M9-04 互不依赖；M9-05 依赖本任务（用到 `HotKey.swift` 和 `config.terminal`）
+- **依赖**：M9-01（网页先不再需要 `config.apps`，否则本任务停发 `apps` 后网页会把配置当成格式不对丢掉）。和 M9-03、M9-04 互不依赖；M9-05 依赖本任务（用到 `HotKey.swift` 和 `config.terminal`）
 - **分支**：task/M9-02
 
 <!-- ===== 以下需求部分由 Claude Code 编写，Codex 不修改 ===== -->
@@ -10,6 +10,7 @@
 ## 目标
 
 - Swift 端去掉只给启动栏用的东西：`launchApp` 动作、启动时导出应用图标、`getConfig` 里的 `apps[].iconUrl`。
+- 去掉项目的"用应用打开"（2026-10-23 用户定）：`openProjectWith` 动作、`updateProject` 的 `appId`、`getProjectEditOptions` 的 `project.appId`、`getConfig` 里的 `apps` 和项目的 `apps`，新项目也不再写 `apps`。
 - `config.json` 认识新的可选项 `terminal.hotkey`，解析成快捷键的键码、修饰键和显示文字；`getConfig` 和推送的 `config` 带上 `terminal.hotkey` 的显示文字。
 
 本任务**不注册**快捷键（M9-05 做），也不碰终端。
@@ -32,8 +33,16 @@
   - 删掉 `AppIcons.swift`、`AppIconsTests.swift`；
   - 删掉 `AppState` 里的 `exportAppIcons` / `withAppIcons` 和相关队列；
   - 删掉 `AppDelegate` 里的调用；
-  - `ConfigReply.makeConfig` / `make` 和 `PageEvent.config` 去掉 `iconIDs` 参数，`apps` 每项只剩 `id`、`name`。
+  - `ConfigReply.makeConfig` / `make` 和 `PageEvent.config` 去掉 `iconIDs` 参数（`apps` 整个去掉，见下一条）。
 - **不删除**磁盘上已有的 `media/app-icons/` 目录（不做删除文件的功能），日志里也不用提它。
+- `openProjectWith` 和 `apps`（照 AGENTS.md 里标着 M9 的部分）：
+  - 从 `BridgeRequest` 和 `Bridge.swift` 删掉 `openProjectWith`，网页再发它回复 `unknown-action`；只有它用的查应用 URL 的辅助函数一并删掉；
+  - `updateProject` 带 `appId` 算 `invalid`；`AppState.updateProject`、`ProjectPreferences.updating` 去掉应用相关的参数和逻辑；
+  - `getProjectEditOptions` 的回复去掉 `project.appId`（`AppState` 和 `RemindersStore` 里组装回复的地方都要改）；
+  - `ConfigReply` 的 `config` 不再有 `apps`，项目不再有 `apps`；
+  - `ProjectEditing.newProject` 不再写 `apps`；
+  - `AppConfig` 去掉顶层 `apps` 和 `Project.apps`，`Config.example` 也去掉；`ConfigStore.filtered` 里过滤应用的部分删掉；
+  - 旧的 `config.json` 里还有 `apps` 时照常能读。改写 `config.json`（M7 / M8 的按字段合并）时，文件里的 `apps` 和项目的 `apps` 原样保留。写一个测试：带 `apps` 的旧文件改名一个项目后，两处 `apps` 都还在。
 
 ### 2. `terminal.hotkey`
 
@@ -69,9 +78,11 @@
 
 - `Sources/DesktopShell/HotKey.swift`（新建）
 - `Sources/DesktopShell/Config.swift`、`Sources/DesktopShell/ConfigStore.swift`、`Sources/DesktopShell/AppState.swift`、`Sources/DesktopShell/AppDelegate.swift`、`Sources/DesktopShell/Bridge.swift`、`Sources/DesktopShell/BridgeProtocol.swift`（修改）
+- `Sources/DesktopShell/ProjectPreferences.swift`、`Sources/DesktopShell/ProjectEditing.swift`、`Sources/DesktopShell/RemindersStore.swift`（修改，只限去掉应用相关的部分）
 - `Sources/DesktopShell/AppIcons.swift`、`Tests/DesktopShellTests/AppIconsTests.swift`（删除）
 - `Tests/DesktopShellTests/HotKeyTests.swift`（新建）
-- `Tests/DesktopShellTests/BridgeTests.swift`、`Tests/DesktopShellTests/PageEventTests.swift`、`Tests/DesktopShellTests/ConfigStoreTests.swift`（修改）
+- `Tests/DesktopShellTests/BridgeTests.swift`、`Tests/DesktopShellTests/PageEventTests.swift`、`Tests/DesktopShellTests/ConfigStoreTests.swift`、`Tests/DesktopShellTests/ProjectPreferencesTests.swift`、`Tests/DesktopShellTests/ProjectEditingTests.swift`（修改）
+- 其他因为上面的删除而编译不过的现有测试文件（只改受影响的部分，在交付记录里逐个列出）
 - 本任务单的"交付记录"和"状态"
 
 ## 不许做
@@ -87,15 +98,15 @@
 
 - [ ] `swift build` 无错误、无警告
 - [ ] `scripts/test.sh` 全部通过，其中有 `HotKeyTests`
-- [ ] `grep -rn "launchApp\|AppIcons\|iconUrl\|app-icons\|iconIDs" Sources Tests/DesktopShellTests` 没有输出
+- [ ] `grep -rn "launchApp\|AppIcons\|iconUrl\|app-icons\|iconIDs\|openProjectWith\|appId\|bundleId" Sources Tests/DesktopShellTests` 没有输出
 - [ ] `git diff --name-only main...task/M9-02` 只有上面"允许修改的文件"
 - [ ] （审查者复验）打包启动后，用 Web 检查器（`DESKTOPSHELL_DEVTOOLS=1`）或日志确认：
-  - `getConfig` 回复里 `config.terminal.hotkey` 是 `"⌥`"`，`apps` 里没有 `iconUrl`；
-  - 页面发 `launchApp` 被回复 `unknown-action`。
+  - `getConfig` 回复里 `config.terminal.hotkey` 是 `"⌥`"`，没有 `apps`，项目里也没有 `apps`；
+  - 页面发 `launchApp`、`openProjectWith` 被回复 `unknown-action`。
 
 **用户手动验证**：
 
-- [ ] 打包启动（`scripts/bundle.sh --open`）后桌面一切照旧。启动栏（M9-01 合并前还在）的图标会变成名字的第一个字，属预期；日志里没有新的错误。
+- [ ] 打包启动（`scripts/bundle.sh --open`）后桌面一切照旧（M9-01 已合并，没有启动栏）；项目"访达"能打开；编辑项目改名后，`config.json` 里原有的 `apps` 还在；日志里没有新的错误。
 
 <!-- ===== 以下由 Codex 填写 ===== -->
 

@@ -2,7 +2,7 @@
 
 - **状态**：todo
 - **里程碑**：M9
-- **依赖**：无。和 M9-02、M9-03 互不依赖；M9-04 依赖本任务（用到同步后的 `tokens.css` 和 `base.css` 的 `.key-hint`）
+- **依赖**：无（基于已合并 M8 项目编辑的 main）。和 M9-03 互不依赖；M9-02 依赖本任务（网页先不再需要 `apps`，Swift 才能停发），M9-04 依赖本任务（用到同步后的 `tokens.css` 和 `base.css` 的 `.key-hint`）
 - **分支**：task/M9-01
 
 <!-- ===== 以下需求部分由 Claude Code 编写，Codex 不修改 ===== -->
@@ -15,7 +15,8 @@
 - 角色卡压成一条（高 112），播放语音时只沿圆形头像外圈亮光环（**顺带完成暂缓的 M4-11**）；
 - 系统状态的电量低提示挪到标题行；
 - 待办伸到底；
-- 第一列系统状态下面多一条"终端"入口，点一下发 `openTerminal`。
+- 第一列系统状态下面多一条"终端"入口，点一下发 `openTerminal`；
+- 项目行只剩"访达"按钮，去掉"用 <应用> 打开"；编辑项目面板去掉"默认打开应用"（2026-10-23 用户定）。
 
 做完后 `web/styles/tokens.css` 和 `docs/design/tokens.css` 完全一样。在应用里，点终端入口要等 M9-05 合并后才会打开面板（之前 Swift 回复 `unknown-action`，组件接住即可）。
 
@@ -59,19 +60,31 @@
   - `kbd` 的文字取 `store.config.terminal.hotkey`。它是字符串时显示；为 `null` 或没有时，`kbd` 设成 `hidden`；
   - 点按钮发送 `bridge.send('openTerminal')`，失败接住，不显示任何提示（Swift 已记日志）。
 
-### 3. `bridge.js` 和 `mock.js`
+### 3. 项目卡片和编辑面板（去掉"用应用打开"）
+
+- `projects.js`：
+  - `projectActions` 只返回"访达"（`openProject`），不再读 `project.apps` 和 `config.apps`；
+  - 管理模式不受影响。
+- `project-editor.js`：
+  - 去掉"默认打开应用"小标题和那组按钮；
+  - `projectEditPatch` 不再比较、也不再发送 `appId`；
+  - `getProjectEditOptions` 回复里没有 `project.appId` 也照常工作。
+- 对应的测试一起改，并加一条：项目行里没有第二个打开按钮，编辑面板里没有"默认打开应用"。
+
+### 4. `bridge.js` 和 `mock.js`
 
 - `bridge.js` 的 `normalizeConfig`：
+  - `config.apps` 不再是必需的：只要求 `greetings`、`projects` 是数组，`apps` 和项目的 `apps` 都不再读取、不再放进 store（M9-02 起 Swift 不发了）；
   - 去掉 `apps[].iconUrl` 的处理；
   - 加上 `terminal: { hotkey: 字符串或 null }`：`config.terminal` 不是对象，或 `hotkey` 不是字符串时，都当作 `null`。
 - `mock.js`：
-  - 去掉 `launchApp` 和 mock 配置里的 `iconUrl`；
+  - 去掉 `launchApp`、`openProjectWith`，mock 配置里去掉 `apps` 和项目的 `apps`；`updateProject` 不再接受 `appId`（带上就回复 `invalid`），`getProjectEditOptions` 的回复不带 `appId`；
   - 加上 `openTerminal`（没有参数，`console.info` 一行后回复 `null`）；
   - mock 配置加上 `terminal: { hotkey: '⌥`' }`。
 - 测试跟着改：
   - `Tests/web/linkage.test.mjs`：去掉启动栏和"相关应用高亮"，外观换背景只检查角色卡；
   - `Tests/web/appearance.test.mjs`：去掉 launcher 的部分；
-  - `Tests/web/bridge.test.mjs`、`Tests/web/mock.test.mjs`、`Tests/web/stats.test.mjs`：按上面的改动更新；
+  - `Tests/web/bridge.test.mjs`、`Tests/web/mock.test.mjs`、`Tests/web/stats.test.mjs`、`Tests/web/projects.test.mjs`、`Tests/web/project-editor.test.mjs`：按上面的改动更新；
   - 新建 `Tests/web/terminal.test.mjs`：覆盖入口的 DOM、快捷键文字的显示和隐藏、点击发送 `openTerminal`、发送失败不抛出、卸载后不再响应。
 
 ## 允许修改的文件
@@ -80,8 +93,10 @@
 - `web/widgets/character.js`、`web/widgets/character.css`、`web/widgets/stats.js`、`web/widgets/stats.css`、`web/widgets/todos.css`、`web/widgets/appearance.js`（修改）
 - `web/widgets/terminal.js`、`web/widgets/terminal.css`（新建）
 - `web/widgets/launcher.js`、`web/widgets/launcher.css`（删除）
+- `web/widgets/projects.js`、`web/widgets/project-editor.js`（修改）
 - `web/js/main.js`、`web/js/media.js`、`web/js/bridge.js`、`web/js/mock.js`（修改）
-- `Tests/web/linkage.test.mjs`、`Tests/web/appearance.test.mjs`、`Tests/web/bridge.test.mjs`、`Tests/web/mock.test.mjs`、`Tests/web/stats.test.mjs`（修改）
+- `Tests/web/linkage.test.mjs`、`Tests/web/appearance.test.mjs`、`Tests/web/bridge.test.mjs`、`Tests/web/mock.test.mjs`、`Tests/web/stats.test.mjs`、`Tests/web/projects.test.mjs`、`Tests/web/project-editor.test.mjs`（修改）
+- `Tests/web/helpers/linkage-browser.mjs`（修改，仅限去掉启动栏、应用相关的部分）
 - `Tests/web/terminal.test.mjs`（新建）、`Tests/web/launcher.test.mjs`（删除）
 - `Tests/web/character.test.mjs`（新建，可选，给光环的 DOM 写测试用）
 - 本任务单的"交付记录"和"状态"
@@ -102,9 +117,9 @@
 - [ ] 下面这条命令没有输出（逐个检查 5 个组件的样式和定稿一致）：
 
   ```bash
-  for n in character stats todos terminal appearance; do awk -v t=web/widgets/$n.css 'index($0, "/* ====") == 1 { f = (index($0, t) > 0); next } f' docs/design/design.css | diff -B - web/widgets/$n.css; done
+  for n in character stats todos terminal appearance projects project-editor; do awk -v t=web/widgets/$n.css 'index($0, "/* ====") == 1 { f = (index($0, t) > 0); next } f' docs/design/design.css | diff -B - web/widgets/$n.css; done
   ```
-- [ ] `grep -rn "launcher\|launchApp\|iconUrl\|app-icons" web Tests/web` 没有输出
+- [ ] `grep -rn "launcher\|launchApp\|iconUrl\|app-icons\|openProjectWith\|appId" web Tests/web` 没有输出
 - [ ] `grep -c "key-hint" web/styles/base.css` 输出 `1`
 - [ ] `git diff --name-only main...task/M9-01` 只有上面"允许修改的文件"
 - [ ] （审查者复验）`node scripts/serve-web.mjs`，浏览器打开 `http://127.0.0.1:8765/`，对照 `http://127.0.0.1:8765/design/index.html`：
@@ -114,11 +129,12 @@
   - 控制台 `window.shell.receive({event: 'systemStats', battery: {level: 15, charging: false, onBattery: true}, cpu: 10, memory: {usedBytes: 1, totalBytes: 2, percent: 50}})` 之后：标题行右边出现"电量低，已暂停视频和动画"，系统状态的高度不变；
   - 点头像，播放期间只有圆形头像外圈有冰蓝光环在呼吸；
   - 点终端入口，控制台出现 mock 的 `openTerminal` 日志；
+  - 项目行只有"访达"一个打开按钮；管理 → 编辑，面板里只有显示名和提醒事项列表；
   - 控制台没有错误。
 
 **用户手动验证**：
 
-- [ ] 用 `scripts/bundle.sh --open` 打包启动：桌面布局和上面一样，没有启动栏；点头像有光环；点终端入口什么都不发生（M9-05 之前属预期），其他组件照旧可用。
+- [ ] 用 `scripts/bundle.sh --open` 打包启动：桌面布局和上面一样，没有启动栏；点头像有光环；点终端入口什么都不发生（M9-05 之前属预期）；项目行只有"访达"，编辑面板改名、关联提醒列表照旧能保存（Swift 还没改时会照旧收到 `apps`，网页忽略即可）；其他组件照旧可用。
 
 <!-- ===== 以下由 Codex 填写 ===== -->
 

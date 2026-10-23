@@ -17,15 +17,12 @@ const config = {
     { from: 23, title: '深夜了', wish: '时辰已晚，且捻熄灯盏，良宵安枕' },
   ],
   projects: [
-    { id: 'desktop-shell', name: 'DesktopShell', tags: ['dev'], apps: ['cursor'], hasReminders: true },
-    { id: 'thesis', name: '课程论文', tags: ['写作'], apps: ['safari', 'notes'], hasReminders: true },
-    { id: 'photos', name: '旅行照片整理', tags: [], apps: [], hasReminders: false },
-    { id: 'website', name: '个人网站', tags: ['dev'], apps: ['cursor', 'safari'], hasReminders: true },
-    { id: 'reading', name: '读书笔记', tags: ['阅读'], apps: ['notes'], hasReminders: true },
-    { id: 'budget', name: '家庭账本', tags: [], apps: [], hasReminders: false },
-  ],
-  apps: [
-    { id: 'cursor', name: 'Cursor' }, { id: 'safari', name: 'Safari' }, { id: 'notes', name: '备忘录' },
+    { id: 'desktop-shell', name: 'DesktopShell', tags: ['dev'], hasReminders: true },
+    { id: 'thesis', name: '课程论文', tags: ['写作'], hasReminders: true },
+    { id: 'photos', name: '旅行照片整理', tags: [], hasReminders: false },
+    { id: 'website', name: '个人网站', tags: ['dev'], hasReminders: true },
+    { id: 'reading', name: '读书笔记', tags: ['阅读'], hasReminders: true },
+    { id: 'budget', name: '家庭账本', tags: [], hasReminders: false },
   ],
   terminal: { hotkey: '⌥`' },   // 2026-10-23：快捷键可在 config.json 里改，入口和面板显示这里的文字
 };
@@ -150,7 +147,6 @@ function renderStats() {
 }
 
 // —— 项目、待办（联动：选中项目 → 过滤待办） ——
-const appName = id => config.apps.find(a => a.id === id)?.name ?? id;
 function renderProjects() {
   const list = $('project-list'); list.replaceChildren();
   for (const project of config.projects) {
@@ -161,7 +157,8 @@ function renderProjects() {
     row.querySelector('.project-name').textContent = project.name;
     for (const tag of project.tags) { const t = document.createElement('span'); t.className = 'tag'; t.textContent = tag; row.querySelector('.project-tags').append(t); }
     const actions = row.querySelector('.project-actions');
-    for (const [label, title] of [['访达', '在访达中打开'], ...project.apps.slice(0, 1).map(id => [appName(id), `用 ${appName(id)} 打开`])]) {
+    // 2026-10-23（M9）：只剩"访达"，去掉了"用 <应用> 打开"
+    for (const [label, title] of [['访达', '在访达中打开']]) {
       const b = document.createElement('button'); b.type = 'button'; b.className = 'ghost-button'; b.textContent = label; b.title = title;
       b.addEventListener('click', event => event.stopPropagation());
       actions.append(b);
@@ -213,7 +210,7 @@ function mockAddProject(path) {
   if (/不存在|missing/.test(clean)) return setProjectHint('找不到这个文件夹', true);
   const name = clean.split('/').pop() || clean;
   if (config.projects.some(p => p.path === clean || p.name === name)) return setProjectHint('这个文件夹已经是项目了', true);
-  config.projects.push({ id: `p${Date.now()}`, name, path: clean, tags: [], apps: ['cursor'], hasReminders: false });
+  config.projects.push({ id: `p${Date.now()}`, name, path: clean, tags: [], hasReminders: false });
   setProjectHint(''); flashMeta(`已添加「${name}」`);
   $('project-input').value = '';
   renderProjects();
