@@ -77,8 +77,7 @@ enum ProjectEditing {
 
     static func newProject(folder: URL, home: URL, config: AppConfig) -> AppConfig.Project {
         AppConfig.Project(id: makeID(name: folder.lastPathComponent, existing: Set(config.projects.map(\.id))),
-                          name: folder.lastPathComponent, path: storedPath(folder, home: home), tags: [],
-                          apps: config.apps.contains(where: { $0.id == "cursor" }) ? ["cursor"] : [])
+                          name: folder.lastPathComponent, path: storedPath(folder, home: home), tags: [])
     }
 
     private static func isInside(_ url: URL, home: URL) -> Bool {

@@ -30,8 +30,8 @@ final class Bridge: NSObject, WKScriptMessageHandlerWithReply {
             case .success(let options): replyHandler(options, nil)
             case .failure(let error): reject(error, action: action, replyHandler: replyHandler)
             }
-        case .success(.updateProject(let id, let name, let appId, let patch)):
-            switch appState.updateProject(projectId: id, name: name, appId: appId, reminderListOption: patch) {
+        case .success(.updateProject(let id, let name, let patch)):
+            switch appState.updateProject(projectId: id, name: name, reminderListOption: patch) {
             case .success(let project): replyHandler(ConfigReply.makeProject(project), nil)
             case .failure(let error): reject(error, action: action, replyHandler: replyHandler)
             }
@@ -77,15 +77,12 @@ final class Bridge: NSObject, WKScriptMessageHandlerWithReply {
                 }
             }
         case .success(.getConfig):
-            appState.withAppIcons { [appState] iconIDs in
-                let avatars = MediaLibrary.scan(mediaDir: appState.paths.mediaDir, subdirectory: "avatars")
-                let backgrounds = MediaLibrary.scan(mediaDir: appState.paths.mediaDir, subdirectory: "backgrounds")
-                let voices = MediaLibrary.scan(mediaDir: appState.paths.mediaDir, subdirectory: "voice", extensions: ["mp3"])
-                let count = appState.config.apps.filter { iconIDs.contains($0.id) }.count
-                Log.notice("DesktopShell bridge: getConfig avatars=\(avatars.count) backgrounds=\(backgrounds.count) voices=\(voices.count) icons=\(count)")
-                replyHandler(ConfigReply.make(config: appState.config, avatars: avatars,
-                    backgrounds: backgrounds, voices: voices, iconIDs: iconIDs, uiState: appState.uiState), nil)
-            }
+            let avatars = MediaLibrary.scan(mediaDir: appState.paths.mediaDir, subdirectory: "avatars")
+            let backgrounds = MediaLibrary.scan(mediaDir: appState.paths.mediaDir, subdirectory: "backgrounds")
+            let voices = MediaLibrary.scan(mediaDir: appState.paths.mediaDir, subdirectory: "voice", extensions: ["mp3"])
+            Log.notice("DesktopShell bridge: getConfig avatars=\(avatars.count) backgrounds=\(backgrounds.count) voices=\(voices.count)")
+            replyHandler(ConfigReply.make(config: appState.config, avatars: avatars,
+                backgrounds: backgrounds, voices: voices, uiState: appState.uiState), nil)
         case .success(.focusInput):
             guard let window, let webView = message.webView else {
                 reject(.failed, action: action, replyHandler: replyHandler)
@@ -140,31 +137,6 @@ final class Bridge: NSObject, WKScriptMessageHandlerWithReply {
                 return
             }
             completeOpen(action: action, ids: projectId, failed: !NSWorkspace.shared.open(directory), replyHandler: replyHandler)
-        case .success(.openProjectWith(let projectId, let appId)):
-            guard let directory = projectDirectory(projectId), let appURL = applicationURL(appId) else {
-                reject(.notFound, action: action, replyHandler: replyHandler)
-                return
-            }
-            // Project.apps controls highlighting only, not the configured-app allowlist.
-            NSWorkspace.shared.open([directory], withApplicationAt: appURL, configuration: NSWorkspace.OpenConfiguration()) { _, error in
-                let failed = error != nil
-                Task { @MainActor in
-                    self.completeOpen(action: action, ids: "\(projectId) \(appId)", failed: failed, replyHandler: replyHandler)
-                }
-            }
-        case .success(.launchApp(let appId)):
-            guard let appURL = applicationURL(appId) else {
-                reject(.notFound, action: action, replyHandler: replyHandler)
-                return
-            }
-            let configuration = NSWorkspace.OpenConfiguration()
-            configuration.activates = true
-            NSWorkspace.shared.openApplication(at: appURL, configuration: configuration) { _, error in
-                let failed = error != nil
-                Task { @MainActor in
-                    self.completeOpen(action: action, ids: appId, failed: failed, replyHandler: replyHandler)
-                }
-            }
         case .success(.saveUiState(let avatar, let background)):
             switch appState.updateAppearance(avatar: avatar, background: background) {
             case .failure(let error):
@@ -182,11 +154,6 @@ final class Bridge: NSObject, WKScriptMessageHandlerWithReply {
         var directory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: url.path, isDirectory: &directory), directory.boolValue else { return nil }
         return url
-    }
-
-    private func applicationURL(_ id: String) -> URL? {
-        guard let app = appState.config.apps.first(where: { $0.id == id }) else { return nil }
-        return NSWorkspace.shared.urlForApplication(withBundleIdentifier: app.bundleId)
     }
 
     private func completeOpen(action: String, ids: String, failed: Bool, replyHandler: @MainActor @Sendable (Any?, String?) -> Void) {

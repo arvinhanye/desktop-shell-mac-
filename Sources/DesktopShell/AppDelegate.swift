@@ -21,7 +21,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Log.notice("DesktopShell webDir: \(paths.webDir.path)")
         let appState = AppState(paths: paths)
         self.appState = appState
-        appState.exportAppIcons()
         let config = appState.config
         let videoURL = SchemeResolver(webRoot: paths.webDir, mediaRoot: paths.mediaDir)
             .fileURL(forPath: "/media/" + config.background.video)
@@ -100,10 +99,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             manager?.broadcast(PageEvent.uiState(state))
         }
         appState.onConfigChanged = { [weak manager, weak appState] in
-            appState?.withAppIcons { [weak manager, weak appState] iconIDs in
-                guard let appState else { return }
-                manager?.broadcast(PageEvent.config(appState.config, iconIDs: iconIDs))
-            }
+            guard let appState else { return }
+            manager?.broadcast(PageEvent.config(appState.config))
         }
         manager.broadcast(PageEvent.uiState(appState.uiState))
         manager.onWindowsChanged = { [weak monitor] windows in
@@ -205,7 +202,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func reloadPages() {
         appState?.reloadConfig()
-        appState?.exportAppIcons()
         screenManager?.reloadPages()
         Log.notice("DesktopShell: reloaded config and pages; background.video changes require an app restart")
     }

@@ -35,8 +35,8 @@ struct FileDropTrackingTests {
 
     @Test("拖入结果按顺序保留成功项，只保留第一个错误，不携带路径")
     func outcomes() {
-        let a = AppConfig.Project(id: "a", name: "甲", path: "/private/a", tags: [], apps: [])
-        let b = AppConfig.Project(id: "b", name: "乙", path: "/private/b", tags: [], apps: [])
+        let a = AppConfig.Project(id: "a", name: "甲", path: "/private/a", tags: [])
+        let b = AppConfig.Project(id: "b", name: "乙", path: "/private/b", tags: [])
         let all = FileDropTracking.dropOutcome(results: [.success(a), .success(b)])
         #expect(all.added.map(\.id) == ["a", "b"] && all.added.map(\.name) == ["甲", "乙"])
         #expect(all.error == nil)

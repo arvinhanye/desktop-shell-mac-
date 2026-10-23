@@ -7,17 +7,13 @@ enum ProjectPreferences {
             + config.projects).filter { seen.insert($0.id).inserted }
     }
 
-    static func updating(_ project: AppConfig.Project, name: String?, appId: String?,
-                         reminderList: UiPatch, apps: [AppConfig.App]) -> Result<AppConfig.Project, BridgeError> {
+    static func updating(_ project: AppConfig.Project, name: String?,
+                         reminderList: UiPatch) -> Result<AppConfig.Project, BridgeError> {
         var result = project
         if let name {
             let value = name.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !value.isEmpty, value.count <= 100 else { return .failure(.invalid) }
             result.name = value
-        }
-        if let appId {
-            guard apps.contains(where: { $0.id == appId }) else { return .failure(.notFound) }
-            result.apps = [appId] + (project.apps ?? []).filter { $0 != appId }
         }
         switch reminderList {
         case .unchanged: break

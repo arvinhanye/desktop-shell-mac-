@@ -252,7 +252,7 @@ struct RemindersStoreTests {
     func projectEditInvalidatesReads() throws {
         let f = try Fixture(); defer { f.cleanup() }; f.store.start()
         _ = try f.state.updateProject(projectId: f.state.config.projects[0].id,
-            name: nil, appId: nil, reminderListOption: .clear).get()
+            name: nil, reminderListOption: .clear).get()
         try #require(f.backend.reads.count == 4)
         try f.complete(0, open: [f.item]); #expect(f.events.isEmpty)
         try f.complete(2, open: [f.item]); #expect(f.events.count == 1)

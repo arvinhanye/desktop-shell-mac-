@@ -42,10 +42,8 @@ enum BridgeRequest: Equatable {
     case addProject(path: String)
     case removeProject(String)
     case getProjectEditOptions(String)
-    case updateProject(projectId: String, name: String?, appId: String?, reminderListOption: UiPatch)
+    case updateProject(projectId: String, name: String?, reminderListOption: UiPatch)
     case reorderProjects([String])
-    case openProjectWith(projectId: String, appId: String)
-    case launchApp(String)
     case saveUiState(avatar: UiPatch, background: UiPatch)
 
     static func parse(_ body: Any) -> Result<BridgeRequest, BridgeError> {
@@ -57,21 +55,17 @@ enum BridgeRequest: Equatable {
             guard Set(body.keys) == ["action", "projectId"], let id = validID(body["projectId"]) else { return .failure(.invalid) }
             return .success(.getProjectEditOptions(id))
         case "updateProject":
-            guard Set(body.keys).isSubset(of: ["action", "projectId", "name", "appId", "reminderListOptionId"]),
+            guard Set(body.keys).isSubset(of: ["action", "projectId", "name", "reminderListOptionId"]),
                   body.count > 2, let id = validID(body["projectId"]),
                   let patch = UiPatch.parse(body["reminderListOptionId"]) else { return .failure(.invalid) }
-            var name: String?, app: String?
+            var name: String?
             if let raw = body["name"] {
                 guard let text = raw as? String else { return .failure(.invalid) }
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !trimmed.isEmpty, trimmed.count <= 100 else { return .failure(.invalid) }
                 name = trimmed
             }
-            if let raw = body["appId"] {
-                guard let value = validID(raw) else { return .failure(.invalid) }
-                app = value
-            }
-            return .success(.updateProject(projectId: id, name: name, appId: app, reminderListOption: patch))
+            return .success(.updateProject(projectId: id, name: name, reminderListOption: patch))
         case "reorderProjects":
             guard Set(body.keys) == ["action", "projectIds"], let ids = body["projectIds"] as? [String],
                   ids.allSatisfy(isValidID), Set(ids).count == ids.count else { return .failure(.invalid) }
@@ -113,15 +107,6 @@ enum BridgeRequest: Equatable {
             guard Set(body.keys) == ["action", "projectId"],
                   let id = validID(body["projectId"]) else { return .failure(.invalid) }
             return .success(.openProject(id))
-        case "openProjectWith":
-            guard Set(body.keys) == ["action", "projectId", "appId"],
-                  let project = validID(body["projectId"]),
-                  let app = validID(body["appId"]) else { return .failure(.invalid) }
-            return .success(.openProjectWith(projectId: project, appId: app))
-        case "launchApp":
-            guard Set(body.keys) == ["action", "appId"],
-                  let id = validID(body["appId"]) else { return .failure(.invalid) }
-            return .success(.launchApp(id))
         case "saveUiState":
             guard Set(body.keys).isSubset(of: ["action", "avatarId", "backgroundId"]),
                   body.count > 1,
@@ -171,11 +156,11 @@ enum ConfigReply {
     }
 
     static func makeProject(_ project: AppConfig.Project) -> [String: Any] {
-        ["id": project.id, "name": project.name, "tags": project.tags ?? [], "apps": project.apps ?? [],
+        ["id": project.id, "name": project.name, "tags": project.tags ?? [],
          "hasReminders": project.remindersListId != nil || !(project.remindersList?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)]
     }
 
-    static func makeConfig(_ config: AppConfig, iconIDs: Set<String>) -> [String: Any] {
+    static func makeConfig(_ config: AppConfig) -> [String: Any] {
         // Build an explicit public projection instead of serializing the private config.
         func trimmedOrNull(_ value: String?) -> Any {
             guard let text = value?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else { return NSNull() }
@@ -188,16 +173,13 @@ enum ConfigReply {
             "user": ["name": trimmedOrNull(config.user?.name)],
             "character": ["name": config.character.name, "motto": trimmedOrNull(config.character.motto)],
             "greetings": greetings, "projects": ProjectPreferences.orderedProjects(config).map(makeProject),
-            "apps": config.apps.map { app -> [String: Any] in
-                ["id": app.id, "name": app.name,
-                 "iconUrl": iconIDs.contains(app.id) ? "/media/app-icons/\(app.id).png" as Any : NSNull()]
-            },
+            "terminal": ["hotkey": HotKey.resolve(config.terminal?.hotkey).display]
         ]
     }
 
-    static func make(config: AppConfig, avatars: [MediaItem], backgrounds: [MediaItem], voices: [MediaItem] = [], iconIDs: Set<String> = [], uiState: UiState) -> [String: Any] {
+    static func make(config: AppConfig, avatars: [MediaItem], backgrounds: [MediaItem], voices: [MediaItem] = [], uiState: UiState) -> [String: Any] {
         [
-            "config": makeConfig(config, iconIDs: iconIDs),
+            "config": makeConfig(config),
             "media": [
                 "avatars": avatars.map { ["id": $0.id, "url": $0.url] },
                 "backgrounds": backgrounds.map { ["id": $0.id, "url": $0.url] },
@@ -217,8 +199,8 @@ enum PageEvent {
         return ["event": "projectDrop", "over": over, "result": payload]
     }
 
-    static func config(_ config: AppConfig, iconIDs: Set<String>) -> [String: Any] {
-        ["event": "config", "config": ConfigReply.makeConfig(config, iconIDs: iconIDs)]
+    static func config(_ config: AppConfig) -> [String: Any] {
+        ["event": "config", "config": ConfigReply.makeConfig(config)]
     }
 
     static func audioSpectrum(_ bands: [Double]) -> [String: Any] {

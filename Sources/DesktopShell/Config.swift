@@ -6,7 +6,7 @@ struct AppConfig: Codable, Equatable {
     var character: Character
     var greetings: [Greeting]
     var projects: [Project]
-    var apps: [App]
+    var terminal: Terminal? = nil
     var projectOrder: [String]? = nil
 
     struct User: Codable, Equatable {
@@ -33,15 +33,31 @@ struct AppConfig: Codable, Equatable {
         var name: String
         var path: String
         var tags: [String]?
-        var apps: [String]?
         var remindersList: String? = nil
         var remindersListId: String? = nil
     }
 
-    struct App: Codable, Equatable {
-        var id: String
-        var name: String
-        var bundleId: String
+    struct Terminal: Codable, Equatable {
+        var hotkey: Shortcut? = nil
+
+        init(hotkey: Shortcut? = nil) { self.hotkey = hotkey }
+
+        private enum CodingKeys: String, CodingKey { case hotkey }
+
+        init(from decoder: Decoder) throws {
+            // A malformed shortcut must not discard the user's other configuration.
+            do {
+                let container = try decoder.container(keyedBy: CodingKeys.self)
+                hotkey = try container.decodeIfPresent(Shortcut.self, forKey: .hotkey)
+            } catch {
+                hotkey = Shortcut(key: "", modifiers: [])
+            }
+        }
+
+        struct Shortcut: Codable, Equatable {
+            var key: String
+            var modifiers: [String]
+        }
     }
 
     static let example = AppConfig(
@@ -59,12 +75,8 @@ struct AppConfig: Codable, Equatable {
         ],
         projects: [Project(
             id: "desktop-shell", name: "DesktopShell", path: "~/Desktop/desktop-shell",
-            tags: ["dev"], apps: ["cursor"]
-        )],
-        apps: [
-            App(id: "cursor", name: "Cursor", bundleId: "com.todesktop.230313mzl4w4u92"),
-            App(id: "safari", name: "Safari", bundleId: "com.apple.Safari")
-        ]
+            tags: ["dev"]
+        )]
     )
 }
 
