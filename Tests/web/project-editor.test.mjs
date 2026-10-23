@@ -43,6 +43,37 @@ test('editor: cancel discards draft, failed saves preserve it, unsafe labels rem
   assert.equal(one(f.host,'project-editor-scroll').scrollTop,0);
   assert.equal(name.value,'A');stop();f.assertClean();
 });
+test('editor: failed loading is an error, reopening clears it before loading new options', async () => {
+  let pending=deferred();const f=fixture(()=>pending.promise);
+  const stop=editor.mount(f.host,f);f.store.set({editingProjectId:'a'});
+  const message=one(f.host,'project-editor-message');
+  assert.match(message.textContent,/读取项目设置/);assert.equal(message.classList.contains('error'),false);
+  pending.reject(new Error('failed'));await flush();
+  assert.match(message.textContent,/读取失败/);assert.equal(message.classList.contains('error'),true);
+  await one(f.host,'project-editor-cancel').emit('click');pending=deferred();f.store.set({editingProjectId:'b'});
+  assert.match(message.textContent,/读取项目设置/);assert.equal(message.classList.contains('error'),false);
+  pending.resolve(options('b'));await flush();
+  assert.equal(message.textContent,'');assert.equal(message.classList.contains('error'),false);
+  stop();f.assertClean();
+});
+test('editor: validation and save failures are errors, correction and saving clear the error state', async () => {
+  let pending=deferred();const f=fixture((action,p)=>action==='updateProject'?pending.promise:Promise.resolve(options(p.projectId)));
+  const stop=editor.mount(f.host,f);f.store.set({editingProjectId:'a'});await flush();
+  const name=one(f.host,'project-editor-name'),message=one(f.host,'project-editor-message'),save=one(f.host,'project-editor-save');
+  name.value=' ';await name.emit('input');
+  assert.equal(save.disabled,true);assert.equal(message.classList.contains('error'),true);
+  name.value='Changed';await name.emit('input');
+  assert.equal(save.disabled,false);assert.equal(message.textContent,'');assert.equal(message.classList.contains('error'),false);
+  const first=save.emit('click');assert.match(message.textContent,/正在保存/);assert.equal(message.classList.contains('error'),false);
+  pending.reject(Object.assign(new Error('not-found'),{code:'not-found'}));await first;
+  assert.match(message.textContent,/保存失败.*已变化/);assert.equal(message.classList.contains('error'),true);assert.equal(name.value,'Changed');
+  pending=deferred();const retry=save.emit('click');
+  assert.match(message.textContent,/正在保存/);assert.equal(message.classList.contains('error'),false);
+  pending.reject(new Error('failed'));await retry;
+  assert.match(message.textContent,/保存失败.*权限/);assert.equal(message.classList.contains('error'),true);
+  name.value='Corrected';await name.emit('input');assert.equal(message.textContent,'');assert.equal(message.classList.contains('error'),false);
+  stop();f.assertClean();
+});
 test('editor: stale options and late save never replace new editor; remote deletion closes', async () => {
   const pending=deferred();const f=fixture((a,p)=>p.projectId==='a'?pending.promise:Promise.resolve(options('b')));
   const stop=editor.mount(f.host,f);f.store.set({editingProjectId:'a'});f.store.set({editingProjectId:'b'});await flush();

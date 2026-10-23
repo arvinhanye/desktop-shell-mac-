@@ -9,6 +9,7 @@
 .project-editor-option { max-width: 100%; overflow-wrap: anywhere; text-align: left; padding: var(--space-2); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-sm); background: var(--color-row-bg); color: var(--color-text-muted); }
 .project-editor-option[aria-pressed="true"] { border-color: var(--color-accent); color: var(--color-text); background: var(--color-selected-bg); }
 .project-editor-option:disabled, .project-editor-save:disabled { opacity: var(--control-disabled-opacity); cursor: default; }
-.project-editor-message { color: var(--color-danger); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.project-editor-message { color: var(--color-text-muted); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.project-editor-message.error { color: var(--color-danger); }
 
 .project-editor-notice { position: absolute; left: var(--column-2); top: var(--projects-top); padding: var(--space-3); color: var(--color-text); background: var(--color-panel-bg); border-radius: var(--radius-sm); box-shadow: var(--shadow-raised); }

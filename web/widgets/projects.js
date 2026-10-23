@@ -192,7 +192,7 @@ export default {
         if (managing) {
           actions.replaceChildren();
           const edit = element('button', 'project-edit', '编辑'); edit.type = 'button';
-          on(edit, 'click', event => { event.stopPropagation(); store.set({ editingProjectId: project.id, appearanceOpen: false, layoutOpen: false }); });
+          on(edit, 'click', event => { event.stopPropagation(); store.set({ editingProjectId: project.id, appearanceOpen: false }); });
           actions.append(edit);
           for (const [direction, label, cls] of [[-1, '↑', 'project-up'], [1, '↓', 'project-down']]) {
             const move = element('button', cls, label); move.type = 'button'; move.title = direction === -1 ? '上移' : '下移';

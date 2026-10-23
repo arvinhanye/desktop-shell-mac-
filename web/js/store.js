@@ -70,7 +70,6 @@ export const initialState = {
   now: null,
   appearanceOpen: false,
   editingProjectId: null,
-  layoutOpen: false,
   voiceRequest: 0,
   voicePlaying: false,
 };

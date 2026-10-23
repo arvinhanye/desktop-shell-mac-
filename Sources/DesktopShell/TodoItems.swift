@@ -23,7 +23,7 @@ enum TodoItems {
     static func listToProject(projects: [AppConfig.Project], lists: [(id: String, title: String)]) -> [String: String] {
         var result: [String: String] = [:]
         for project in projects {
-            guard let listID = boundListID(project, lists: lists) else { continue }
+            guard let listID = boundListID(project, lists: lists, reportIssues: true) else { continue }
             guard result[listID] == nil else {
                 Log.notice("DesktopShell reminders: list-shared project=\(project.id)")
                 continue
@@ -33,11 +33,22 @@ enum TodoItems {
         return result
     }
 
-    static func boundListID(_ project: AppConfig.Project, lists: [(id: String, title: String)]) -> String? {
-        if let id = project.remindersListId { return lists.first { $0.id == id }?.id }
+    static func boundListID(_ project: AppConfig.Project, lists: [(id: String, title: String)],
+                            reportIssues: Bool = false) -> String? {
+        if let id = project.remindersListId {
+            let match = lists.first { $0.id == id }?.id
+            if match == nil && reportIssues { Log.notice("DesktopShell reminders: list-missing project=\(project.id)") }
+            return match
+        }
         guard let title = project.remindersList,
               !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-        return lists.filter { $0.title == title }.sorted { $0.id < $1.id }.first?.id
+        let matches = lists.filter { $0.title == title }.sorted { $0.id < $1.id }
+        guard let match = matches.first else {
+            if reportIssues { Log.notice("DesktopShell reminders: list-missing project=\(project.id)") }
+            return nil
+        }
+        if matches.count > 1 && reportIssues { Log.notice("DesktopShell reminders: list-ambiguous project=\(project.id)") }
+        return match.id
     }
 
     static func due(_ components: DateComponents?) -> TodoItem.Due? {

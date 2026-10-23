@@ -22,6 +22,7 @@ export default {
     const apps = node('div', 'project-editor-options'), lists = node('div', 'project-editor-options');
     apps.setAttribute('role', 'group'); apps.setAttribute('aria-label', '默认打开应用'); lists.setAttribute('role', 'group'); lists.setAttribute('aria-label', '提醒事项列表');
     const binding = node('p', 'card-meta'), message = node('p', 'project-editor-message'); message.setAttribute('role', 'status');
+    const setMessage = (text, error = false) => { message.textContent = text; message.classList.toggle('error', error); };
     scroll.append(label, node('h3', '', '默认打开应用'), apps, node('h3', '', '提醒事项列表'), binding, lists, message);
     panel.append(head, scroll); overlay.append(panel); host.append(overlay);
     const notice = node('p', 'project-editor-notice'); notice.hidden = true; notice.setAttribute('role', 'status'); host.append(notice);
@@ -60,31 +61,31 @@ export default {
     };
     const open = async id => {
       const version = ++generation; blur(); scroll.scrollTop = 0; current = id; original = draft = options = null; pending = false;
-      clearChoices(); apps.replaceChildren(); lists.replaceChildren(); name.value = ''; binding.textContent = ''; message.textContent = '';
+      clearChoices(); apps.replaceChildren(); lists.replaceChildren(); name.value = ''; binding.textContent = ''; setMessage('');
       overlay.hidden = id === null; updateSave(); if (id === null || disposed) return;
-      store.set({ appearanceOpen: false, layoutOpen: false });
-      message.textContent = '读取项目设置…';
+      store.set({ appearanceOpen: false });
+      setMessage('读取项目设置…');
       try {
         const reply = await bridge.send('getProjectEditOptions', { projectId: id });
         if (disposed || version !== generation) return;
         options = reply; original = { name: reply.project.name, appId: reply.project.appId }; draft = { ...original };
-        name.value = draft.name; message.textContent = ''; renderChoices(); updateSave();
+        name.value = draft.name; setMessage(''); renderChoices(); updateSave();
       } catch {
-        if (!disposed && version === generation) message.textContent = '读取失败，请关闭后重试';
+        if (!disposed && version === generation) setMessage('读取失败，请关闭后重试', true);
       }
     };
-    const input = () => { if (!draft || pending) return; draft.name = name.value; message.textContent = valid() ? '' : '名称需为 1–100 个字'; updateSave(); };
+    const input = () => { if (!draft || pending) return; draft.name = name.value; setMessage(valid() ? '' : '名称需为 1–100 个字', !valid()); updateSave(); };
     const submit = async () => {
       if (disposed || pending || !valid()) return;
       const patch = projectEditPatch(original, draft);
       if (!Object.keys(patch).length) { close(); return; }
-      const version = ++generation, id = current; pending = true; updateSave(); renderChoices(); message.textContent = '正在保存…';
+      const version = ++generation, id = current; pending = true; updateSave(); renderChoices(); setMessage('正在保存…');
       try {
         await bridge.send('updateProject', { projectId: id, ...patch });
         if (!disposed && version === generation) close();
       } catch (error) {
-        if (!disposed && version === generation) message.textContent = error.code === 'not-found'
-          ? '保存失败，项目、应用或列表已变化，请重新打开检查' : '保存失败，请检查列表权限或占用情况后重试';
+        if (!disposed && version === generation) setMessage(error.code === 'not-found'
+          ? '保存失败，项目、应用或列表已变化，请重新打开检查' : '保存失败，请检查列表权限或占用情况后重试', true);
       } finally {
         if (!disposed && version === generation) { pending = false; updateSave(); renderChoices(); }
       }

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createStore, initialState, store } from '../../web/js/store.js';
 
 test('store: singleton has the initial keys; getState is a shallow copy', () => {
-  assert.deepEqual(Object.keys(store.getState()), ['ready', 'config', 'media', 'ui', 'todos', 'todosAccess', 'safeArea', 'paused', 'systemStats', 'audioSpectrum', 'phase', 'selectedProject', 'projectDrop', 'now', 'appearanceOpen', 'editingProjectId', 'layoutOpen', 'voiceRequest', 'voicePlaying']);
+  assert.deepEqual(Object.keys(store.getState()), ['ready', 'config', 'media', 'ui', 'todos', 'todosAccess', 'safeArea', 'paused', 'systemStats', 'audioSpectrum', 'phase', 'selectedProject', 'projectDrop', 'now', 'appearanceOpen', 'editingProjectId', 'voiceRequest', 'voicePlaying']);
   assert.equal(store.get('ready'), false);
   assert.equal(store.get('todosAccess'), 'unknown');
   const snapshot = store.getState();

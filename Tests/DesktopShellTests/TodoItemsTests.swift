@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import Testing
 @testable import DesktopShell
 
@@ -67,6 +68,59 @@ struct TodoItemsTests {
         #expect(TodoItems.listToProject(projects: projects, lists: [("z", "Work"), ("a", "Work")]) == ["a": "first"])
         #expect(TodoItems.listToProject(projects: [project("x", "Work")], lists: [("a", "Work ")]).isEmpty)
         #expect(TodoItems.listToProject(projects: [project("x", " Work ")], lists: [("a", " Work ")]) == ["a": "x"])
+    }
+
+    @Test("列表缺失和同名歧义记录项目 id，ID 失联不按名称回退且不泄露列表信息")
+    func bindingDiagnostics() throws {
+        let projects: [AppConfig.Project] = [
+            .init(id: "diagnostic-missing-name", name: "", path: "", remindersList: "PRIVATE-MISSING-TITLE"),
+            .init(id: "diagnostic-ambiguous", name: "", path: "", remindersList: "PRIVATE-DUPLICATE-TITLE"),
+            .init(id: "diagnostic-missing-id", name: "", path: "", remindersList: "PRIVATE-OLD-TITLE", remindersListId: "PRIVATE-MISSING-ID"),
+            .init(id: "diagnostic-id-priority", name: "", path: "", remindersList: "PRIVATE-DUPLICATE-TITLE", remindersListId: "PRIVATE-BOUND-ID"),
+            .init(id: "diagnostic-empty", name: "", path: "", remindersList: " \n"),
+            .init(id: "diagnostic-none", name: "", path: "")
+        ]
+        let lists: [(id: String, title: String)] = [
+            ("PRIVATE-Z-ID", "PRIVATE-DUPLICATE-TITLE"),
+            ("PRIVATE-A-ID", "PRIVATE-DUPLICATE-TITLE"),
+            ("PRIVATE-OTHER-ID", "PRIVATE-OLD-TITLE"),
+            ("PRIVATE-BOUND-ID", "PRIVATE-RENAMED-TITLE")
+        ]
+        var result: [String: String] = [:]
+        let output = try captureStderr {
+            result = TodoItems.listToProject(projects: projects, lists: lists)
+        }
+        #expect(result == ["PRIVATE-A-ID": "diagnostic-ambiguous", "PRIVATE-BOUND-ID": "diagnostic-id-priority"])
+        let messages = output.split(separator: "\n").filter { $0.contains("project=diagnostic-") }
+            .compactMap { line -> String? in
+                guard let start = line.range(of: "DesktopShell reminders:")?.lowerBound else { return nil }
+                return String(line[start...])
+            }
+        #expect(messages == [
+            "DesktopShell reminders: list-missing project=diagnostic-missing-name",
+            "DesktopShell reminders: list-ambiguous project=diagnostic-ambiguous",
+            "DesktopShell reminders: list-missing project=diagnostic-missing-id"
+        ])
+        #expect(!output.contains("PRIVATE-"))
+    }
+
+    private func captureStderr(_ action: () -> Void) throws -> String {
+        let directory = try TemporaryTestDirectory()
+        defer { directory.cleanup() }
+        let output = directory.root.appendingPathComponent("stderr.log")
+        try Data().write(to: output)
+        let file = try FileHandle(forWritingTo: output)
+        defer { try? file.close() }
+        let original = dup(STDERR_FILENO)
+        try #require(original >= 0)
+        defer {
+            dup2(original, STDERR_FILENO)
+            close(original)
+        }
+        try #require(dup2(file.fileDescriptor, STDERR_FILENO) >= 0)
+        action()
+        try file.synchronize()
+        return String(decoding: try Data(contentsOf: output), as: UTF8.self)
     }
 }
 
