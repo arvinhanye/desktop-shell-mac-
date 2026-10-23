@@ -49,3 +49,34 @@ body { font: 13px -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; 
 :root[data-embed] .viewer { inset: 0; }
 :root[data-embed] .stage { left: 0; top: 0; transform: none !important; }
 :root[data-embed] .sys-menubar, :root[data-embed] .sys-dock, :root[data-embed] .sys-icons, :root[data-embed] .controls { display: none; }
+
+/* 终端面板（2026-10-23）：模拟 Swift 摆放的 NSPanel——鼠标所在屏幕的安全区域左右各缩 16、离顶 8、高 45%（1003 × 0.45 ≈ 451），放大后上下各留 8。
+   backdrop-filter 只用来在浏览器里近似原生毛玻璃 .hudWindow，应用里不用；底色浓度取应用里的值 0.85 */
+.mock-terminal-window {
+  position: absolute; left: 16px; top: 38px; width: 1760px; height: 451px; z-index: 28;
+  --terminal-fill-opacity: 0.85;
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-raised);
+  -webkit-backdrop-filter: blur(40px) saturate(1.6); backdrop-filter: blur(40px) saturate(1.6);
+  font-family: var(--font-sans); font-size: var(--text-md); line-height: var(--leading-normal); color: var(--color-text);
+  -webkit-font-smoothing: antialiased; -webkit-user-select: none; user-select: none; cursor: default;
+  animation: mock-terminal-in var(--duration-terminal) var(--ease-standard);
+}
+.mock-terminal-window.maximized { height: 987px; }
+.mock-terminal-window button { font: inherit; color: inherit; cursor: pointer; }
+@keyframes mock-terminal-in { from { transform: translateY(-24px); opacity: 0; } }
+.mock-xterm { margin: 0; font: inherit; white-space: pre; -webkit-user-select: text; user-select: text; cursor: text; }
+.mock-xterm .cursor { background: var(--terminal-cursor); color: var(--terminal-cursor-text); }
+.mock-xterm .dim { opacity: 0.55; }
+.mock-xterm .b { font-weight: var(--weight-bold); }
+.mock-xterm .k { color: var(--ansi-bright-black); } .mock-xterm .r { color: var(--ansi-red); } .mock-xterm .g { color: var(--ansi-green); }
+.mock-xterm .y { color: var(--ansi-yellow); } .mock-xterm .bl { color: var(--ansi-blue); } .mock-xterm .m { color: var(--ansi-magenta); }
+.mock-xterm .bm { color: var(--ansi-bright-magenta); } .mock-xterm .c { color: var(--ansi-cyan); } .mock-xterm .w { color: var(--ansi-white); }
+
+/* 终端背后的亮色应用窗口（模拟 Safari 网页），用来看面板盖在亮色窗口上时字清不清楚 */
+.mock-app-window { position: absolute; left: 260px; top: 70px; width: 1180px; height: 860px; z-index: 25; border-radius: 10px; overflow: hidden; background: #fbfbfd; box-shadow: 0 22px 60px rgb(0 0 0 / 0.45); }
+.mock-app-bar { height: 52px; display: flex; gap: 8px; align-items: center; padding: 0 18px; background: #ececf0; border-bottom: 1px solid #d6d6dc; }
+.mock-app-bar i { width: 12px; height: 12px; border-radius: 50%; background: #ff5f57; } .mock-app-bar i + i { background: #febc2e; } .mock-app-bar i + i + i { background: #28c840; }
+.mock-app-page { padding: 56px 120px; display: grid; gap: 18px; }
+.mock-app-page b { display: block; height: 34px; width: 46%; border-radius: 6px; background: #1d1d1f; }
+.mock-app-page p { margin: 0; height: 14px; border-radius: 4px; background: #c9c9d1; }
+.mock-app-page p:nth-of-type(2n) { width: 82%; }

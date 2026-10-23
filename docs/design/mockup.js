@@ -25,11 +25,9 @@ const config = {
     { id: 'budget', name: '家庭账本', tags: [], apps: [], hasReminders: false },
   ],
   apps: [
-    // iconUrl 由 Swift 启动时导出到 media/app-icons/；应用没装或导出失败时为 null，显示名字首字母
-    ...[['cursor', 'Cursor'], ['safari', 'Safari'], ['notes', '备忘录'], ['music', '音乐'], ['mail', '邮件'], ['calendar', '日历']]
-      .map(([id, name]) => ({ id, name, iconUrl: `/media/app-icons/${id}.png` })),
-    { id: 'missing', name: 'Figma', iconUrl: null },
+    { id: 'cursor', name: 'Cursor' }, { id: 'safari', name: 'Safari' }, { id: 'notes', name: '备忘录' },
   ],
+  terminal: { hotkey: '⌥`' },   // 2026-10-23：快捷键可在 config.json 里改，入口和面板显示这里的文字
 };
 const avatars = Array.from({ length: 30 }, (_, i) => ({ id: String(i + 1), url: `/media/avatars/${i + 1}.png` }));
 const backgrounds = [
@@ -53,7 +51,7 @@ let todos = [
   { id: 't9', text: '读完《设计心理学》第五章', done: false, projectId: 'reading', due: null },
   { id: 't10', text: '给妈妈打个电话', done: false, projectId: null, due: dayOffset(0, '21:30') },
   { id: 't11', text: '把照片备份到移动硬盘', done: false, projectId: null, due: dayOffset(5) },
-  { id: 't12', text: '确认启动栏图标的显示尺寸', done: false, projectId: 'desktop-shell', due: dayOffset(4) },
+  { id: 't12', text: '试一下终端面板的快捷键', done: false, projectId: 'desktop-shell', due: dayOffset(4) },
   { id: 't6', text: '回复导师的邮件', done: true, projectId: 'thesis', due: null },
   { id: 't13', text: '整理桌面，只留两列图标', done: true, projectId: 'desktop-shell', due: null },
 ];
@@ -93,7 +91,7 @@ function renderClock() {
 function renderAppearance() {
   $('avatar-img').src = avatars.find(a => a.id === ui.avatarId)?.url ?? avatars[0].url;
   const bg = backgrounds.find(b => b.id === ui.backgroundId);
-  for (const id of ['character-art', 'launcher-art']) $(id).style.backgroundImage = bg ? `url("${bg.url}")` : 'none';
+  $('character-art').style.backgroundImage = bg ? `url("${bg.url}")` : 'none';
   $('character-name').textContent = config.character.name;
   $('character-motto').textContent = config.character.motto ?? '';
   for (const [gridId, items, key] of [['avatar-grid', avatars, 'avatarId'], ['background-grid', backgrounds, 'backgroundId']]) {
@@ -151,7 +149,7 @@ function renderStats() {
   $('bat-value').innerHTML = `${battery}<small>${state.lowBattery ? '% 用电池' : '% 电源'}</small>`;
 }
 
-// —— 项目、待办、启动栏（联动：选中项目 → 过滤待办、高亮相关应用） ——
+// —— 项目、待办（联动：选中项目 → 过滤待办） ——
 const appName = id => config.apps.find(a => a.id === id)?.name ?? id;
 function renderProjects() {
   const list = $('project-list'); list.replaceChildren();
@@ -196,7 +194,7 @@ function removeButton(project) {
     config.projects = config.projects.filter(p => p.id !== project.id);
     if (state.selectedProject === project.id) state.selectedProject = null;
     flashMeta(`已移除「${project.name}」，文件夹没有动`);
-    renderProjects(); renderTodos(); renderLauncher();
+    renderProjects(); renderTodos();
   });
   return b;
 }
@@ -218,7 +216,7 @@ function mockAddProject(path) {
   config.projects.push({ id: `p${Date.now()}`, name, path: clean, tags: [], apps: ['cursor'], hasReminders: false });
   setProjectHint(''); flashMeta(`已添加「${name}」`);
   $('project-input').value = '';
-  renderProjects(); renderLauncher();
+  renderProjects();
   const list = $('project-list'); list.scrollTop = list.scrollHeight; updateScrollHints(list);
 }
 $('project-input').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.isComposing) mockAddProject(event.target.value); });
@@ -237,7 +235,7 @@ $('toggle-drop').addEventListener('click', () => setDropTarget(!projectsCard.cla
 function selectProject(id) {
   state.selectedProject = state.selectedProject === id ? null : id;
   $('toggle-select').setAttribute('aria-pressed', String(Boolean(state.selectedProject)));
-  renderProjects(); renderTodos(); renderLauncher();
+  renderProjects(); renderTodos();
 }
 const dueLabel = due => {
   if (!due) return null;
@@ -284,17 +282,58 @@ $('todo-input').addEventListener('keydown', event => {
   todos.unshift({ id: `t${nextTodo++}`, text, done: false, projectId: project?.hasReminders ? project.id : null, due: null });
   event.target.value = ''; renderTodos();
 });
-function renderLauncher() {
-  const related = new Set(config.projects.find(p => p.id === state.selectedProject)?.apps ?? []);
-  const row = $('app-row'); row.replaceChildren();
-  for (const app of config.apps) {
-    const b = document.createElement('button'); b.type = 'button'; b.className = `app${related.has(app.id) ? ' related' : ''}`; b.title = `启动 ${app.name}`;
-    if (app.iconUrl) b.innerHTML = `<img class="app-icon" alt="" draggable="false" src="${app.iconUrl}"><span class="app-name"></span>`;
-    else { b.innerHTML = '<span class="app-icon app-icon-fallback"></span><span class="app-name"></span>'; b.querySelector('.app-icon').textContent = [...app.name][0]; }
-    b.querySelector('.app-name').textContent = app.name;
-    row.append(b);
-  }
+// —— 终端（2026-10-23）：入口点一下或按 ⌥` 打开面板；面板只由快捷键和"收起"按钮关闭（Esc 留给 vim、codex） ——
+const MAX_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5 9.5 6.5M2.5 13.5l4-4"/></svg>';
+const RESTORE_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" d="M13.5 6.5h-4v-4M2.5 9.5h4v4M9.5 6.5l4-4M6.5 9.5l-4 4"/></svg>';
+const prompt = dir => `<span class="bm">arvin@MacBook</span> <span class="c">${dir}</span> % `;
+// 模拟的会话内容（效果图里用 <pre> 画，应用里是 xterm.js），带中文，用来看等宽和中文宽度
+const SESSION = [
+  '<span class="dim">Last login: Fri Oct 23 09:12:04 on ttys002</span>',
+  `${prompt('~')}cd ~/Desktop/desktop-shell`,
+  `${prompt('desktop-shell')}git status -sb`,
+  '<span class="g">## main</span>...<span class="r">origin/main</span>',
+  ' <span class="r">M</span> docs/design/tokens.css',
+  ' <span class="r">M</span> docs/design/design.css',
+  '<span class="r">??</span> docs/design/终端说明.md',
+  `${prompt('desktop-shell')}ls`,
+  'AGENTS.md  CLAUDE.md  Package.swift  <span class="bl b">Sources</span>  <span class="bl b">Tests</span>  <span class="bl b">assets</span>  <span class="bl b">docs</span>  <span class="bl b">scripts</span>  <span class="bl b">web</span>',
+  `${prompt('desktop-shell')}scripts/test.sh`,
+  '<span class="k">[1/3]</span> Compiling DesktopShell BridgeProtocol.swift',
+  '<span class="g">✔</span> Test run with 214 tests passed after 3.42 seconds.',
+  "<span class=\"y\">⚠</span> 1 warning: 'NSUserNotification' was deprecated in macOS 11",
+  `${prompt('desktop-shell')}codex`,
+  '',
+  '<span class="m">›</span> 帮我看一下 M8-01 的验收标准有没有遗漏',
+  '',
+  '<span class="c">•</span> 正在读取 docs/tasks/M8-01-layout.md …',
+  '<span class="c">•</span> 第 3 条只写了"待办加高"，没有写具体的像素，建议补上 <span class="w">bottom: 12px</span>',
+  '',
+  '<span class="m">›</span> <span class="cursor"> </span>',
+];
+const terminal = { open: false, maximized: false, exited: false };
+function renderTerminal() {
+  $('terminal-entry-key').textContent = $('terminal-key').textContent = config.terminal.hotkey;
+  $('terminal-window').hidden = !terminal.open;
+  $('mock-app').hidden = !terminal.open || $('toggle-mock-app').getAttribute('aria-pressed') !== 'true';
+  $('terminal-window').classList.toggle('maximized', terminal.maximized);
+  $('terminal-max').innerHTML = terminal.maximized ? RESTORE_ICON : MAX_ICON;
+  $('terminal-max').title = terminal.maximized ? '还原' : '放大';
+  $('terminal-max').setAttribute('aria-label', $('terminal-max').title);
+  // 标题栏显示正在运行的程序设的标题（xterm onTitleChange），没有时显示 shell 的名字
+  $('terminal-meta').textContent = terminal.exited ? 'zsh' : 'codex';
+  const lines = terminal.exited
+    ? [...SESSION.slice(0, 13), `${prompt('desktop-shell')}exit`, '', '<span class="dim">[shell 已退出，按任意键重新开始]</span>', '<span class="cursor"> </span>']
+    : SESSION;
+  $('mock-xterm').innerHTML = lines.join('\n');
+  press('toggle-terminal', terminal.open); press('toggle-terminal-max', terminal.maximized); press('toggle-terminal-exit', terminal.exited);
 }
+const setTerminal = patch => { Object.assign(terminal, patch); renderTerminal(); };
+$('terminal-entry').addEventListener('click', () => setTerminal({ open: true }));
+$('terminal-close').addEventListener('click', () => setTerminal({ open: false }));
+$('terminal-max').addEventListener('click', () => setTerminal({ maximized: !terminal.maximized }));
+document.addEventListener('keydown', event => {
+  if (event.code === 'Backquote' && event.altKey) { event.preventDefault(); setTerminal({ open: !terminal.open }); }
+});
 
 // —— 音频律动（模拟频谱；暂停或页面不可见时停住并归零） ——
 const bars = { left: [], right: [] };
@@ -336,6 +375,10 @@ function setPaused(paused) {
   startViz();
 }
 $('toggle-paused').addEventListener('click', () => { const on = $('toggle-paused').getAttribute('aria-pressed') !== 'true'; press('toggle-paused', on); setPaused(on || state.lowBattery); });
+$('toggle-terminal').addEventListener('click', () => setTerminal({ open: !terminal.open }));
+$('toggle-terminal-max').addEventListener('click', () => setTerminal({ open: true, maximized: !terminal.maximized }));
+$('toggle-terminal-exit').addEventListener('click', () => setTerminal({ open: true, exited: !terminal.exited }));
+$('toggle-mock-app').addEventListener('click', () => { press('toggle-mock-app', $('toggle-mock-app').getAttribute('aria-pressed') !== 'true'); renderTerminal(); });
 $('toggle-denied').addEventListener('click', () => { state.denied = !state.denied; press('toggle-denied', state.denied); renderTodos(); });
 $('toggle-appearance').addEventListener('click', () => setAppearanceOpen($('appearance').hidden));
 $('toggle-icons').addEventListener('click', () => { const hidden = $('icons').classList.toggle('hidden'); press('toggle-icons', !hidden); });
@@ -382,7 +425,7 @@ window.probe = {
   setPaused(on) { press('toggle-paused', on); setPaused(on); },
 };
 
-renderClock(); renderAppearance(); renderStats(); renderProjects(); renderTodos(); renderLauncher(); fit(); startViz();
+renderClock(); renderAppearance(); renderStats(); renderProjects(); renderTodos(); renderTerminal(); fit(); startViz();
 if (params.get('still') === '1') window.probe.setPaused(true);
 reportGlass();
 setInterval(renderClock, 30_000);

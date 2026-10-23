@@ -17,7 +17,7 @@
   background: linear-gradient(var(--color-card-tint), var(--color-card-tint)), var(--color-card-bg);
   opacity: var(--card-fill-opacity);
 }
-/* 可换的背景图（角色卡、启动栏），在底色之上、内容之下 */
+/* 可换的背景图（角色卡），在底色之上、内容之下 */
 .card-art { position: absolute; inset: 0; background-size: cover; background-position: center 30%; opacity: var(--card-art-opacity); }
 /* :where() 不增加优先级，组件自己的定位规则（例如 position: absolute）照常生效 */
 .card > :where(:not(.card-art)) { position: relative; z-index: 1; }
@@ -29,6 +29,8 @@
 .ghost-button { padding: var(--space-half) var(--space-2); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-sm); background: none; font-size: var(--text-sm); color: var(--color-text-muted); }
 .ghost-button:hover { color: var(--color-text); border-color: var(--color-accent); }
 .primary-button { padding: var(--space-1) var(--space-4); border: 0; border-radius: var(--radius-sm); background: var(--color-accent); color: var(--color-accent-contrast); font-weight: var(--weight-bold); }
+/* 快捷键提示（终端入口、终端面板标题栏共用；2026-10-23 加） */
+.key-hint { padding: 0 var(--space-2); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: var(--text-sm); line-height: var(--leading-loose); letter-spacing: var(--tracking-title); color: var(--color-text-muted); text-shadow: none; }
 
 /* 可滚动列表（项目、待办）：细滚动条只在鼠标移上去时出现；上下还有内容时边缘淡出（JS 切换 more-above / more-below） */
 .scroll-list { overflow-y: auto; overscroll-behavior: contain; margin-right: calc(-1 * var(--space-2)); padding-right: var(--space-2); }
@@ -67,7 +69,7 @@
 .greeting-name { color: var(--color-accent); }
 .greeting-wish { margin: var(--space-2) 0 0; font-size: var(--text-wish); line-height: var(--leading-tight); }
 
-/* ==================== web/widgets/character.css（照 prototype / Profile：头像组合图整张显示在卡片左上） ==================== */
+/* ==================== web/widgets/character.css（照 prototype / Profile；2026-10-23 压缩：头像组合图缩到 0.64 倍放在左边，名字和签名在右边） ==================== */
 [data-widget="character"] { left: var(--column-1); top: var(--character-top); width: var(--column-width); }
 .character-card { height: var(--character-height); padding-top: 0; }
 .avatar-button { position: absolute; left: var(--space-1); top: var(--space-2); width: var(--avatar-width); height: var(--avatar-height); padding: 0; border: 0; background: none; border-radius: var(--radius-full); }
@@ -78,9 +80,9 @@
 .avatar-ring { position: absolute; left: var(--avatar-ring-x); top: var(--avatar-ring-y); width: var(--avatar-ring-size); height: var(--avatar-ring-size); border-radius: var(--radius-full); box-shadow: var(--glow-voice); opacity: 0; pointer-events: none; transition: opacity var(--duration-normal) var(--ease-standard); }
 .avatar-button.playing .avatar-ring { opacity: 1; animation: voice-pulse var(--duration-voice-pulse) var(--ease-breathe) infinite; }
 @keyframes voice-pulse { 50% { opacity: var(--voice-ring-dim); } }
-.character-info { position: absolute; left: var(--card-padding); right: var(--card-padding); bottom: var(--space-3); display: grid; grid-template-columns: auto 1fr; align-items: baseline; column-gap: var(--space-3); }
-.character-name { font-family: var(--font-serif); font-size: var(--text-xl); letter-spacing: var(--tracking-name); }
-.character-motto { font-family: var(--font-serif); font-size: var(--text-sm); color: var(--color-text-muted); }
+.character-info { position: absolute; left: var(--character-info-x); right: var(--card-padding); bottom: var(--space-4); display: grid; row-gap: var(--space-half); }
+.character-name { font-family: var(--font-serif); font-size: var(--text-xl); line-height: var(--leading-tight); letter-spacing: var(--tracking-name); }
+.character-motto { font-family: var(--font-serif); font-size: var(--text-sm); line-height: var(--leading-snug); color: var(--color-text-muted); }
 .appearance-button { position: absolute; top: var(--space-3); right: var(--space-3); display: flex; align-items: center; gap: var(--space-1); padding: var(--space-1) var(--space-2); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-sm); background: var(--color-card-bg); font-size: var(--text-sm); }
 .appearance-button:hover { background: var(--color-card-bg-hover); }
 .appearance-button svg { width: var(--icon-sm); height: var(--icon-sm); }
@@ -121,8 +123,9 @@
 .stat-spark { grid-column: 2; height: var(--spark-height); width: 100%; }
 .stat-spark polyline { fill: none; stroke: var(--color-ice); stroke-width: var(--spark-stroke); vector-effect: non-scaling-stroke; }
 .stat-spark polygon { fill: color-mix(in srgb, var(--color-ice) 16%, transparent); }
-.power-hint { display: none; margin: var(--space-3) 0 0; padding-top: var(--space-2); border-top: var(--border-width) solid var(--color-card-border); color: var(--color-warning); font-size: var(--text-sm); }
-.stats-card.low-battery .power-hint { display: block; }
+/* 电量低的提示放在标题行右边（2026-10-23 改，原来是卡片底部多一行）：卡片高度不变，下面的终端入口才能紧挨着放 */
+.power-hint { display: none; color: var(--color-warning); }
+.stats-card.low-battery .power-hint { display: inline; }
 .stats-card.low-battery .stat-battery .stat-bar > span { background: var(--color-warning); }
 
 /* ==================== web/widgets/projects.css ==================== */
@@ -159,7 +162,7 @@
 .projects-card.drop-target .card-head, .projects-card.drop-target .project-add, .projects-card.drop-target .project-hint, .projects-card.drop-target .project-list { opacity: var(--drop-dim-opacity); }
 
 /* ==================== web/widgets/todos.css（系统提醒事项） ==================== */
-[data-widget="todos"] { left: var(--column-2); top: var(--todos-top); bottom: calc(var(--launcher-bottom) + var(--launcher-height) + var(--column-gap)); width: var(--column-width); }
+[data-widget="todos"] { left: var(--column-2); top: var(--todos-top); bottom: var(--todos-bottom); width: var(--column-width); }
 .todos-card { display: flex; flex-direction: column; height: 100%; }
 .todo-add { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-sm); background: var(--color-input-bg); }
 .todo-add input { flex: 1; min-width: 0; border: 0; outline: none; background: none; color: var(--color-text); font: inherit; }
@@ -182,22 +185,13 @@
 .todo-empty, .todo-denied { margin: var(--space-6) var(--space-2); color: var(--color-text-muted); font-size: var(--text-md); text-align: center; line-height: var(--leading-loose); }
 .todo-denied strong { display: block; color: var(--color-text); font-family: var(--font-serif); font-size: var(--text-lg); font-weight: var(--weight-regular); margin-bottom: var(--space-1); }
 
-/* ==================== web/widgets/launcher.css（横跨两列；背景可换成背景图库里的图） ==================== */
-[data-widget="launcher"] { left: var(--column-1); bottom: var(--launcher-bottom); width: calc(var(--column-width) * 2 + var(--column-gap)); height: var(--launcher-height); }
-.launcher-card { height: 100%; padding: var(--space-3) var(--space-4); }
-.app-row { display: flex; gap: var(--space-2); }
-.app {
-  display: grid; justify-items: center; gap: var(--space-1); width: var(--app-tile-width); padding: var(--space-2) 0;
-  border: var(--border-width) solid transparent; border-radius: var(--radius-sm); background: none;
-}
-.app:hover { background: var(--color-card-bg-hover); }
-.app-icon { width: var(--app-icon-size); height: var(--app-icon-size); display: block; filter: drop-shadow(var(--shadow-icon)); transition: filter var(--duration-fast) var(--ease-standard); }
-/* iconUrl 为 null（应用没装、导出失败）时：名字的第一个字 */
-.app-icon-fallback { display: grid; place-items: center; border-radius: var(--radius-md); background: var(--color-track); border: var(--border-width) solid var(--color-card-border); font-family: var(--font-serif); font-size: var(--text-xl); filter: none; }
-.app-name { font-size: var(--text-sm); color: var(--color-text-muted); }
-.app.related { border-color: color-mix(in srgb, var(--color-highlight) 55%, transparent); background: color-mix(in srgb, var(--color-highlight) 12%, transparent); }
-.app.related .app-icon { filter: drop-shadow(var(--glow-related)); }
-.app.related .app-name { color: var(--color-highlight); }
+/* ==================== web/widgets/terminal.css（终端入口：第一列系统状态下面一条，点开终端面板；2026-10-23 加，替换启动栏） ==================== */
+[data-widget="terminal"] { left: var(--column-1); top: var(--terminal-entry-top); width: var(--column-width); height: var(--terminal-entry-height); }
+.terminal-entry { display: flex; align-items: center; gap: var(--space-3); width: 100%; height: 100%; padding: 0 var(--card-padding); background: none; text-align: left; transition: border-color var(--duration-fast) var(--ease-standard); }
+.terminal-entry:hover { border-color: color-mix(in srgb, var(--color-accent) 55%, transparent); }
+.terminal-entry-icon { width: var(--icon-md); height: var(--icon-md); color: var(--color-text-muted); }
+.terminal-entry:hover .terminal-entry-icon { color: var(--color-accent); }
+.terminal-entry-label { flex: 1; font-family: var(--font-serif); font-size: var(--text-lg); letter-spacing: var(--tracking-title); }
 
 /* ==================== web/widgets/visualizer.css（冰晶心形装饰条 + 两侧各 12 根，不接收点击） ==================== */
 [data-widget="visualizer"] { left: calc(var(--visualizer-center) - var(--viz-ornament-width) / 2); bottom: var(--visualizer-bottom); width: var(--viz-ornament-width); height: var(--visualizer-height); pointer-events: none; }
@@ -212,3 +206,26 @@
   transform-origin: bottom; transform: scaleY(var(--viz-bar-rest));
   filter: drop-shadow(var(--glow-viz));
 }
+
+/* ==================== web/terminal/terminal.css（终端面板 terminal.html：独立 NSPanel 里的网页，铺满面板；2026-10-23 加） ====================
+   terminal.html 依次引用 tokens.css、fonts.css、base.css、vendor/xterm.css、本文件。body 透明（底下垫原生毛玻璃），页面只有一个 .terminal-panel。
+   xterm.js 挂在 .terminal-screen 里，字体、字号、行高、配色从 tokens 读（--font-mono、--terminal-*、--ansi-*）。终端里的字不加 text-shadow。 */
+.terminal-panel { position: relative; height: 100%; display: flex; flex-direction: column; overflow: hidden; border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-lg); }
+.terminal-panel::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(var(--color-terminal-tint), transparent var(--terminal-tint-height)), var(--color-terminal-bg);
+  opacity: var(--terminal-fill-opacity);
+}
+.terminal-panel > * { position: relative; }
+.terminal-bar { display: flex; align-items: center; gap: var(--space-3); height: var(--terminal-bar-height); padding: 0 var(--space-2) 0 var(--space-4); border-bottom: var(--border-width) solid var(--color-card-border); flex: none; }
+.terminal-title { display: flex; align-items: center; gap: var(--space-2); font-family: var(--font-serif); font-size: var(--text-md); letter-spacing: var(--tracking-title); }
+.terminal-title svg { width: var(--icon-sm); height: var(--icon-sm); color: var(--color-accent); }
+/* 正在运行的程序设的窗口标题（xterm onTitleChange），没有时显示 shell 的名字；太长就省略 */
+.terminal-meta { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--text-sm); color: var(--color-text-faint); }
+.terminal-actions { display: flex; align-items: center; gap: var(--space-1); }
+.terminal-button { display: grid; place-items: center; width: var(--space-6); height: var(--space-6); padding: 0; border: 0; border-radius: var(--radius-sm); background: none; color: var(--color-text-muted); }
+.terminal-button:hover { background: var(--color-card-bg-hover); color: var(--color-text); }
+.terminal-button svg { width: var(--icon-sm); height: var(--icon-sm); }
+.terminal-screen { flex: 1; min-height: 0; padding: var(--terminal-screen-padding); font-family: var(--font-mono); font-size: var(--terminal-font-size); line-height: var(--terminal-line-height); color: var(--terminal-fg); }
+/* xterm.css 自带的视口底色是黑的，换成透明，露出面板底色 */
+.terminal-screen .xterm-viewport { background: transparent !important; }

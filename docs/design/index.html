@@ -53,7 +53,7 @@
 
         <section class="widget" data-widget="stats" aria-label="系统状态">
           <div class="card stats-card" id="stats-card">
-            <div class="card-head"><h2 class="card-title">系统状态</h2></div>
+            <div class="card-head"><h2 class="card-title">系统状态</h2><span class="card-meta power-hint">电量低，已暂停视频和动画</span></div>
             <div class="stat-row">
               <span class="stat-label">CPU</span>
               <svg class="stat-spark" id="cpu-spark" viewBox="0 0 60 26" preserveAspectRatio="none" aria-hidden="true"><polygon points=""/><polyline points=""/></svg>
@@ -69,7 +69,6 @@
               <div class="stat-bar"><span id="bat-bar"></span></div>
               <span class="stat-value" id="bat-value"></span>
             </div>
-            <p class="power-hint">电量低于 20%，已暂停背景视频和动画来省电</p>
           </div>
         </section>
 
@@ -95,11 +94,13 @@
           </div>
         </section>
 
-        <section class="widget" data-widget="launcher" aria-label="应用启动栏">
-          <div class="card launcher-card">
-            <div class="card-art" id="launcher-art"></div>
-            <div class="app-row" id="app-row"></div>
-          </div>
+        <!-- 2026-10-23：替换启动栏。点一下打开终端面板（bridge 动作 openTerminal）；快捷键提示取自配置 -->
+        <section class="widget" data-widget="terminal" aria-label="终端">
+          <button class="card terminal-entry" id="terminal-entry" type="button">
+            <svg class="terminal-entry-icon" viewBox="0 0 18 18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" d="M3.5 5l4 4-4 4M9.5 13.5h5"/></svg>
+            <span class="terminal-entry-label">终端</span>
+            <kbd class="key-hint" id="terminal-entry-key"></kbd>
+          </button>
         </section>
 
         <section class="widget" data-widget="visualizer" aria-hidden="true">
@@ -121,19 +122,40 @@
               <div class="appearance-scroll">
                 <h3>头像</h3>
                 <div class="thumb-grid avatars" id="avatar-grid" role="radiogroup" aria-label="头像"></div>
-                <h3>启动栏和卡片的背景</h3>
+                <h3>角色卡的背景</h3>
                 <div class="thumb-grid backgrounds" id="background-grid" role="radiogroup" aria-label="背景"></div>
               </div>
             </div>
           </div>
         </section>
       </main>
+
+      <!-- 效果图模拟：终端面板盖在一个亮色的应用窗口上（不属于设计） -->
+      <div class="mock-app-window" id="mock-app" aria-hidden="true" hidden><div class="mock-app-bar"><i></i><i></i><i></i></div><div class="mock-app-page"><b></b><p></p><p></p><p></p><b></b><p></p><p></p></div></div>
+
+      <!-- 终端面板：应用里是独立 NSPanel 里的 terminal.html，下面 .terminal-panel 就是那个页面的全部 DOM。
+           .mock-terminal-window 只是效果图里模拟的面板窗口（位置、尺寸、毛玻璃由 Swift 负责），不属于设计 -->
+      <div class="mock-terminal-window" id="terminal-window" hidden>
+        <div class="terminal-panel">
+          <header class="terminal-bar">
+            <span class="terminal-title"><svg viewBox="0 0 18 18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" d="M3.5 5l4 4-4 4M9.5 13.5h5"/></svg>终端</span>
+            <span class="terminal-meta" id="terminal-meta">codex</span>
+            <kbd class="key-hint" id="terminal-key"></kbd>
+            <div class="terminal-actions">
+              <button class="terminal-button" id="terminal-max" type="button" aria-label="放大" title="放大"></button>
+              <button class="terminal-button" id="terminal-close" type="button" aria-label="收起" title="收起"><svg viewBox="0 0 16 16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg></button>
+            </div>
+          </header>
+          <div class="terminal-screen"><pre class="mock-xterm" id="mock-xterm"></pre></div>
+        </div>
+      </div>
     </div>
   </div>
 
   <aside class="controls" aria-label="效果图控制">
     <div class="group"><span class="label">时段</span><button data-phase="morning">早晨</button><button data-phase="day">白天</button><button data-phase="evening">傍晚</button><button data-phase="night">夜晚</button></div>
     <div class="group"><span class="label">状态</span><button id="toggle-select">选中项目</button><button id="toggle-lowbat">电量低</button><button id="toggle-paused">暂停</button><button id="toggle-denied">提醒事项未授权</button><button id="toggle-appearance">外观面板</button><button id="toggle-voice">播放语音</button><button id="toggle-drop">拖入项目</button></div>
+    <div class="group"><span class="label">终端</span><button id="toggle-terminal">打开（⌥`）</button><button id="toggle-terminal-max">放大</button><button id="toggle-mock-app">背后垫一个亮色窗口（模拟）</button><button id="toggle-terminal-exit">shell 已退出</button></div>
     <div class="group"><span class="label">视图</span><button id="toggle-icons" aria-pressed="true">桌面图标</button><button id="toggle-actual">实际尺寸</button></div>
   </aside>
 </body>
