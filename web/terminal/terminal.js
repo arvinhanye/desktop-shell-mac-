@@ -67,9 +67,12 @@ export function createTerminalController({ term, fit, elements, target,
           return;
         case 'terminalExited':
           if (!Number.isSafeInteger(event.status)) throw new TypeError();
-          title = '';
-          elements.meta.textContent = shell;
-          term.write(EXIT_MESSAGE);
+          // xterm parses writes asynchronously. Reset only after any earlier OSC
+          // titles have been consumed, at the same queue position as the exit line.
+          term.write(EXIT_MESSAGE, () => {
+            title = '';
+            elements.meta.textContent = shell;
+          });
           return;
         case 'terminalState': {
           if (typeof event.visible !== 'boolean' || typeof event.maximized !== 'boolean'

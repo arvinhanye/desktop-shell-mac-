@@ -5,7 +5,7 @@ import { terminalOptions, decodeOutput, splitInput, createTerminalController } f
 function fixture(nativeMode = true, responder = () => null) {
   const sent = [], writes = [], warnings = [], infos = [], handlers = {};
   const term = { cols: 80, rows: 24, focuses: 0, blurs: 0,
-    write: data => writes.push(data), focus() { this.focuses++; }, blur() { this.blurs++; },
+    write(data, complete) { writes.push(data); complete?.(); }, focus() { this.focuses++; }, blur() { this.blurs++; },
     onData(fn) { handlers.data = fn; }, onResize(fn) { handlers.resize = fn; }, onTitleChange(fn) { handlers.title = fn; },
   };
   const element = () => ({ textContent: '', innerHTML: '', hidden: true, attributes: {},
@@ -127,4 +127,19 @@ test('terminal: input while fonts are loading waits for first fit and ready', as
   assert.deepEqual(f.sent, []);
   f.controller.start(); await f.controller.whenIdle();
   assert.deepEqual(f.sent, [{ action: 'terminalReady', cols: 80, rows: 24 }, { action: 'terminalInput', data: 'early' }]);
+});
+
+test('terminal: exit title reset waits for previously queued OSC titles to finish', () => {
+  const f = fixture(); f.controller.start(); f.target.shell.receive(state());
+  const queued = [];
+  f.term.write = (data, complete) => queued.push(() => {
+    if (data instanceof Uint8Array) f.handlers.title('finished command');
+    complete?.();
+  });
+  f.target.shell.receive({ event: 'terminalOutput', data: Buffer.from('\x1b]0;finished command\x07').toString('base64') });
+  f.target.shell.receive({ event: 'terminalExited', status: 0 });
+  for (const process of queued) process();
+  assert.equal(f.elements.meta.textContent, 'zsh');
+  f.target.shell.receive(state({ shell: 'bash' }));
+  assert.equal(f.elements.meta.textContent, 'bash');
 });
