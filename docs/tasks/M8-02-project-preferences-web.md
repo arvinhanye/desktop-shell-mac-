@@ -1,6 +1,6 @@
 # M8-02: 项目管理模式与编辑面板
 
-- **状态**：review
+- **状态**：changes-requested
 - **里程碑**：M8
 - **依赖**：M8-01 本地实现与自查通过
 - **分支**：task/M8-02（接续 M8-01，记录起点 SHA）
@@ -54,6 +54,44 @@
 
 ## 审查记录
 
-- **审查者**：待正式独立审查。
-- **结论**：待审查。
-- **意见**：子代理结果仅作实现自查。
+- **审查者**：Claude Code（2026-10-23）
+- **范围**：M8-01 + M8-02，加上 `task/M8-05` 上给 M8-02 的修复 `d570600`。在临时检出里基于 `4cb083a` cherry-pick `d570600`（无冲突），对照 `c18d068`（main）审查。
+- **用户决定（2026-10-23）**：旧 M8 只保留项目编辑（M8-01、M8-02）；M8-03、M8-04、M8-05 作废，不合并。终端改造另编为 M9。
+- **结论**：需修改（changes-requested）
+
+### 已实际执行
+
+- `scripts/test-web.sh`：493/493 通过
+- `git diff --check c18d068 HEAD`：无输出
+- `swift build`：成功（冷编译 236 秒）
+- `scripts/test.sh`：275 个测试、29 个套件全部通过
+
+### 需要实现者修改（在 `task/M8-02` 上接着提交。审查者已把 `d570600` 拣到这个分支上，就是 `9cdebd1`，不用再拣）
+
+1. **提醒列表日志的规则回退了**（`TodoItems.swift`，属于 M8-01）。AGENTS.md"配置文件示例"要求：`remindersList` 找不到时记录日志，同名列表有多个时取第一个并记录日志。改动后的 `listToProject` / `boundListID` 把 `list-missing`、`list-ambiguous` 两条日志去掉了，只剩 `list-shared`。要补回来，并给 `remindersListId` 失联也记一条（只写项目 id，不写列表名）。
+2. **进度提示显示成了错误色**（`project-editor.js` / `project-editor.css`）。"读取项目设置…""正在保存…"和错误共用 `.project-editor-message`，而它是 `--color-danger`。把进度提示和错误分开：进度用 `--color-text-muted`，只有错误用 `--color-danger`（比如错误时加 `.error` 类，和 `.project-hint.error` 一样）。CSS 规则由 Claude Code 写进 `docs/design/design.css`，见下面"审查者改动"；实现者照抄。
+3. **去掉作废任务留下的 `layoutOpen`**。它是给已经作废的 M8-03、M8-04 预留的，现在没有人读。从 `store.js` 的初始状态、`projects.js`、`appearance.js`、`project-editor.js` 和对应测试里删掉。
+
+### 审查者改动（Claude Code 负责 `docs/design/`）
+
+- `docs/design/design.css`：项目编辑的规则原来直接接在 `visualizer.css` 一节后面，没有分节标题。结果用 README 里的核对命令提取 `visualizer.css` 时，会把项目编辑的规则一起带出来，和 `web/widgets/visualizer.css` 对不上。现在拆成 `web/widgets/project-editor.css` 一节，项目卡片新增的几条挪回 `projects.css` 一节，并加上第 2 条要的 `.project-editor-message.error`。
+- `docs/design/tokens.css`：`--editor-width`、`--control-disabled-opacity` 原来是一个单独的 `:root`，放在时段主题后面。现在挪进主 `:root` 的对应分组，数值不变。`web/styles/tokens.css` 由实现者照着同步。
+
+### 合并时由 Claude Code 处理
+
+- AGENTS.md 补上项目编辑的规范（用户已同意先审合并，措辞合并前给用户看）：
+  - 三个新动作 `getProjectEditOptions` / `updateProject` / `reorderProjects`；
+  - 配置字段 `projectOrder`、`remindersListId`；
+  - M7"改写 config.json"的规则改成"只合并改动的字段，保留结构体不认识的键"；
+  - 编辑接口会把提醒事项列表的名字和来源发给网页（以前 `getConfig` 从不给网页列表名）。
+- `M8-03`、`M8-04`、`M8-05` 三张任务单的状态改成"作废（2026-10-23 用户决定）"，`M8-00` 计划里加一行说明。
+
+### 用户手动验证（实现者改完、复验通过后，由用户在签名的 `.app` 里做；审查者先备份 `config.json`）
+
+- M8-02 任务单里的四条：
+  - 中文名称、⌘A / ⌘C / ⌘V、Esc 交还焦点；
+  - 改默认应用后打开的目标正确；
+  - 选择 / 解除提醒列表后，新增的提醒进对的列表；
+  - 列表改名后绑定仍有效，重启后保持。
+- 其中"其他关联高亮仍在"一句是针对启动栏的，M9 去掉启动栏后不再适用，这次只看默认应用。
+

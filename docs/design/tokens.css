@@ -104,6 +104,7 @@
   --icon-sm: 14px;            /* 按钮里的小图标 */
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
+  --control-disabled-opacity: 0.45;  /* 禁用的按钮（M8，2026-10-22） */
 
   /* —— 阴影和光晕（box-shadow / drop-shadow 的参数） —— */
   --shadow-card: none;
@@ -153,6 +154,7 @@
   --appearance-top: 120px;    /* 外观面板，左边和第二列对齐 */
   --appearance-width: 760px;
   --appearance-max-height: 760px;
+  --editor-width: 560px;       /* 编辑项目面板（M8，2026-10-22） */
 
   /* —— 时钟内部（相对时钟组件左上角，照 Ageo / Time and Date） —— */
   --clock-day-x: 30px;
@@ -232,6 +234,3 @@
   --color-accent: var(--color-sakura);
   --color-text-muted: rgb(214 220 244 / 0.74);
 }
-
-/* M8 project preferences */
-:root { --editor-width: 560px; --control-disabled-opacity: 0.45; }
