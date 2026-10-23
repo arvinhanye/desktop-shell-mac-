@@ -1,12 +1,19 @@
 import AppKit
 import EventKit
 
+struct ReminderListSnapshot: Equatable {
+    var id: String
+    var title: String
+    var sourceTitle: String
+    var canWrite: Bool
+}
+
 @MainActor
 protocol RemindersBackend: AnyObject {
     var access: String { get }
     var changeSource: AnyObject { get }
     func requestAccess(_ completion: @escaping @MainActor (Bool) -> Void)
-    func lists() -> [(id: String, title: String)]
+    func lists() -> [ReminderListSnapshot]
     func defaultListID() -> String?
     func refresh()
     func fetch(completedSince: Date?, completion: @escaping @MainActor ([ReminderSnapshot]?) -> Void)
@@ -40,8 +47,11 @@ final class EventKitRemindersBackend: RemindersBackend {
             Task { @MainActor in completion(failed) }
         }
     }
-    func lists() -> [(id: String, title: String)] {
-        store.calendars(for: .reminder).map { ($0.calendarIdentifier, $0.title) }
+    func lists() -> [ReminderListSnapshot] {
+        store.calendars(for: .reminder).map {
+            ReminderListSnapshot(id: $0.calendarIdentifier, title: $0.title,
+                sourceTitle: $0.source.title, canWrite: $0.allowsContentModifications)
+        }
     }
     func defaultListID() -> String? { store.defaultCalendarForNewReminders()?.calendarIdentifier }
     func refresh() { store.refreshSourcesIfNecessary() }
@@ -100,6 +110,7 @@ final class RemindersStore {
     private var lastAccess: String?
     private var lastItems: [TodoItem]?
     private var lastEmittedAccess: String?
+    private var optionTokens: [String: String] = [:]
 
     init(appState: AppState, backend: RemindersBackend? = nil,
          notifications: NotificationCenter = .default,
@@ -215,7 +226,7 @@ final class RemindersStore {
         guard lifecycle != nil, checkAccess(), let appState else { return }
         let id = UUID(); readID = id
         let instant = now(), calendar = calendar()
-        let mapping = TodoItems.listToProject(projects: appState.config.projects, lists: backend.lists())
+        let mapping = TodoItems.listToProject(projects: appState.config.projects, lists: backend.lists().map { ($0.id, $0.title) })
         var batches: [Int: [ReminderSnapshot]] = [:]
         let receive: @MainActor (Int, [ReminderSnapshot]?) -> Void = { [weak self] index, snapshots in
             guard let self, self.lifecycle != nil, self.readID == id, self.checkAccess() else { return }
@@ -244,12 +255,66 @@ final class RemindersStore {
         Log.notice("DesktopShell reminders: pushed items=\(items.count)")
     }
 
+    private func refreshOptions(_ lists: [ReminderListSnapshot]) {
+        let ids = Set(lists.map(\.id))
+        optionTokens = optionTokens.filter { ids.contains($0.key) }
+        for list in lists where optionTokens[list.id] == nil { optionTokens[list.id] = UUID().uuidString }
+    }
+
+    func projectEditOptions(project: AppConfig.Project, projects: [AppConfig.Project], appId: String?) -> [String: Any] {
+        let access = lifecycle == nil ? "unknown" : backend.access
+        let lists = access == "granted" ? backend.lists() : []
+        refreshOptions(lists)
+        let pairs = lists.map { ($0.id, $0.title) }
+        let mapping = TodoItems.listToProject(projects: projects, lists: pairs)
+        let bound = TodoItems.boundListID(project, lists: pairs)
+        let status: String
+        if access != "granted" { status = "unavailable" }
+        else if let bound, let list = lists.first(where: { $0.id == bound }) {
+            if projects.filter({ TodoItems.boundListID($0, lists: pairs) == bound }).count > 1 { status = "shared" }
+            else { status = list.canWrite ? "linked" : "read-only" }
+        } else {
+            let hasBinding = project.remindersListId != nil
+                || !(project.remindersList?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            status = hasBinding ? "missing" : "none"
+        }
+        return ["project": ["id": project.id, "name": project.name,
+                             "appId": appId.map { $0 as Any } ?? NSNull()],
+                "access": access,
+                "binding": ["status": status, "optionId": bound.flatMap { optionTokens[$0] }.map { $0 as Any } ?? NSNull()],
+                "lists": lists.map { list -> [String: Any] in
+                    ["id": optionTokens[list.id]!, "title": list.title, "source": list.sourceTitle,
+                     "canWrite": list.canWrite, "assignedProjectId": mapping[list.id].map { $0 as Any } ?? NSNull()]
+                }]
+    }
+
+    func resolveReminderOption(_ optionID: String, projectId: String,
+                               projects: [AppConfig.Project]) -> Result<String, BridgeError> {
+        guard lifecycle != nil, backend.access == "granted" else { return .failure(.failed) }
+        let lists = backend.lists()
+        refreshOptions(lists)
+        guard let raw = optionTokens.first(where: { $0.value == optionID })?.key,
+              let list = lists.first(where: { $0.id == raw }) else { return .failure(.notFound) }
+        let pairs = lists.map { ($0.id, $0.title) }
+        // Check every claimant, not just the first legacy owner in the public mapping.
+        guard list.canWrite, !projects.contains(where: {
+            $0.id != projectId && TodoItems.boundListID($0, lists: pairs) == raw
+        }) else { return .failure(.failed) }
+        return .success(raw)
+    }
+
     func add(text: String, projectId: String?, reply: @escaping (Result<TodoItem, BridgeError>) -> Void) {
         guard lifecycle != nil, checkAccess(), let appState else { reply(.failure(.failed)); return }
         let projects = appState.config.projects
         if let projectId, !projects.contains(where: { $0.id == projectId }) { reply(.failure(.notFound)); return }
-        let mapping = TodoItems.listToProject(projects: projects, lists: backend.lists())
-        let projectList = projectId.flatMap { id in mapping.first { $0.value == id }?.key }
+        let lists = backend.lists()
+        let mapping = TodoItems.listToProject(projects: projects, lists: lists.map { ($0.id, $0.title) })
+        var projectList = projectId.flatMap { id in mapping.first { $0.value == id }?.key }
+        if let project = projects.first(where: { $0.id == projectId }), let id = project.remindersListId {
+            guard let list = lists.first(where: { $0.id == id }) else { reply(.failure(.notFound)); return }
+            guard list.canWrite else { reply(.failure(.failed)); return }
+            projectList = id
+        }
         guard let list = projectList ?? backend.defaultListID() else { reply(.failure(.failed)); return }
         do {
             let snapshot = try backend.add(text: text.trimmingCharacters(in: .whitespacesAndNewlines), listID: list)

@@ -5,6 +5,8 @@ const parameters = new Map([
   ['launchApp', ['appId']], ['saveUiState', ['avatarId', 'backgroundId']],
   ['addTodo', ['text', 'projectId']], ['setTodoDone', ['todoId', 'done']],
   ['addProject', ['path']], ['removeProject', ['projectId']],
+  ['getProjectEditOptions', ['projectId']], ['updateProject', ['projectId', 'name', 'appId', 'reminderListOptionId']],
+  ['reorderProjects', ['projectIds']],
 ]);
 const accessStates = new Set(['granted', 'denied', 'notDetermined', 'restricted', 'writeOnly']);
 const fail = code => { throw new Error(code); };
@@ -79,6 +81,23 @@ export function createMock({ timers = globalThis, now = () => Date.now(), random
     { id: 't6', text: '回复导师的邮件', done: true, projectId: 'thesis', due: null },
     { id: 't13', text: '整理桌面，只留两列图标', done: true, projectId: 'desktop-shell', due: null },
   ];
+  const bindings = new Map(config.projects.filter(p => p.hasReminders).map(p => [p.id, `list-${p.id}`]));
+  let reminderLists = [
+    ...config.projects.filter(p => p.hasReminders).map(p => ({ id: bindings.get(p.id), title: p.name, source: 'iCloud', canWrite: true })),
+    { id: 'free-1', title: '提醒', source: 'iCloud', canWrite: true },
+    { id: 'free-2', title: '提醒', source: '本地', canWrite: true },
+    { id: 'readonly', title: '共享参考', source: '共享', canWrite: false },
+  ];
+  let nextOption = 0;
+  const optionTokens = new Map();
+  const refreshOptions = lists => {
+    for (const id of optionTokens.keys()) if (!lists.some(l => l.id === id)) optionTokens.delete(id);
+    for (const list of lists) if (!optionTokens.has(list.id)) optionTokens.set(list.id, `option-${++nextOption}`);
+  };
+  const rawOption = token => [...optionTokens].find(([, value]) => value === token)?.[0];
+  const todoLists = new Map(todos.map(todo => [todo.id, bindings.get(todo.projectId) ?? 'default']));
+  const assignedProject = listId => reminderLists.some(list => list.id === listId)
+    ? config.projects.find(p => bindings.get(p.id) === listId)?.id ?? null : null;
   let nextTodo = 14;
   let ui = { avatarId: '1', backgroundId: 'folder-01', voiceEnabled: true };
   let sound = true;
@@ -93,7 +112,7 @@ export function createMock({ timers = globalThis, now = () => Date.now(), random
   // Swift validates String.count (extended grapheme clusters), not UTF-16 length.
   const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
   const emit = event => { if (receive) receive(structuredClone(event)); };
-  const emitTodos = () => emit({ event: 'todos', access: todosAccess, items: todosAccess === 'granted' ? todos.slice(0, 500) : [] });
+  const emitTodos = () => emit({ event: 'todos', access: todosAccess, items: todosAccess === 'granted' ? todos.slice(0, 500).map(todo => ({ ...todo, projectId: assignedProject(todoLists.get(todo.id)) })) : [] });
   const emitConfig = () => emit({ event: 'config', config });
   // Mock-only paths stay private, just like the native config projection.
   const projectPaths = new Map(config.projects.map(project => [project.id, `~/Desktop/${project.name}`]));
@@ -144,6 +163,49 @@ export function createMock({ timers = globalThis, now = () => Date.now(), random
       switch (message.action) {
         case 'getConfig':
           return structuredClone({ config, media, uiState: ui });
+        case 'getProjectEditOptions': {
+          requireID(message.projectId); const p = projectFor(message.projectId), id = bindings.get(p.id);
+          const list = reminderLists.find(l => l.id === id);
+          refreshOptions(todosAccess === 'granted' ? reminderLists : []);
+          return structuredClone({ project: { id: p.id, name: p.name, appId: p.apps.find(id => config.apps.some(a => a.id === id)) ?? null },
+            access: todosAccess, binding: { status: todosAccess !== 'granted' ? 'unavailable' : !id ? 'none' : !list ? 'missing' : list.canWrite ? 'linked' : 'read-only',
+              optionId: todosAccess === 'granted' && list ? optionTokens.get(id) : null },
+            lists: todosAccess === 'granted' ? reminderLists.map(l => ({ ...l, id: optionTokens.get(l.id), assignedProjectId: assignedProject(l.id) })) : [] });
+        }
+        case 'updateProject': {
+          requireID(message.projectId); const p = projectFor(message.projectId);
+          const fields = ['name','appId','reminderListOptionId'].filter(k => Object.hasOwn(message,k));
+          if (!fields.length) fail('invalid');
+          const next = { ...p };
+          if (Object.hasOwn(message,'name')) {
+            if (typeof message.name !== 'string') fail('invalid');
+            const name = message.name.trim(), count = [...segmenter.segment(name)].length;
+            if (count < 1 || count > 100) fail('invalid'); next.name = name;
+          }
+          if (Object.hasOwn(message,'appId')) {
+            requireID(message.appId); appFor(message.appId); next.apps = [message.appId, ...p.apps.filter(id => id !== message.appId)];
+          }
+          if (Object.hasOwn(message,'reminderListOptionId')) {
+            const id = message.reminderListOptionId;
+            if (id !== null) {
+              requireID(id); if (todosAccess !== 'granted') fail('failed');
+              refreshOptions(reminderLists);
+              const list = reminderLists.find(l => l.id === rawOption(id)); if (!list) fail('not-found');
+              if (!list.canWrite || [...bindings].some(([owner, value]) => owner !== p.id && value === list.id)) fail('failed');
+            }
+            next.hasReminders = id !== null;
+          }
+          if (Object.hasOwn(message,'reminderListOptionId')) {
+            if (message.reminderListOptionId === null) bindings.delete(p.id); else bindings.set(p.id, rawOption(message.reminderListOptionId));
+          }
+          Object.assign(p, next); emitTodos(); emitConfig(); return structuredClone(p);
+        }
+        case 'reorderProjects': {
+          if (!Array.isArray(message.projectIds)) fail('invalid'); const ids = [...message.projectIds]; ids.forEach(requireID);
+          if (new Set(ids).size !== ids.length) fail('invalid');
+          if (ids.length !== config.projects.length || ids.some(id => !config.projects.some(p => p.id === id))) fail('not-found');
+          config.projects = ids.map(projectFor); emitConfig(); return null;
+        }
         case 'addProject':
           return addProject(message.path);
         case 'removeProject': {
@@ -151,6 +213,7 @@ export function createMock({ timers = globalThis, now = () => Date.now(), random
           projectFor(message.projectId);
           config.projects = config.projects.filter(project => project.id !== message.projectId);
           projectPaths.delete(message.projectId);
+          bindings.delete(message.projectId);
           // Removing a project changes routing, not the reminders themselves.
           todos = todos.map(todo => todo.projectId === message.projectId ? { ...todo, projectId: null } : todo);
           emitTodos();
@@ -201,7 +264,13 @@ export function createMock({ timers = globalThis, now = () => Date.now(), random
           if (Object.hasOwn(message, 'projectId') && message.projectId !== null) requireID(message.projectId);
           if (todosAccess !== 'granted') fail('failed');
           const project = message.projectId == null ? null : projectFor(message.projectId);
-          const todo = { id: `mock-${nextTodo++}`, text, done: false, projectId: project?.hasReminders ? project.id : null, due: null };
+          const listId = bindings.get(project?.id);
+          if (listId) {
+            const list = reminderLists.find(l => l.id === listId);
+            if (!list) fail('not-found'); if (!list.canWrite) fail('failed');
+          }
+          const todo = { id: `mock-${nextTodo++}`, text, done: false, projectId: listId ? project.id : null, due: null };
+          todoLists.set(todo.id, listId ?? 'default');
           todos = [...todos, todo];
           emitTodos();
           return structuredClone(todo);
@@ -273,6 +342,19 @@ export function createMock({ timers = globalThis, now = () => Date.now(), random
       if (typeof value !== 'boolean') fail('invalid');
       paused = value;
       emit({ event: 'paused', paused });
+    },
+    // Browser mock controls for external EventKit-like changes, never Bridge actions.
+    setReminderList(optionId, patch) {
+      const id = rawOption(optionId), list = reminderLists.find(l => l.id === id);
+      if (!list) fail('not-found');
+      if (patch === null) reminderLists = reminderLists.filter(l => l.id !== id);
+      else {
+        if (!isPlainObject(patch) || Object.keys(patch).some(k => !['title', 'canWrite'].includes(k))) fail('invalid');
+        if (Object.hasOwn(patch, 'title') && typeof patch.title !== 'string') fail('invalid');
+        if (Object.hasOwn(patch, 'canWrite') && typeof patch.canWrite !== 'boolean') fail('invalid');
+        Object.assign(list, patch);
+      }
+      emitTodos();
     },
     setTodosAccess(access) {
       if (!accessStates.has(access)) fail('invalid');

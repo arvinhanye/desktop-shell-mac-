@@ -41,6 +41,9 @@ enum BridgeRequest: Equatable {
     case openProject(String)
     case addProject(path: String)
     case removeProject(String)
+    case getProjectEditOptions(String)
+    case updateProject(projectId: String, name: String?, appId: String?, reminderListOption: UiPatch)
+    case reorderProjects([String])
     case openProjectWith(projectId: String, appId: String)
     case launchApp(String)
     case saveUiState(avatar: UiPatch, background: UiPatch)
@@ -50,6 +53,29 @@ enum BridgeRequest: Equatable {
             return .failure(.invalid)
         }
         switch action {
+        case "getProjectEditOptions":
+            guard Set(body.keys) == ["action", "projectId"], let id = validID(body["projectId"]) else { return .failure(.invalid) }
+            return .success(.getProjectEditOptions(id))
+        case "updateProject":
+            guard Set(body.keys).isSubset(of: ["action", "projectId", "name", "appId", "reminderListOptionId"]),
+                  body.count > 2, let id = validID(body["projectId"]),
+                  let patch = UiPatch.parse(body["reminderListOptionId"]) else { return .failure(.invalid) }
+            var name: String?, app: String?
+            if let raw = body["name"] {
+                guard let text = raw as? String else { return .failure(.invalid) }
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !trimmed.isEmpty, trimmed.count <= 100 else { return .failure(.invalid) }
+                name = trimmed
+            }
+            if let raw = body["appId"] {
+                guard let value = validID(raw) else { return .failure(.invalid) }
+                app = value
+            }
+            return .success(.updateProject(projectId: id, name: name, appId: app, reminderListOption: patch))
+        case "reorderProjects":
+            guard Set(body.keys) == ["action", "projectIds"], let ids = body["projectIds"] as? [String],
+                  ids.allSatisfy(isValidID), Set(ids).count == ids.count else { return .failure(.invalid) }
+            return .success(.reorderProjects(ids))
         case "addProject":
             guard Set(body.keys) == ["action", "path"], let path = body["path"] as? String,
                   !path.isEmpty, path.count <= 1024 else { return .failure(.invalid) }
@@ -146,7 +172,7 @@ enum ConfigReply {
 
     static func makeProject(_ project: AppConfig.Project) -> [String: Any] {
         ["id": project.id, "name": project.name, "tags": project.tags ?? [], "apps": project.apps ?? [],
-         "hasReminders": !(project.remindersList?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)]
+         "hasReminders": project.remindersListId != nil || !(project.remindersList?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)]
     }
 
     static func makeConfig(_ config: AppConfig, iconIDs: Set<String>) -> [String: Any] {
@@ -161,7 +187,7 @@ enum ConfigReply {
         return [
             "user": ["name": trimmedOrNull(config.user?.name)],
             "character": ["name": config.character.name, "motto": trimmedOrNull(config.character.motto)],
-            "greetings": greetings, "projects": config.projects.map(makeProject),
+            "greetings": greetings, "projects": ProjectPreferences.orderedProjects(config).map(makeProject),
             "apps": config.apps.map { app -> [String: Any] in
                 ["id": app.id, "name": app.name,
                  "iconUrl": iconIDs.contains(app.id) ? "/media/app-icons/\(app.id).png" as Any : NSNull()]

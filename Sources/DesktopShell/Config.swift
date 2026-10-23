@@ -7,6 +7,7 @@ struct AppConfig: Codable, Equatable {
     var greetings: [Greeting]
     var projects: [Project]
     var apps: [App]
+    var projectOrder: [String]? = nil
 
     struct User: Codable, Equatable {
         var name: String?
@@ -34,6 +35,7 @@ struct AppConfig: Codable, Equatable {
         var tags: [String]?
         var apps: [String]?
         var remindersList: String? = nil
+        var remindersListId: String? = nil
     }
 
     struct App: Codable, Equatable {

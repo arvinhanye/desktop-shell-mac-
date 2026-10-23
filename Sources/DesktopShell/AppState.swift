@@ -65,7 +65,8 @@ final class AppState {
     func addProject(path: String) -> Result<AppConfig.Project, BridgeError> {
         let store = ConfigStore(supportDir: paths.supportDir)
         do {
-            var updated = try store.loadUnfiltered()
+            let previous = try store.loadUnfiltered()
+            var updated = previous
             let folder: URL
             switch ProjectEditing.resolve(path, home: projectHome, existing: updated.projects.map(\.path),
                                           fileSystem: LocalProjectFileSystem()) {
@@ -76,7 +77,10 @@ final class AppState {
             }
             let project = ProjectEditing.newProject(folder: folder, home: projectHome, config: updated)
             updated.projects.append(project)
-            try saveProjects(updated, store: store)
+            if previous.projectOrder != nil {
+                updated.projectOrder = ProjectPreferences.orderedProjects(ConfigStore.filtered(previous)).map(\.id) + [project.id]
+            }
+            try saveProjects(updated, replacing: previous, store: store)
             Log.notice("DesktopShell project: added id=\(project.id) path=\(project.path)")
             return .success(project)
         } catch {
@@ -88,13 +92,15 @@ final class AppState {
     func removeProject(id: String) -> Result<Void, BridgeError> {
         let store = ConfigStore(supportDir: paths.supportDir)
         do {
-            var updated = try store.loadUnfiltered()
+            let previous = try store.loadUnfiltered()
+            var updated = previous
             guard let index = updated.projects.firstIndex(where: { $0.id == id }) else {
                 Log.error("DesktopShell project: remove rejected code=not-found")
                 return .failure(.notFound)
             }
             updated.projects.remove(at: index)
-            try saveProjects(updated, store: store)
+            updated.projectOrder?.removeAll { $0 == id }
+            try saveProjects(updated, replacing: previous, store: store)
             Log.notice("DesktopShell project: removed id=\(id)")
             return .success(())
         } catch {
@@ -103,11 +109,63 @@ final class AppState {
         }
     }
 
-    private func saveProjects(_ updated: AppConfig, store: ConfigStore) throws {
-        try store.save(updated)
-        config = try store.load()
+    private func saveProjects(_ updated: AppConfig, replacing previous: AppConfig, store: ConfigStore) throws {
+        try store.saveProjects(updated, replacing: previous)
+        config = ConfigStore.filtered(updated)
         remindersStore?.configDidReload()
         onConfigChanged?()
+    }
+
+    func projectEditOptions(projectId: String) -> Result<[String: Any], BridgeError> {
+        do {
+            let latest = ConfigStore.filtered(try ConfigStore(supportDir: paths.supportDir).loadUnfiltered())
+            guard let project = latest.projects.first(where: { $0.id == projectId }) else { return .failure(.notFound) }
+            let appId = project.apps?.first { id in latest.apps.contains { $0.id == id } }
+            if let remindersStore {
+                return .success(remindersStore.projectEditOptions(project: project, projects: latest.projects, appId: appId))
+            }
+            return .success(["project": ["id": project.id, "name": project.name,
+                                           "appId": appId.map { $0 as Any } ?? NSNull()],
+                             "access": "unknown", "binding": ["status": "unavailable", "optionId": NSNull()],
+                             "lists": []])
+        } catch { return .failure(.failed) }
+    }
+
+    func updateProject(projectId: String, name: String?, appId: String?,
+                       reminderListOption: UiPatch) -> Result<AppConfig.Project, BridgeError> {
+        guard name != nil || appId != nil || reminderListOption != .unchanged else { return .failure(.invalid) }
+        let store = ConfigStore(supportDir: paths.supportDir)
+        do {
+            let previous = try store.loadUnfiltered()
+            var updated = previous
+            guard isValidID(projectId), let index = updated.projects.firstIndex(where: { $0.id == projectId }) else {
+                return .failure(.notFound)
+            }
+            var patch = reminderListOption
+            if case .set(let option) = patch {
+                guard let remindersStore else { return .failure(.failed) }
+                patch = .set(try remindersStore.resolveReminderOption(option, projectId: projectId,
+                    projects: ConfigStore.filtered(previous).projects).get())
+            }
+            let project = try ProjectPreferences.updating(updated.projects[index], name: name, appId: appId,
+                reminderList: patch, apps: ConfigStore.filtered(previous).apps).get()
+            updated.projects[index] = project
+            try saveProjects(updated, replacing: previous, store: store)
+            return .success(project)
+        } catch { return .failure(error as? BridgeError ?? .failed) }
+    }
+
+    func reorderProjects(projectIds: [String]) -> Result<Void, BridgeError> {
+        guard projectIds.allSatisfy(isValidID), Set(projectIds).count == projectIds.count else { return .failure(.invalid) }
+        let store = ConfigStore(supportDir: paths.supportDir)
+        do {
+            let previous = try store.loadUnfiltered()
+            guard Set(projectIds) == Set(ConfigStore.filtered(previous).projects.map(\.id)) else { return .failure(.notFound) }
+            var updated = previous
+            updated.projectOrder = projectIds
+            try saveProjects(updated, replacing: previous, store: store)
+            return .success(())
+        } catch { return .failure(.failed) }
     }
 
     func reloadConfig() {

@@ -29,3 +29,8 @@
 .project-drop svg { width: var(--icon-lg); height: var(--icon-lg); }
 .projects-card.drop-target .project-drop { display: flex; }
 .projects-card.drop-target .card-head, .projects-card.drop-target .project-add, .projects-card.drop-target .project-hint, .projects-card.drop-target .project-list { opacity: var(--drop-dim-opacity); }
+.project-manage-toggle, .project-edit, .project-up, .project-down { padding: var(--space-half) var(--space-2); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-sm); background: none; font-size: var(--text-sm); color: var(--color-text-muted); }
+.project-up:disabled, .project-down:disabled { opacity: var(--control-disabled-opacity); cursor: default; }
+.managing .project-remove { opacity: 1; }
+.project > :first-child { min-width: 0; }
+.project-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
