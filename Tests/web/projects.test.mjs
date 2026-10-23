@@ -5,25 +5,19 @@ import { applyEvent, createBridge } from '../../web/js/bridge.js';
 import { createMock } from '../../web/js/mock.js';
 import { createStore, initialState } from '../../web/js/store.js';
 
-const apps = [{ id: 'cursor', name: 'Cursor' }, { id: 'safari', name: 'Safari' }];
-const config = { apps, projects: [
-  { id: 'p1', name: 'Project 1', tags: ['dev'], apps: ['cursor'] },
-  { id: 'p2', name: 'Project 2', tags: [], apps: ['missing', 'safari', 'cursor'] },
+const config = { projects: [
+  { id: 'p1', name: 'Project 1', tags: ['dev'] },
+  { id: 'p2', name: 'Project 2', tags: [] },
 ] };
 const finder = { label: '访达', title: '在访达中打开', action: 'openProject', payload: { projectId: 'p1' } };
-for (const appIds of [undefined, [], ['missing']]) {
-  test(`projects: ${JSON.stringify(appIds)} gives only Finder`, () => {
-    assert.deepEqual(projectActions({ id: 'p1', apps: appIds }, apps), [finder]);
-  });
-}
-test('projects: first configured app is chosen after skipping unknown ids, payloads contain ids only', () => {
-  const p = { id: 'p1', name: 'private name', path: '/private/path', apps: ['missing', 'safari', 'cursor'] };
+test('projects: Finder payload contains only project identity and leaves project data untouched', () => {
+  const p = { id: 'p1', name: 'private name', path: '/private/path' };
   const before = structuredClone(p);
-  assert.deepEqual(projectActions(p, apps), [finder, { label: 'Safari', title: '用 Safari 打开', action: 'openProjectWith', payload: { projectId: 'p1', appId: 'safari' } }]);
+  assert.deepEqual(projectActions(p), [finder]);
   assert.deepEqual(p, before);
 });
-test('projects: normal app creates Finder plus its app button', () => {
-  assert.deepEqual(projectActions(config.projects[0], apps), [finder, { label: 'Cursor', title: '用 Cursor 打开', action: 'openProjectWith', payload: { projectId: 'p1', appId: 'cursor' } }]);
+test('projects: older application preferences do not add an opening action', () => {
+  assert.deepEqual(projectActions({ id: 'p1', apps: ['cursor'] }, [{ id: 'cursor', name: 'Cursor' }]), [finder]);
 });
 for (const [current, id, expected] of [[null, 'p1', 'p1'], ['p1', 'p1', null], ['p1', 'p2', 'p2']]) {
   test(`projects: toggle ${current} to ${id}`, () => assert.equal(toggleSelection(current, id), expected));
@@ -75,7 +69,7 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 
 test('projects: mount creates the card, error slot and empty-project message', () => {
-  const f = fixture({ config: { projects: [], apps } });
+  const f = fixture({ config: { projects: [] } });
   assert.equal(projects.name, 'projects'); assert.equal(projects.css, 'projects.css');
   const cleanup = projects.mount(f.host, f);
   assert.equal(typeof cleanup, 'function');
@@ -115,16 +109,27 @@ test('projects: Enter/Space toggle the focused row, not its nested buttons or re
   row.emit('keydown', { key: 'Escape' }); assert.equal(f.store.get('selectedProject'), null);
   cleanup();
 });
-test('projects: each button deduplicates only its own pending request and does not select its row', async () => {
+test('projects: each row has one Finder button and deduplicates its pending request without selecting', async () => {
   const pending = []; const f = fixture({ config }, () => { const request = deferred(); pending.push(request); return request.promise; });
   const cleanup = projects.mount(f.host, f); const buttons = all(one(f.host, 'project'), 'ghost-button');
-  assert.equal(buttons.length, 2); assert.equal(buttons[0].title, '在访达中打开'); assert.equal(buttons[1].title, '用 Cursor 打开');
-  buttons[0].emit('click'); buttons[0].emit('click'); buttons[1].emit('click');
-  assert.deepEqual(f.calls, [{ action: 'openProject', payload: { projectId: 'p1' } }, { action: 'openProjectWith', payload: { projectId: 'p1', appId: 'cursor' } }]);
+  assert.equal(buttons.length, 1); assert.equal(buttons[0].title, '在访达中打开');
+  assert.equal(buttons[0].textContent, '访达');
+  buttons[0].emit('click'); buttons[0].emit('click');
+  assert.deepEqual(f.calls, [{ action: 'openProject', payload: { projectId: 'p1' } }]);
   assert.equal(f.store.get('selectedProject'), null);
-  pending[0].resolve(null); pending[1].resolve(null); await flush();
+  pending[0].resolve(null); await flush();
   assert.equal(one(one(f.host, 'card-head'), 'card-meta').textContent, '');
-  buttons[0].emit('click'); assert.equal(f.calls.length, 3); pending[2].resolve(null); await flush(); cleanup();
+  buttons[0].emit('click'); assert.equal(f.calls.length, 2); pending[1].resolve(null); await flush(); cleanup();
+});
+test('projects: older configurations still render only one Finder button per row', () => {
+  const f = fixture({ config: {
+    projects: [{ id: 'p1', name: 'Project 1', tags: [], apps: ['cursor'] }],
+    apps: [{ id: 'cursor', name: 'Cursor' }],
+  } });
+  const cleanup = projects.mount(f.host, f);
+  const buttons = all(one(f.host, 'project'), 'ghost-button');
+  assert.deepEqual(buttons.map(button => button.textContent), ['访达']);
+  cleanup();
 });
 test('projects: failures show a three-second message and a later failure restarts that timer', async () => {
   const f = fixture({ config }, async () => { throw new Error('failed'); }); const cleanup = projects.mount(f.host, f);
@@ -142,14 +147,14 @@ test('projects: failures show a three-second message and a later failure restart
 test('projects: config changes clear removed selection and ignore replies from replaced buttons', async () => {
   const request = deferred(); const f = fixture({ config, selectedProject: 'p1' }, () => request.promise);
   const cleanup = projects.mount(f.host, f); const oldButton = one(f.host, 'ghost-button'); oldButton.emit('click');
-  f.store.set({ config: { apps, projects: [config.projects[1]] } });
+  f.store.set({ config: { projects: [config.projects[1]] } });
   assert.equal(f.store.get('selectedProject'), null); assert.equal(all(f.host, 'project').length, 1);
   request.reject(new Error('failed')); await flush();
   assert.equal(one(one(f.host, 'card-head'), 'card-meta').textContent, ''); assert.equal(f.timers.size, 0);
   oldButton.emit('click'); assert.equal(f.calls.length, 1); cleanup();
 });
 test('projects: untrusted labels stay text, scroll hints update, cleanup cancels observers/listeners/replies', async () => {
-  const request = deferred(); const f = fixture({ config: { apps, projects: [{ ...config.projects[0], name: '<img src=x>', tags: ['<b>tag</b>'] }] } }, () => request.promise);
+  const request = deferred(); const f = fixture({ config: { projects: [{ ...config.projects[0], name: '<img src=x>', tags: ['<b>tag</b>'] }] } }, () => request.promise);
   const cleanup = projects.mount(f.host, f); const list = one(f.host, 'project-list'), button = one(f.host, 'ghost-button');
   assert.equal(one(f.host, 'project-name').textContent, '<img src=x>'); assert.equal(one(f.host, 'tag').textContent, '<b>tag</b>');
   assert.equal(one(f.host, 'project-name').children.length, 0);
@@ -197,7 +202,7 @@ test('projects: add trims input, ignores empty/composing/repeated pending Enter 
   assert.equal(input.emit('keydown', { key: 'Enter' }).defaultPrevented, true);
   input.emit('keydown', { key: 'Enter' });
   assert.deepEqual(f.calls, [{ action: 'addProject', payload: { path: '~/My App' } }]);
-  const added = { id: 'my-app', name: 'My App', tags: [], apps: [], hasReminders: false };
+  const added = { id: 'my-app', name: 'My App', tags: [], hasReminders: false };
   request.resolve(added); await flush();
   assert.equal(input.value, '');
   assert.equal(metaOf(f).textContent, '已添加「My App」');

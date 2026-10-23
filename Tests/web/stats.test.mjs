@@ -102,7 +102,11 @@ test('stats: initial missing snapshot shows empty values, bars and plot in acces
   assert.equal(svg.namespaceURI, 'http://www.w3.org/2000/svg');
   assert.equal(svg.getAttribute('viewBox'), '0 0 60 26');
   assert.equal(svg.getAttribute('preserveAspectRatio'), 'none'); assert.equal(svg.getAttribute('aria-hidden'), 'true');
-  assert.equal(byClass(f.host, 'power-hint')[0].textContent, '电量低于 20%，已暂停背景视频和动画来省电');
+  const hint = byClass(f.host, 'power-hint')[0];
+  assert.equal(hint.textContent, '电量低，已暂停视频和动画');
+  assert.equal(hint.tagName, 'SPAN');
+  assert.ok(hint.classList.contains('card-meta'));
+  assert.equal(byClass(f.host, 'card-head')[0].children[1], hint);
   assert.equal(byClass(f.host, 'low-battery').length, 0); f.cleanup();
 });
 test('stats: initial snapshot renders numbers with small suffixes and the second push draws a line', () => {

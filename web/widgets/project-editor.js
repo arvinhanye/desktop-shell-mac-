@@ -3,7 +3,6 @@ export const projectNameLength = text => [...segmenter.segment(text.trim())].len
 export function projectEditPatch(original, draft) {
   const patch = {};
   if (draft.name.trim() !== original.name) patch.name = draft.name.trim();
-  if (draft.appId !== original.appId) patch.appId = draft.appId;
   if (Object.hasOwn(draft, 'reminderListOptionId')) patch.reminderListOptionId = draft.reminderListOptionId;
   return patch;
 }
@@ -19,11 +18,11 @@ export default {
     cancel.type = save.type = 'button'; head.append(node('h2', 'card-title', '编辑项目'), cancel, save);
     const scroll = node('div', 'project-editor-scroll scroll-list'), label = node('label', 'project-editor-label', '显示名称');
     const name = node('input', 'project-editor-name'); name.type = 'text'; name.setAttribute('autocomplete', 'off'); name.setAttribute('spellcheck', 'false'); label.append(name);
-    const apps = node('div', 'project-editor-options'), lists = node('div', 'project-editor-options');
-    apps.setAttribute('role', 'group'); apps.setAttribute('aria-label', '默认打开应用'); lists.setAttribute('role', 'group'); lists.setAttribute('aria-label', '提醒事项列表');
+    const lists = node('div', 'project-editor-options');
+    lists.setAttribute('role', 'group'); lists.setAttribute('aria-label', '提醒事项列表');
     const binding = node('p', 'card-meta'), message = node('p', 'project-editor-message'); message.setAttribute('role', 'status');
     const setMessage = (text, error = false) => { message.textContent = text; message.classList.toggle('error', error); };
-    scroll.append(label, node('h3', '', '默认打开应用'), apps, node('h3', '', '提醒事项列表'), binding, lists, message);
+    scroll.append(label, node('h3', '', '提醒事项列表'), binding, lists, message);
     panel.append(head, scroll); overlay.append(panel); host.append(overlay);
     const notice = node('p', 'project-editor-notice'); notice.hidden = true; notice.setAttribute('role', 'status'); host.append(notice);
     let noticeTimer;
@@ -35,7 +34,7 @@ export default {
     const valid = () => draft && projectNameLength(draft.name) > 0 && projectNameLength(draft.name) <= 100;
     const updateSave = () => { save.disabled = pending || !valid(); name.disabled = !draft || pending; };
     const renderChoices = () => {
-      clearChoices(); apps.replaceChildren(); lists.replaceChildren();
+      clearChoices(); lists.replaceChildren();
       const choice = (parent, text, selected, disabled, select) => {
         const button = node('button', 'project-editor-option', text); button.type = 'button'; button.disabled = disabled || pending;
         button.setAttribute('aria-pressed', String(selected));
@@ -43,8 +42,6 @@ export default {
         button.addEventListener('click', click); choiceCleanups.push(() => button.removeEventListener('click', click)); parent.append(button);
       };
       if (!draft) return;
-      for (const app of store.get('config')?.apps ?? []) choice(apps, app.name, draft.appId === app.id, false, () => { draft.appId = app.id; });
-      if (!apps.children.length) apps.append(node('p', 'card-meta', '未配置应用，仍可在访达打开'));
       const status = {none:'未关联，新增待办使用系统默认列表',linked:'已关联',missing:'关联列表已失联，请重新选择或解除',
         'read-only':'当前列表只读',unavailable:'提醒事项权限未就绪，仍可修改其他字段',shared:'历史共享列表，保留原有归属'};
       binding.textContent = status[options.binding.status] ?? '请检查关联状态';
@@ -61,14 +58,14 @@ export default {
     };
     const open = async id => {
       const version = ++generation; blur(); scroll.scrollTop = 0; current = id; original = draft = options = null; pending = false;
-      clearChoices(); apps.replaceChildren(); lists.replaceChildren(); name.value = ''; binding.textContent = ''; setMessage('');
+      clearChoices(); lists.replaceChildren(); name.value = ''; binding.textContent = ''; setMessage('');
       overlay.hidden = id === null; updateSave(); if (id === null || disposed) return;
       store.set({ appearanceOpen: false });
       setMessage('读取项目设置…');
       try {
         const reply = await bridge.send('getProjectEditOptions', { projectId: id });
         if (disposed || version !== generation) return;
-        options = reply; original = { name: reply.project.name, appId: reply.project.appId }; draft = { ...original };
+        options = reply; original = { name: reply.project.name }; draft = { ...original };
         name.value = draft.name; setMessage(''); renderChoices(); updateSave();
       } catch {
         if (!disposed && version === generation) setMessage('读取失败，请关闭后重试', true);
@@ -85,7 +82,7 @@ export default {
         if (!disposed && version === generation) close();
       } catch (error) {
         if (!disposed && version === generation) setMessage(error.code === 'not-found'
-          ? '保存失败，项目、应用或列表已变化，请重新打开检查' : '保存失败，请检查列表权限或占用情况后重试', true);
+          ? '保存失败，项目或列表已变化，请重新打开检查' : '保存失败，请检查列表权限或占用情况后重试', true);
       } finally {
         if (!disposed && version === generation) { pending = false; updateSave(); renderChoices(); }
       }

@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import appearance, { appearanceSelection, appearanceChange } from '../../web/widgets/appearance.js';
 import character from '../../web/widgets/character.js';
-import launcher from '../../web/widgets/launcher.js';
 import { createStore, initialState } from '../../web/js/store.js';
 import { applyEvent } from '../../web/js/bridge.js';
 
@@ -262,17 +261,16 @@ test('character: avatar requests voice only when idle; playback class and appear
   assert.equal(one(f.host, 'card-art').style.backgroundImage, 'none');
   assert.ok(f.nodes.every(node => [...node.listeners.values()].every(set => set.size === 0)));
 });
-test('appearance integration: pushed selection updates character and launcher together without optimism', async () => {
-  const f = fixture(); const cardHost = f.doc.createElement('section'), launcherHost = f.doc.createElement('section');
-  const cleanups = [appearance.mount(f.host, f), character.mount(cardHost, f), launcher.mount(launcherHost, f)];
+test('appearance integration: pushed selection updates character without optimism', async () => {
+  const f = fixture(); const cardHost = f.doc.createElement('section');
+  const cleanups = [appearance.mount(f.host, f), character.mount(cardHost, f)];
   one(f.host, 'avatars').children[1].emit('click'); one(f.host, 'backgrounds').children[0].emit('click'); await flush();
   assert.equal(one(cardHost, 'avatar-button').children[0].src, media.avatars[0].url);
-  assert.equal(one(launcherHost, 'card-art').style.backgroundImage, 'none');
+  assert.equal(one(cardHost, 'card-art').style.backgroundImage, 'none');
   publishUI(f, { avatarId: '2', backgroundId: 'bg' });
   assert.equal(one(cardHost, 'avatar-button').children[0].src, media.avatars[1].url);
   const background = `url(${JSON.stringify(media.backgrounds[0].url)})`;
   assert.equal(one(cardHost, 'card-art').style.backgroundImage, background);
-  assert.equal(one(launcherHost, 'card-art').style.backgroundImage, background);
   publishUI(f, { avatarId: 'missing', backgroundId: 'missing' });
   assert.equal(one(cardHost, 'avatar-button').children[0].src, media.avatars[0].url);
   assert.equal(one(cardHost, 'card-art').style.backgroundImage, 'none');

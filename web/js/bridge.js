@@ -11,25 +11,23 @@ const accessStates = new Set(['granted', 'denied', 'notDetermined', 'restricted'
 function normalizeConfig(config) {
   requireValue(isObject(config));
   requireValue(isObject(config.character) && typeof config.character.name === 'string');
-  requireValue(['greetings', 'projects', 'apps'].every(key => Array.isArray(config[key])));
+  requireValue(['greetings', 'projects'].every(key => Array.isArray(config[key])));
   const projects = [...config.projects].map(project => {
     requireValue(isObject(project));
     return {
-      ...project,
+      id: project.id,
+      name: project.name,
       tags: Array.isArray(project.tags) ? project.tags : [],
-      apps: Array.isArray(project.apps) ? project.apps : [],
       hasReminders: typeof project.hasReminders === 'boolean' ? project.hasReminders : false,
     };
   });
   const stringOrNull = value => typeof value === 'string' ? value : null;
-  const apps = [...config.apps].map(app => {
-    requireValue(isObject(app));
-    return { ...app, iconUrl: stringOrNull(app.iconUrl) };
-  });
   return {
-    ...config, projects, apps,
+    greetings: config.greetings,
+    projects,
     user: { name: stringOrNull(config.user?.name) },
     character: { ...config.character, motto: stringOrNull(config.character.motto) },
+    terminal: { hotkey: isObject(config.terminal) ? stringOrNull(config.terminal.hotkey) : null },
   };
 }
 

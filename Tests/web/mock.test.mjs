@@ -23,14 +23,14 @@ test('mock: getConfig returns display-only configuration and all 30/63 real medi
   assert.deepEqual(reply.config.greetings.map(item => item.from), [0, 6, 12, 18, 20, 21, 23]);
   assert.equal(reply.config.greetings[0].wish, '时辰已晚，且捻熄灯盏，良宵安枕');
   assert.equal(reply.config.projects.length, 6);
-  assert.equal(reply.config.apps.length, 7);
-  assert.deepEqual(reply.config.projects[0].apps, ['cursor']);
+  assert.ok(!Object.hasOwn(reply.config, 'apps'));
+  assert.deepEqual(reply.config.terminal, { hotkey: '⌥`' });
   assert.equal(reply.config.projects[0].hasReminders, true);
-  assert.ok(reply.config.projects.some(project => project.apps.length === 0 && !project.hasReminders));
+  assert.ok(reply.config.projects.some(project => !project.hasReminders));
   for (const project of reply.config.projects) {
+    assert.ok(!('apps' in project));
     assert.ok(!('path' in project) && !('remindersList' in project));
   }
-  assert.ok(reply.config.apps.every(app => !('bundleId' in app)));
   assert.ok(!('background' in reply.config));
   assert.equal(reply.media.avatars.length, 30);
   assert.deepEqual(reply.media.avatars[29], { id: '30', url: '/media/avatars/30.png' });
@@ -52,11 +52,7 @@ const badRequests = [
   [{ action: 'openProject', projectId: '../etc' }, 'invalid'],
   [{ action: 'openProject', projectId: '' }, 'invalid'],
   [{ action: 'openProject', projectId: 'desktop-shell', path: '/' }, 'invalid'],
-  [{ action: 'openProjectWith', projectId: 'desktop-shell' }, 'invalid'],
-  [{ action: 'openProjectWith', projectId: 'missing', appId: '../bad' }, 'invalid'],
-  [{ action: 'openProjectWith', projectId: 'desktop-shell', appId: 'absent-app' }, 'not-found'],
-  [{ action: 'launchApp', appId: 'absent-app' }, 'not-found'],
-  [{ action: 'launchApp', appId: 'com.apple.Safari' }, 'invalid'],
+  [{ action: 'openTerminal', projectId: 'desktop-shell' }, 'invalid'],
   [{ action: 'saveUiState' }, 'invalid'],
   [{ action: 'saveUiState', avatarId: '31' }, 'not-found'],
   [{ action: 'saveUiState', avatarId: '../1' }, 'invalid'],
@@ -88,16 +84,14 @@ test('mock: keyboard focus actions resolve null without changing mock state', as
   assert.deepEqual(mock.state, before);
 });
 
-test('mock: launch actions and array hit regions succeed without requiring app/project association', async t => {
+test('mock: opening a project and array hit regions succeed', async t => {
   const info = t.mock.method(console, 'info', () => {});
   const { mock } = fixture();
   for (const message of [
     { action: 'setHitRegions', regions: [] },
     { action: 'openProject', projectId: 'desktop-shell' },
-    { action: 'openProjectWith', projectId: 'desktop-shell', appId: 'safari' },
-    { action: 'launchApp', appId: 'cursor' },
   ]) assert.equal(await mock.handle(message), null);
-  assert.equal(info.mock.callCount(), 3);
+  assert.equal(info.mock.callCount(), 1);
 });
 
 test('mock: saveUiState updates, broadcasts, clears and rejects atomically without leaking mutable state', async () => {
@@ -272,39 +266,25 @@ test('mock: stop/restart inside startup callback interrupts the obsolete initial
   assert.equal(jobs.size, 0);
 });
 
-test('mock: M4 display fields, installed/missing icons and all 54 voice URLs', async () => {
+test('mock: display fields and all 54 voice URLs', async () => {
   const { mock } = fixture();
   const { config, media } = await mock.handle({ action: 'getConfig' });
   assert.deepEqual(config.user, { name: 'Arvin' });
   assert.equal(config.character.motto, '愿星光一直落在你走的路上');
-  assert.deepEqual(config.apps.map(({ id, iconUrl }) => ({ id, iconUrl })), [
-    { id: 'cursor', iconUrl: '/media/app-icons/cursor.png' },
-    { id: 'safari', iconUrl: '/media/app-icons/safari.png' },
-    { id: 'notes', iconUrl: '/media/app-icons/notes.png' },
-    { id: 'music', iconUrl: '/media/app-icons/music.png' },
-    { id: 'mail', iconUrl: '/media/app-icons/mail.png' },
-    { id: 'calendar', iconUrl: '/media/app-icons/calendar.png' },
-    { id: 'missing', iconUrl: null },
-  ]);
   assert.equal(media.voices.length, 54);
   for (let i = 1; i <= 54; i++) assert.deepEqual(media.voices[i - 1], { id: String(i), url: `/media/voice/${i}.mp3` });
 });
 
-test('mock: all six projects and seven apps match the approved preview', async () => {
+test('mock: all six projects match the approved preview', async () => {
   const { mock } = fixture();
   const { config } = await mock.handle({ action: 'getConfig' });
   assert.deepEqual(config.projects, [
-    { id: 'desktop-shell', name: 'DesktopShell', tags: ['dev'], apps: ['cursor'], hasReminders: true },
-    { id: 'thesis', name: '课程论文', tags: ['写作'], apps: ['safari', 'notes'], hasReminders: true },
-    { id: 'photos', name: '旅行照片整理', tags: [], apps: [], hasReminders: false },
-    { id: 'website', name: '个人网站', tags: ['dev'], apps: ['cursor', 'safari'], hasReminders: true },
-    { id: 'reading', name: '读书笔记', tags: ['阅读'], apps: ['notes'], hasReminders: true },
-    { id: 'budget', name: '家庭账本', tags: [], apps: [], hasReminders: false },
-  ]);
-  assert.deepEqual(config.apps.map(({ id, name }) => ({ id, name })), [
-    { id: 'cursor', name: 'Cursor' }, { id: 'safari', name: 'Safari' },
-    { id: 'notes', name: '备忘录' }, { id: 'music', name: '音乐' },
-    { id: 'mail', name: '邮件' }, { id: 'calendar', name: '日历' }, { id: 'missing', name: 'Figma' },
+    { id: 'desktop-shell', name: 'DesktopShell', tags: ['dev'], hasReminders: true },
+    { id: 'thesis', name: '课程论文', tags: ['写作'], hasReminders: true },
+    { id: 'photos', name: '旅行照片整理', tags: [], hasReminders: false },
+    { id: 'website', name: '个人网站', tags: ['dev'], hasReminders: true },
+    { id: 'reading', name: '读书笔记', tags: ['阅读'], hasReminders: true },
+    { id: 'budget', name: '家庭账本', tags: [], hasReminders: false },
   ]);
 });
 
@@ -323,7 +303,6 @@ test('mock: relative dates cross calendar boundaries and added reminders keep un
   mock.stop();
 });
 
-
 test('mock: glass regions accepts arrays, rejects missing/non-array and extra parameters', async () => {
   const { mock } = fixture();
   assert.equal(await mock.handle({ action: 'setGlassRegions', regions: [[1, 2, 30, 40, 5]] }), null);
@@ -340,7 +319,7 @@ test('mock: addProject returns a public project, pushes config and generates sta
   for (const [name, id] of [['CS61A-master', 'cs61a-master'], ['My App', 'my-app'], ['操作系统原理实验', 'project'],
     ['另一中文项目', 'project-2'], ['--a__b--', 'a-b'], ['My-App', 'my-app-2']]) {
     const project = await mock.handle({ action: 'addProject', path: `~/Desktop/${name}` });
-    assert.deepEqual(project, { id, name, tags: [], apps: ['cursor'], hasReminders: false });
+    assert.deepEqual(project, { id, name, tags: [], hasReminders: false });
     assert.equal(events.at(-1).event, 'config');
     assert.deepEqual(events.at(-1).config.projects.at(-1), project);
     project.name = 'mutated reply'; events.at(-1).config.projects.at(-1).name = 'mutated event';
@@ -364,7 +343,7 @@ for (const path of ['～/Desktop/test', '～／Desktop／test', '／Users／me�
   test(`mock: full-width prefix ${path} is normalized before adding`, async () => {
     const { mock } = fixture(); const events = []; mock.start(event => events.push(event));
     const project = await mock.handle({ action: 'addProject', path });
-    assert.deepEqual(project, { id: 'test', name: 'test', tags: [], apps: ['cursor'], hasReminders: false });
+    assert.deepEqual(project, { id: 'test', name: 'test', tags: [], hasReminders: false });
     assert.deepEqual(events.at(-1).config.projects.at(-1), project);
     await rejects(mock, { action: 'addProject', path: '~/Desktop/test' }, 'duplicate');
     mock.stop();
@@ -435,4 +414,47 @@ test('mock: setDropRegions accepts regions like setHitRegions and rejects missin
     { action: 'setDropRegions', regions: [], path: '~/private' }]) {
     await rejects(mock, message, 'invalid');
   }
+});
+
+test('mock: openTerminal logs once, returns null and rejects every parameter without changing state', async t => {
+  const info = t.mock.method(console, 'info', () => {});
+  const { mock } = fixture();
+  const before = await mock.handle({ action: 'getConfig' });
+  assert.equal(await mock.handle({ action: 'openTerminal' }), null);
+  assert.deepEqual(info.mock.calls[0].arguments, ['mock: openTerminal']);
+  for (const extra of [undefined, null, false, 0, '', [], {}]) {
+    await rejects(mock, { action: 'openTerminal', extra }, 'invalid');
+  }
+  assert.equal(info.mock.callCount(), 1);
+  assert.deepEqual(await mock.handle({ action: 'getConfig' }), before);
+});
+
+test('mock: retired application actions are unknown and cannot change configuration', async () => {
+  const { mock } = fixture();
+  const before = await mock.handle({ action: 'getConfig' });
+  for (const action of ['launch' + 'App', 'openProject' + 'With']) {
+    await rejects(mock, { action, projectId: 'desktop-shell', ['app' + 'Id']: 'cursor' }, 'unknown-action');
+  }
+  assert.deepEqual(await mock.handle({ action: 'getConfig' }), before);
+});
+
+test('mock: project edit options only expose identity and name', async () => {
+  const { mock } = fixture();
+  const options = await mock.handle({ action: 'getProjectEditOptions', projectId: 'desktop-shell' });
+  assert.deepEqual(options.project, { id: 'desktop-shell', name: 'DesktopShell' });
+});
+
+test('mock: legacy application updates reject atomically', async () => {
+  const { mock } = fixture(); const events = []; mock.start(event => events.push(event));
+  try {
+    const before = await mock.handle({ action: 'getConfig' }), count = events.length;
+    for (const value of ['cursor', null, undefined]) {
+      await rejects(mock, { action: 'updateProject', projectId: 'desktop-shell', name: 'Changed', ['app' + 'Id']: value }, 'invalid');
+    }
+    assert.deepEqual(await mock.handle({ action: 'getConfig' }), before);
+    assert.equal(events.length, count);
+    const updated = await mock.handle({ action: 'updateProject', projectId: 'desktop-shell', name: 'Changed' });
+    assert.deepEqual(updated, { id: 'desktop-shell', name: 'Changed', tags: ['dev'], hasReminders: true });
+    assert.deepEqual(events.at(-1).config.projects[0], updated);
+  } finally { mock.stop(); }
 });
