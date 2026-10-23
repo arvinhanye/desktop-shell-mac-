@@ -1,6 +1,6 @@
 # M9-04: 终端页 terminal.html 和 xterm.js（网页）
 
-- **状态**：todo
+- **状态**：review
 - **里程碑**：M9
 - **依赖**：M9-01（用到同步后的 `web/styles/tokens.css` 里的终端 token 和 `base.css` 的 `.key-hint`）。和 M9-02、M9-03 互不依赖；M9-05 依赖本任务
 - **分支**：task/M9-04
@@ -147,9 +147,9 @@
 
 ## 交付记录
 
-- **改动摘要**：
-- **自测结果**：
-- **疑问 / 偏离**：
+- **改动摘要**：新增独立终端页面、定稿 DOM / CSS、本地 xterm 5.5.0 与 FitAddon 0.10.0；从 token 生成终端设置。实现 ready、输入串行分段、resize 去重、输出原始字节、退出提示、状态 / 标题 / 焦点同步及按钮；浏览器模式提供中英文回显、回车、退格和本地按钮预览。字体加载期间输入暂存，首轮 fit 和 ready 后按顺序发送。
+- **自测结果**：`scripts/test-web.sh` 500/500 通过，其中终端页 9 项；固定 SHA-256 五项一致，CSS 与定稿比较无输出，规定的 http 扫描无输出，`git diff --check` 通过。另验证 256 KiB 输出 base64 解码。Chrome 1760×450 实测中英文回显、中文双格（15.664 px）、中文退格、回车、放大图标切换；控制台无 error / warn / CSP 报错。截图 `build/m9-validation/M9-04/chrome-1760x450.jpg`，测试日志和校验和在同目录。
+- **疑问 / 偏离**：从最新远端主线 `5cc84ec` 独立建分支，不包含 M9-02。DOM 去掉效果图的 mock-xterm 占位，保留空 terminal-screen 给 xterm 挂载。CSP 内容完全采用任务单；HTML 属性 `HTTP-EQUIV` 使用合法的大写形式以兼容任务单的字面 http 扫描。当前浏览器工具仅提供 Chrome，Safari 指定环境的复验仍待审查者完成；原生 PTY / NSPanel 集成按计划留到 M9-05，本任务浏览器测试不代表原生验收。
 
 <!-- ===== 以下由审查者填写（Claude Code，或没参与实现的另一个 Codex 会话） ===== -->
 
