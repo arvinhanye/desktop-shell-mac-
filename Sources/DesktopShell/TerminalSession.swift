@@ -112,7 +112,7 @@ final class TerminalSession {
 }
 
 /// All allocations and Swift collection access finish before forkpty.
-private func launchTerminal(_ launch: TerminalLaunch, size: TerminalSize) -> (pid: pid_t, fd: Int32)? {
+func launchTerminal(_ launch: TerminalLaunch, size: TerminalSize) -> (pid: pid_t, fd: Int32)? {
     let environment = terminalEnvironment(launch.environment)
     let values = [launch.executable, launch.directory] + launch.arguments + environment.map { "\($0.key)=\($0.value)" }
     guard !values.contains(where: { $0.utf8.contains(0) }),
@@ -187,7 +187,8 @@ private final class TerminalDescriptor {
     }
 }
 
-private final class TerminalProcess {
+/// Serial PTY worker; event entry points enqueue work on its own IO queue.
+final class TerminalProcess {
     private let queue = DispatchQueue(label: "DesktopShell.terminal.io")
     private let pid: pid_t
     private let descriptor: TerminalDescriptor
@@ -201,6 +202,7 @@ private final class TerminalProcess {
     private var outputScheduled = false
     private var pendingInput = Data()
     private var inputOffset = 0
+    private var childHasExited = false
     private var exitStatus: Int32?
     private var exitDelivered = false
 
@@ -218,8 +220,8 @@ private final class TerminalProcess {
             self.descriptor.retainSource()
             reader.setCancelHandler { [descriptor = self.descriptor] in descriptor.releaseSource() }
             reader.setEventHandler { [weak self] in
-                guard let self, self.exitStatus == nil else { return }
-                self.readAvailable()
+                guard let self, !self.childHasExited else { return }
+                _ = self.readAvailable()
             }
             self.reader = reader
             // The exit handler keeps this worker alive until the child has been reaped,
@@ -234,7 +236,7 @@ private final class TerminalProcess {
 
     func write(_ bytes: Data) {
         queue.async {
-            guard self.exitStatus == nil else { return }
+            guard !self.childHasExited else { return }
             self.pendingInput.append(bytes)
             self.writeAvailable()
         }
@@ -242,7 +244,7 @@ private final class TerminalProcess {
 
     func resize(_ size: TerminalSize) {
         queue.async {
-            guard self.exitStatus == nil else { return }
+            guard !self.childHasExited else { return }
             var windowSize = size.windowSize
             if ioctl(self.descriptor.fd, 0x80087467, &windowSize) < 0 {
                 Log.error("terminal resize failed errno=\(errno)")
@@ -252,14 +254,16 @@ private final class TerminalProcess {
 
     func terminate() {
         queue.async {
-            guard self.exitStatus == nil else { return }
+            guard !self.childHasExited else { return }
             if kill(self.pid, SIGHUP) < 0 && errno != ESRCH {
                 Log.error("terminal terminate failed errno=\(errno)")
             }
         }
     }
 
-    private func readAvailable() {
+    /// True only after reaching the end of the currently available output.
+    /// False means a later batch must continue reading before the child is reaped.
+    private func readAvailable() -> Bool {
         var bytes = [UInt8](repeating: 0, count: 16384)
         var readCount = 0
         // Yield between bursts so a continuously writing child cannot starve writes,
@@ -267,14 +271,14 @@ private final class TerminalProcess {
         while readCount < 256 * 1024 {
             // Bound queued output as well as replay. Suspending the source lets the
             // PTY backpressure the child while the UI is busy, without dropping bytes.
-            if exitStatus == nil && pendingOutput.count >= 256 * 1024 {
+            if pendingOutput.count >= 256 * 1024 {
                 if !readerSuspended, let reader {
                     reader.suspend()
                     readerSuspended = true
                 }
-                return
+                return false
             }
-            let capacity = exitStatus == nil ? min(bytes.count, 256 * 1024 - pendingOutput.count) : bytes.count
+            let capacity = min(bytes.count, 256 * 1024 - pendingOutput.count)
             let count = Darwin.read(descriptor.fd, &bytes, capacity)
             if count > 0 {
                 pendingOutput.append(contentsOf: bytes.prefix(count))
@@ -282,17 +286,18 @@ private final class TerminalProcess {
                 scheduleOutput()
             } else if count == 0 || (count < 0 && errno == EIO) {
                 cancelReader()
-                return
+                return true
             } else if errno == EINTR {
                 continue
             } else if errno == EAGAIN {
-                return
+                return true
             } else {
                 Log.error("terminal read failed errno=\(errno)")
                 cancelReader()
-                return
+                return true
             }
         }
+        return false
     }
 
     private func scheduleOutput() {
@@ -307,7 +312,9 @@ private final class TerminalProcess {
                     // Begin the next interval only after delivery on the main queue;
                     // a busy UI cannot cause previously queued callbacks to bunch up.
                     self.outputScheduled = false
-                    if self.readerSuspended, let reader = self.reader {
+                    if self.childHasExited {
+                        self.drainBeforeReaping()
+                    } else if self.readerSuspended, let reader = self.reader {
                         self.readerSuspended = false
                         reader.resume()
                     }
@@ -328,7 +335,7 @@ private final class TerminalProcess {
     }
 
     private func writeAvailable() {
-        guard exitStatus == nil else { return }
+        guard !childHasExited else { return }
         var written = 0
         while inputOffset < pendingInput.count && written < 256 * 1024 {
             let count = pendingInput.withUnsafeBytes { bytes in
@@ -364,8 +371,29 @@ private final class TerminalProcess {
         source.activate()
     }
 
-    private func childExited() {
+    func childExited() {
+        queue.async { self.handleChildExit() }
+    }
+
+    private func handleChildExit() {
+        guard !childHasExited else { return }
+        childHasExited = true
+        cancelReader()
+        writer?.cancel()
+        writer = nil
+        pendingInput.removeAll()
+        inputOffset = 0
+        drainBeforeReaping()
+    }
+
+    private func drainBeforeReaping() {
         guard exitStatus == nil else { return }
+        // On macOS, waitpid can discard unread PTY bytes or wait for terminal
+        // teardown while those bytes still need reading. Drain first, including
+        // when the reader was suspended at the output high-water mark. Keep the
+        // same memory bound and resume here after the main queue acknowledges a
+        // batch; reaching a per-turn read limit is not the end of the stream.
+        guard readAvailable() else { return }
         var status: Int32 = 0
         var result: pid_t
         repeat { result = waitpid(pid, &status, 0) } while result < 0 && errno == EINTR
@@ -376,15 +404,8 @@ private final class TerminalProcess {
             let signal = status & 0x7F
             exitStatus = signal == 0 ? (status >> 8) & 0xFF : 128 + signal
         }
-        // Drain the PTY's remaining kernel-buffered bytes before closing the master.
-        readAvailable()
-        cancelReader()
-        writer?.cancel()
-        writer = nil
         exitSource?.cancel()
         exitSource = nil
-        pendingInput.removeAll()
-        inputOffset = 0
         descriptor.requestClose()
         Log.notice("terminal session exited status=\(exitStatus!)")
         deliverExitIfReady()

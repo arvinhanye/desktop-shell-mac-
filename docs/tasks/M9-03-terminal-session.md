@@ -98,6 +98,12 @@
   - 最终 `swift build` 成功、无编译错误/警告；`git diff --check` 通过。日志检查仅开始 pid、退出 status 与 errno，不含终端输入/输出或长度。子代理只读自查和 debug 目标文件反汇编核对 forkpty 子路径仅 chdir/execve/_exit，无 Swift runtime 调用（自查不是正式审查）。
   - 证据位于 `build/m9-validation/`：`M9-03-full-tests.log`、`M9-03-build-final.log`、`M9-03-targeted-final.log`、`M9-03-backpressure-red.log`。最初沙盒运行被 Swift 模块缓存写权限阻止，以上结果均来自正常本机权限下的项目脚本；未修改签名、系统权限或运行配置。
 - **疑问 / 偏离**：无范围偏离，仅新增两份允许文件并更新本任务状态/交付记录。没有接入窗口或 bridge，不构建终端面板；交互验收按任务单留到 M9-05。M9-01 与本任务分别在独立分支交付；未合并 `main`。任务分支推送被自动审批拦截；虽然已通过 GitHub 连接器核实远端归属和推送权限，审批仍要求用户在对话中明确授权向 `https://github.com/arvinhanye/desktop-shell-mac-` 推送，故暂作本地交付。
+- **审查修改（2026-10-23，对应 `main` 的审查记录 `e8ecd0e`）**：
+  - 修复 P2：退出事件先进入排空阶段，停止写入并取消读取源（已暂停时先恢复再取消）；只有读到 EOF / EIO / EAGAIN 后才调用 `waitpid`。达到 256 KiB 积压上限时继续保留 PTY 和子进程，待主线程交付上一批输出、返回 ACK 后续读，不把一次读取预算耗尽当成排空完成。退出状态仍在最后一批 `onOutput` 完成后交付，保持原有节流、内存上限和 fd 取消顺序。
+  - 新增两项真实 PTY 检查：一项让首个输出回调暂不返回，积压 256 KiB 和中文尾串，核对恢复后的完整输出、最近 256 KiB 及退出顺序；另一项复用生产 shell 启动函数，待独立 marker 确认真实子进程已写完尾部后，人工调度后台 worker 的退出入口，强制退出处理早于首次读取。这项窄回归不声称覆盖内核退出事件的投递；通知路径由现有端到端测试与延迟监听探针覆盖。为此仅将启动函数、worker 和其串行化退出入口改为模块内可见，未改动公开会话接口、未添加运行时测试分支。高水位测试本身不保证事件顺序，也能在原版通过；原有读写背压和释放回收测试保留。
+  - 最终 `scripts/test.sh --jobs 4` **301/301 PASS（30 suites，终端组 25 项）**；`swift build --jobs 4` 成功且无编译错误/警告；`git diff --check` 通过。日志仍仅 pid、status、errno。独立子代理自查未发现新增生命周期或回调顺序问题，仅算实现自查，不代替正式复审。
+  - 同一退出入口回归对旧版逻辑 **RED**（等待 `onExit` 5 秒超时），对修复版 **GREEN**（17 字节尾部、退出码 3、退出前交付完整输出和回收均通过）。隔离旧版仅同步模块可见性及队列转发，保留先 waitpid 后读的原逻辑。最终源码另经审查者延迟监听探针 **30/30 PASS**；fd 数 **4→4**，提前释放后无残留子进程。验证产物保存在 `build/m9-validation/M9-03-revision/`：`full-tests-final.log`、`build-final.log`、`regression-scheduled-exit-original-red.log`、`regression-scheduled-exit-green.log`、`exit-tail-fixed.log`。`regression-notes.md` 区分最终证据和没有区分能力的中间测试构造，后者不算修复证明。
+  - 超时证据边界：本次原版延迟探针也会卡住，父进程采样显示终端队列已进入退出处理并阻塞在 `__wait4`（725/725 个样本）；对照副本先读后等即通过。独立 C 探针同时确认先读后回收有 4 字节、先回收后读为 0。详见 `quick-exit-diagnosis.md`、`diagnostic-parent.sample.txt`、`pty-tail-before.log`。这证明本次可复现超时受读/回收顺序影响；审查最初那次全量测试超时没有当时调用栈，**仍不能断言同因，也不以本次通过抹去**。原审查记录保留在 `main`，本次未修改审查者内容。
 
 <!-- ===== 以下由审查者填写（Claude Code，或没参与实现的另一个 Codex 会话） ===== -->
 

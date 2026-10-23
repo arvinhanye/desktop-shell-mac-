@@ -319,6 +319,110 @@ struct TerminalSessionTests {
         #expect(session.recentOutput == received)
     }
 
+    @Test("输出积压到高水位时，先交付全部尾部再通知退出")
+    func exitDrainsTailWhileOutputIsBackpressured() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let marker = directory.appendingPathComponent("output-finished")
+        let tail = Data("exit-tail-中文".utf8)
+        let expected = Data(repeating: 0x20, count: capacity) + tail
+        let session = TerminalSession(launch: TerminalLaunch(
+            executable: "/bin/sh", arguments: ["-c", "stty raw -echo; printf '%s\\n' \"$$\"; read token; printf '%262144s' ''; printf 'exit-tail-中文'; : > output-finished; exit 3"],
+            directory: directory.path
+        ))
+        defer {
+            session.onOutput = nil
+            session.onExit = nil
+            session.terminate()
+        }
+        var received = Data()
+        var outputAtExit = Data()
+        var exits: [Int32] = []
+        var releasedChild = false
+        var outputFinishedBeforeReturning = false
+        session.onOutput = { bytes in
+            received.append(bytes)
+            guard !releasedChild, received.contains(0x0A) else { return }
+            guard let pid = pid_t(text(received).trimmingCharacters(in: .whitespacesAndNewlines)),
+                  pid > 0, pid != getpid() else {
+                Issue.record("PTY readiness output did not contain its child PID")
+                return
+            }
+            releasedChild = true
+            received.removeAll()
+            session.write(Data("go\n".utf8))
+            // Keep this real output callback unacknowledged. The IO queue can fill
+            // exactly one pending 256 KiB batch, leaving the small tail in the PTY.
+            // The marker proves the child has finished writing all those bytes.
+            // Keep the reader backpressured while the child finishes. This checks
+            // delivery at the high-water mark without assuming source event order.
+            let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+            while ContinuousClock.now < deadline && !FileManager.default.fileExists(atPath: marker.path) {
+                usleep(1000)
+            }
+            outputFinishedBeforeReturning = FileManager.default.fileExists(atPath: marker.path)
+            if outputFinishedBeforeReturning { usleep(100_000) }
+        }
+        session.onExit = {
+            outputAtExit = received
+            exits.append($0)
+        }
+        try #require(session.start(cols: 80, rows: 24))
+        try #require(await waitUntil(timeout: 10) { !exits.isEmpty })
+        #expect(releasedChild)
+        #expect(outputFinishedBeforeReturning)
+        #expect(exits == [3])
+        #expect(received == expected)
+        #expect(outputAtExit == expected)
+        #expect(session.recentOutput == Data(expected.suffix(capacity)))
+        #expect(!session.isRunning)
+    }
+
+    @Test("退出处理先于任何 PTY 读取时，回收前排空真实子进程的尾部")
+    func exitEventBeforeFirstReadPreservesTail() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let written = directory.appendingPathComponent("written")
+        let expected = Data("exit-first-中文".utf8)
+        let child = try #require(launchTerminal(TerminalLaunch(
+            executable: "/bin/sh",
+            arguments: ["-c", "printf 'exit-first-中文'; : > written; exit 3"],
+            directory: directory.path
+        ), size: TerminalSize(cols: 80, rows: 24)))
+        var transferredOwnership = false
+        defer {
+            if !transferredOwnership {
+                close(child.fd)
+                kill(child.pid, SIGKILL)
+                var status: Int32 = 0
+                while waitpid(child.pid, &status, 0) < 0 && errno == EINTR {}
+            }
+        }
+        var received = Data()
+        var outputAtExit = Data()
+        var exits: [Int32] = []
+        let worker = TerminalProcess(pid: child.pid, fd: child.fd, onOutput: { received.append($0) }, onExit: {
+            outputAtExit = received
+            exits.append($0)
+        })
+        transferredOwnership = true
+        defer {
+            if exits.isEmpty { worker.terminate(); worker.childExited() }
+        }
+        try #require(await waitUntil { FileManager.default.fileExists(atPath: written.path) })
+        // Deliberately schedule the worker's exit path before any PTY read. The
+        // separate marker proves the real child wrote its tail; no source is begun
+        // and no wait syscall can alter the PTY before the code under test runs.
+        worker.childExited()
+        try #require(await waitUntil { !exits.isEmpty })
+        #expect(exits == [3])
+        #expect(received == expected)
+        #expect(outputAtExit == expected)
+        #expect(kill(child.pid, 0) == -1 && errno == ESRCH)
+    }
+
     @Test("持续短输出分成多批，主线程相邻回调至少间隔 15 ms")
     func outputCallbacksRespectBatchInterval() async throws {
         let session = shell("i=0; while [ \"$i\" -lt 64 ]; do printf x; /bin/sleep 0.004; i=$((i + 1)); done")
