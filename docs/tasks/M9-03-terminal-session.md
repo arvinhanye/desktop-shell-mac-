@@ -1,6 +1,6 @@
 # M9-03: 终端会话：PTY 跑登录 shell（Swift）
 
-- **状态**：todo
+- **状态**：review
 - **里程碑**：M9
 - **依赖**：无。和 M9-01、M9-02、M9-04 互不依赖；M9-05 依赖本任务
 - **分支**：task/M9-03
@@ -89,9 +89,15 @@
 
 ## 交付记录
 
-- **改动摘要**：
+- **改动摘要**：从 `main`（`d15e0a1`）独立创建 `task/M9-03`，不包含 M9-01 的网页修改。新增 `TerminalLaunch`、`@MainActor TerminalSession`、`TerminalSize.validated(cols: Double, rows: Double)`、`terminalEnvironment` 和 `TerminalOutputBuffer`。公开会话接口保持任务约定；`lastSize` 是有 `cols` / `rows` 的 `TerminalSize`，初始 80×24。默认登录 shell、环境、工作目录按规范；start 幂等，resize 无效尺寸不污染状态，退出保留输出，重开清空输出。
+  - 后台串行队列负责 PTY 读写；EINTR 重试，EAGAIN 通过可写事件继续发送，保留短写偏移，不忙等或阻塞主线程。输出以 16 ms 批次交给主线程，确认上一批已交付后才安排下一批，退出先排空尾部再回调状态。read/write source 全部完成取消后才 close，避免 fd 复用竞态；释放会话同样发送 SIGHUP 并保留退出监听直至 waitpid 回收。
+  - 最近输出上限 256 KiB，截断时避开 UTF-8 后续字节。自查发现待交付输出可能在主线程忙碌时堆积，已补读端背压：积压达到 256 KiB 时暂停 read source，主线程接收后恢复，不丢字；退出时正确恢复并取消 suspended source。
 - **自测结果**：
-- **疑问 / 偏离**：
+  - 基线 `scripts/test.sh` **276/276 PASS**；最终 **299/299 PASS（30 suites）**。新增 `TerminalSessionTests` **23/23 PASS**，覆盖环境、尺寸边界/非整数/非有限、UTF-8 分块与容量、真实 sh 退出码、cat 写入、stty 改尺寸、默认状态/幂等/重开、工作目录/环境、SIGHUP、exec/chdir 失败 127、主线程回调节流、释放后进程回收、512 KiB 写入背压、主线程阻塞后 1 MiB 输出仍完整。
+  - 先写测试验证类型缺失 RED；实现后通过。自查修复的主线程背压另有真实 RED→GREEN：旧实现会在主线程阻塞时提前写完 marker，新实现让子进程受 PTY 背压，恢复后输出和 marker 完整。
+  - 最终 `swift build` 成功、无编译错误/警告；`git diff --check` 通过。日志检查仅开始 pid、退出 status 与 errno，不含终端输入/输出或长度。子代理只读自查和 debug 目标文件反汇编核对 forkpty 子路径仅 chdir/execve/_exit，无 Swift runtime 调用（自查不是正式审查）。
+  - 证据位于 `build/m9-validation/`：`M9-03-full-tests.log`、`M9-03-build-final.log`、`M9-03-targeted-final.log`、`M9-03-backpressure-red.log`。最初沙盒运行被 Swift 模块缓存写权限阻止，以上结果均来自正常本机权限下的项目脚本；未修改签名、系统权限或运行配置。
+- **疑问 / 偏离**：无范围偏离，仅新增两份允许文件并更新本任务状态/交付记录。没有接入窗口或 bridge，不构建终端面板；交互验收按任务单留到 M9-05。M9-01 与本任务分别在独立分支交付；未合并 `main`。任务分支推送被自动审批拦截；虽然已通过 GitHub 连接器核实远端归属和推送权限，审批仍要求用户在对话中明确授权向 `https://github.com/arvinhanye/desktop-shell-mac-` 推送，故暂作本地交付。
 
 <!-- ===== 以下由审查者填写（Claude Code，或没参与实现的另一个 Codex 会话） ===== -->
 
