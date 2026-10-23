@@ -295,7 +295,7 @@ private final class ProjectReminderBackend: RemindersBackend {
     var access = "granted"
     let changeSource: AnyObject = NSObject()
     func requestAccess(_ completion: @escaping @MainActor (Bool) -> Void) { completion(false) }
-    func lists() -> [(id: String, title: String)] { [("work-list", "Work")] }
+    func lists() -> [ReminderListSnapshot] { [.init(id: "work-list", title: "Work", sourceTitle: "Test", canWrite: true)] }
     func defaultListID() -> String? { "work-list" }
     func refresh() {}
     func fetch(completedSince: Date?, completion: @escaping @MainActor ([ReminderSnapshot]?) -> Void) {

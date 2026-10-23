@@ -7,6 +7,13 @@ export function projectActions(project, apps) {
   return actions;
 }
 
+export function moveProjectIds(projects, projectId, direction) {
+  const ids = projects.map(project => project.id), index = ids.indexOf(projectId), next = index + direction;
+  if (![-1, 1].includes(direction) || index < 0 || next < 0 || next >= ids.length) return null;
+  [ids[index], ids[next]] = [ids[next], ids[index]];
+  return ids;
+}
+
 export function toggleSelection(current, id) {
   return current === id ? null : id;
 }
@@ -40,7 +47,8 @@ export default {
     card.setAttribute('data-drop', 'projects');
     const head = element('div', 'card-head');
     const status = element('span', 'card-meta');
-    head.append(element('h2', 'card-title', '项目'), status);
+    const manage = element('button', 'project-manage-toggle', '管理'); manage.type = 'button';
+    head.append(element('h2', 'card-title', '项目'), status, manage);
     const list = element('div', 'project-list scroll-list');
     const add = element('label', 'project-add');
     const input = element('input', '');
@@ -63,6 +71,7 @@ export default {
     host.append(card);
 
     let disposed = false;
+    let managing = false, reordering = false, configGeneration = 0;
     let generation = 0;
     let messageTimer;
     let rowCleanups = [];
@@ -180,6 +189,35 @@ export default {
           });
           actions.append(button);
         }
+        if (managing) {
+          actions.replaceChildren();
+          const edit = element('button', 'project-edit', '编辑'); edit.type = 'button';
+          on(edit, 'click', event => { event.stopPropagation(); store.set({ editingProjectId: project.id, appearanceOpen: false }); });
+          actions.append(edit);
+          for (const [direction, label, cls] of [[-1, '↑', 'project-up'], [1, '↓', 'project-down']]) {
+            const move = element('button', cls, label); move.type = 'button'; move.title = direction === -1 ? '上移' : '下移';
+            move.setAttribute('aria-label', `${move.title} ${project.name}`);
+            move.disabled = reordering || moveProjectIds(projects, project.id, direction) === null;
+            on(move, 'click', async event => {
+              event.stopPropagation(); if (disposed || reordering || move.disabled) return;
+              const projectIds = moveProjectIds(store.get('config')?.projects ?? [], project.id, direction);
+              if (!projectIds) return;
+              reordering = true; render();
+              try { await bridge.send('reorderProjects', { projectIds }); }
+              catch {
+                if (!disposed) {
+                  const refreshVersion = configGeneration;
+                  showMessage('排序失败，正在刷新');
+                  try {
+                    const reply = await bridge.send('getConfig');
+                    if (!disposed && refreshVersion === configGeneration) store.set({ config: reply.config });
+                  } catch { if (!disposed && refreshVersion === configGeneration) showMessage('刷新失败，请重试'); }
+                }
+              } finally { reordering = false; if (!disposed) render(); }
+            });
+            actions.append(move);
+          }
+        }
         const remove = element('button', 'project-remove');
         remove.type = 'button';
         remove.title = '从列表移除（不会删除文件夹）';
@@ -225,7 +263,9 @@ export default {
       updateSelection();
       scrollToAdded();
     };
-    const unsubscribeConfig = store.subscribe('config', render, { immediate: true });
+    const toggleManagement = () => { managing = !managing; manage.textContent = managing ? '完成' : '管理'; manage.setAttribute('aria-pressed', String(managing)); card.classList.toggle('managing', managing); render(); };
+    manage.addEventListener('click', toggleManagement);
+    const unsubscribeConfig = store.subscribe('config', () => { configGeneration++; render(); }, { immediate: true });
     const unsubscribeSelection = store.subscribe('selectedProject', updateSelection, { immediate: true });
     card.classList.toggle('drop-target', store.get('projectDrop')?.over === true);
     // Results are one-shot: subscribe to new envelopes, not a previous mount's result.
@@ -242,6 +282,7 @@ export default {
       disposed = true;
       generation++;
       unsubscribeConfig();
+      manage.removeEventListener('click', toggleManagement);
       unsubscribeSelection();
       unsubscribeDrop();
       input.removeEventListener('input', onInput);
