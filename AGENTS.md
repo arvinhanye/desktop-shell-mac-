@@ -198,12 +198,16 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 | `setGlassRegions` | `regions`：`[[x, y, w, h, radius], …]`，CSS 像素，相对网页左上角 | 整体替换该窗口毛玻璃的位置（2026-10-18 增加）。校验同 `setHitRegions`，另外 `radius` 必须在 0 到宽高较小值的一半之间 |
 | `addProject` | `path`（非空字符串，最多 1024 个字符） | 把一个文件夹加成项目（M7，2026-10-21 增加）。**这是唯一允许传路径的动作**，见"安全要求"。Swift 展开 `~`、标准化、解析符号链接后核对：存在（否则 `not-found`）、是文件夹（否则 `not-directory`）、在个人目录（`~`）里且不是 `~` 本身（否则 `outside-home`）、还没有项目指向同一个文件夹（否则 `duplicate`）。新项目：`name` 是文件夹名，`id` 由名字生成（见"配置文件示例"），`tags` 为空，`apps` 为 `["cursor"]`（配置里没有 `cursor` 就为空），没有 `remindersList`。写回 `config.json` 后回复新项目（格式同 `getConfig` 里的一项），并向所有页面推送 `config` |
 | `removeProject` | `projectId` | 从 `config.json` 的 `projects` 里去掉这一项（M7）。**只改配置，绝不删除、移动磁盘上的文件夹**。查不到 → `not-found`。成功后回复 `null` 并推送 `config` |
+| `getProjectEditOptions` | `projectId` | 打开"编辑项目"面板时读取（M8，2026-10-22）。回复 `{project: {id, name, appId}, access, binding: {status, optionId}, lists: [{id, title, source, canWrite, assignedProjectId}]}`：`appId` 是项目当前的默认应用（`apps` 里第一个在 `config.apps` 中存在的），没有就是 `null`；`access` 是提醒事项权限（同 `todos` 事件，服务没就绪时是 `unknown`）；`binding.status` 为 `none` / `linked` / `missing`（绑定的列表找不到了）/ `read-only` / `unavailable`（没有权限）/ `shared`（旧配置里几个项目共用一个列表）；`lists` 只在有权限时列出。**`lists[].id` 和 `binding.optionId` 是 Swift 在进程内临时分配的选项 id**，不是 EventKit 的列表 id，Swift 自己记着对应关系；`title` 是列表名，`source` 是列表所在账户的显示名（例如 iCloud），`assignedProjectId` 是已经占用这个列表的项目。查不到项目 → `not-found` |
+| `updateProject` | `projectId`, `name?`, `appId?`, `reminderListOptionId?` | 改一个项目的显示名、默认应用、提醒事项列表（M8）。至少带一项，没带的不动。`name` 去掉首尾空白后 1–100 个字符，只改显示名，`id`、`path`、`tags` 不变；`appId` 必须在 `config.apps` 里，选中的应用挪到项目 `apps` 的第一位，其他照原顺序保留；`reminderListOptionId` 为 `null` 表示不再关联（同时清掉 `remindersList` 和 `remindersListId`），为选项 id 时 Swift 重新核对权限、列表还在、可写、没被别的项目占用，通过后写入 `remindersListId` 并清掉 `remindersList`。项目、应用或选项查不到 → `not-found`；没有权限、只读、已被占用 → `failed`。成功后回复新项目（格式同 `getConfig` 里的一项）并推送 `config` |
+| `reorderProjects` | `projectIds` | 调整项目的显示顺序（M8）。必须是当前所有可见项目 id 的完整排列，不能重复；和磁盘上最新的项目集合对不上 → `not-found`。只写顶层 `projectOrder`，`projects` 数组本身的顺序不动。成功后回复 `null` 并推送 `config` |
 | `setDropRegions` | `regions`：`[[x, y, w, h], …]`，CSS 像素，相对网页左上角 | 整体替换该窗口接收文件夹拖入的区域（M7；目前只有项目卡片）。校验同 `setHitRegions`，最多 8 个 |
 
 **安全要求**：
 
 - Bridge 只处理来自 `shell://app` **主框架**的消息（校验 `message.frameInfo.isMainFrame`，以及 `securityOrigin` 的 scheme 为 `shell`、host 为 `app`），其他来源一律忽略并记录日志。
 - 网页**只传 id，不传路径或 bundle id**。真实路径和应用由 Swift 从 `config.json` 里查。这样即使网页被塞了坏代码，也只能打开配置里列出的东西。不提供任何执行 shell 命令的动作。
+- **提醒事项列表的名字只在编辑面板里出现**（M8，2026-10-22 用户同意）：`getConfig` 和 `config` 推送照旧不带列表名和列表 id；只有 `getProjectEditOptions` 回复列表名、账户显示名，好让用户挑选。EventKit 的列表 id 不出 Swift，网页拿到的是进程内临时的选项 id，重启应用后作废。
 - **唯一的例外是 `addProject` 的 `path`**（2026-10-21 用户同意）：用户在输入框里粘贴的路径要经过网页。范围用核对来限制：只能是个人目录里已经存在的文件夹，加进来以后能做的事和其他项目一样（在访达或配置里的应用里打开），不能执行、删除、移动任何东西。日志不写路径以外的用户内容，路径本身只在添加成功时写一行。
 - **拖入文件夹时路径不经过网页**：由 Swift 原生接住拖放（WKWebView 的拖放方法在 Swift 里改写，网页拿不到文件路径），拖放操作用"复制"（`NSDragOperation.copy`），访达不会移动被拖的文件夹。网页只收到推送事件 `projectDrop`（是否悬停、添加结果）。
 - URL 约定（同一个源）：`shell://app/<path>` 对应 `web/<path>`，`shell://app/media/<path>` 对应 `media/<path>`。
@@ -258,9 +262,11 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 
 - `background.video` 是相对 `media/` 的路径。
 - 项目的 `remindersList`（可选）是系统提醒事项里一个列表的名字，按名字精确匹配；找不到时记录日志，当作没有配置。同名列表有多个时取第一个并记录日志。
+- 项目的 `remindersListId`（可选，M8）是在编辑面板里选列表时写入的 EventKit 列表 id。有它时只按 id 找，**找不到不按名字回退**（记录日志，向这个项目新增提醒会失败，不会悄悄放进默认列表），列表改名不影响绑定；没有它时照旧用 `remindersList`。加载配置时不迁移、不改写。
+- 顶层 `projectOrder`（可选，M8）：项目的显示顺序，只影响 `getConfig` / `config` 里 `projects` 的顺序。重复的、已经不存在的 id 忽略，没列出的项目按 `projects` 原来的顺序排在后面。新加的项目排在最后，移除项目时一并从这里去掉。
 - `greetings` 按整点 `from` 升序排列，取不大于当前小时的最后一项；问候显示为 `"<title>，<user.name>"`，名字用强调色；没有 `user.name` 时只显示 `title`（2026-10-18 改定，原来是角色名）。默认文案取自美化包 `Skins/Ageo` 的配置。
 - `character.motto`（签名）显示在角色卡上名字的右边，可选，没有就不显示。
-- **在桌面上增删项目**（M7，2026-10-21 定）：项目卡片可以用输入框粘贴路径或把文件夹拖进来添加，行尾的 × 点两次从列表移除。这是应用唯一会改写 `config.json` 的地方：每次先从磁盘重新读一遍（不做启动时的过滤和排序），只增删 `projects` 里的一项，再整体写回（`prettyPrinted`、`sortedKeys`、`withoutEscapingSlashes`，原子写入）。读不出来（文件损坏）就拒绝，不覆盖用户的文件。手写在 `config.json` 里、结构体不认识的键会在写回时丢掉。新项目的 `path` 在个人目录里时写成 `~/…`。`id` 由文件夹名生成：ASCII 字母和数字转小写，其余字符变成 `-`，连续的 `-` 合并、去掉首尾的 `-`；结果为空（例如纯中文名）就用 `project`；和已有 id 重复时依次加 `-2`、`-3`…。增删以后提醒事项按新的项目对应关系重新推送 `todos`。
+- **在桌面上增删项目**（M7，2026-10-21 定）：项目卡片可以用输入框粘贴路径或把文件夹拖进来添加，行尾的 × 点两次从列表移除。应用只在这里和 M8 的编辑项目里改写 `config.json`：每次先从磁盘重新读一遍（不做启动时的过滤和排序），只改 `projects` 里本次涉及的项目和 `projectOrder`，**按字段合并**回原来的 JSON 再写回（`prettyPrinted`、`sortedKeys`、`withoutEscapingSlashes`，原子写入）。没改的项目原样保留，手写的、结构体不认识的键也保留（2026-10-22 起；原来会丢掉）。读不出来（文件损坏）就拒绝，不覆盖用户的文件；读完到写回之间文件被改过，也拒绝（回复 `failed`）。新项目的 `path` 在个人目录里时写成 `~/…`。`id` 由文件夹名生成：ASCII 字母和数字转小写，其余字符变成 `-`，连续的 `-` 合并、去掉首尾的 `-`；结果为空（例如纯中文名）就用 `project`；和已有 id 重复时依次加 `-2`、`-3`…。增删以后提醒事项按新的项目对应关系重新推送 `todos`。
 - 同目录下的其他数据文件：`ui.json`（当前头像、背景图、语音开关、是否隐藏桌面文件）。待办存在系统提醒事项里，不另存文件。`ui.json` 由应用自己管理，缺少的字段用默认值，损坏时记录日志并使用默认值。
 
 ### 运行时素材目录
@@ -284,7 +290,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 视觉主题复刻《鸣潮》爱弥斯美化包（作者 Dr_Black），按 Mac 的实际情况调整。第一版共八个组件和两项功能：
 
 1. **时钟**：以大号衬线体的星期和日期为主（Mac 菜单栏已经显示时间）。同时负责计算当前时段，写入 `store.phase`：早晨 6–12 点、白天 12–18 点、傍晚 18–21 点、夜晚 21–6 点。
-2. **项目卡片**：列出 `config.projects`。点击卡片会选中它（写入 `store.selectedProject`）；每个项目有"访达"和"用 <应用> 打开"两个按钮（应用取项目 `apps` 里的第一个，例如 Cursor；没有就只有"访达"，M3.5 定）。M7 起可以在卡片上添加项目（输入框粘贴路径，或把文件夹拖到卡片上）和移除项目（只改配置）。
+2. **项目卡片**：列出 `config.projects`。点击卡片会选中它（写入 `store.selectedProject`）；每个项目有"访达"和"用 <应用> 打开"两个按钮（应用取项目 `apps` 里的第一个，例如 Cursor；没有就只有"访达"，M3.5 定）。M7 起可以在卡片上添加项目（输入框粘贴路径，或把文件夹拖到卡片上）和移除项目（只改配置）。M8 起标题右边有"管理"按钮：管理模式下每行显示"编辑"、上移、下移和移除；"编辑"在同一个网页里打开"编辑项目"面板（显示名、默认应用、提醒事项列表），和外观面板互斥。
 3. **应用启动栏**：列出 `config.apps`，点击启动。
 4. **待办（系统提醒事项）**（2026-10-17 改定，原方案是自己存 `todos.json`）：直接读写系统"提醒事项"，和 iPhone 同步。显示所有列表的未完成提醒和今天完成的提醒，带到期时间的显示到期时间。可勾选完成、可新增（第一版只填文字，到期时间在 iPhone 上加），**不能删除**。项目通过配置里的 `remindersList` 对应一个列表。没有授权时显示提示，告诉用户去"系统设置 → 隐私与安全性 → 提醒事项"里允许。
 5. **系统状态**：电量、CPU、内存，外加一条 CPU 历史折线。
@@ -381,6 +387,7 @@ desktop-shell/
 │   ├── PlaybackMonitor.swift      # 监听有没有别的应用在放声音
 │   ├── LaunchAtLogin.swift        # 开机自启：SMAppService 状态 → 菜单勾选、点击动作（M6）
 │   ├── ProjectEditing.swift       # 增删项目：路径核对、id 生成、改写 config.json（M7，纯函数为主）
+│   ├── ProjectPreferences.swift   # 项目的显示顺序、改名 / 默认应用 / 提醒列表（M8，纯函数）
 │   ├── FileDropTracking.swift     # 判断是否在拖文件、拖入区域命中（M7，纯函数）
 │   └── ConfigStore.swift          # 读写 JSON
 ├── web/
@@ -401,6 +408,7 @@ desktop-shell/
 │   └── widgets/                   # 每个组件一个 <名字>.js，样式在同名 .css（照 docs/design/design.css 对应的一节）
 │       ├── clock.js
 │       ├── projects.js
+│       ├── project-editor.js      # 编辑项目面板（M8）
 │       ├── launcher.js
 │       ├── todos.js
 │       ├── stats.js
@@ -505,6 +513,7 @@ desktop-shell/
 - **M5.5 系统音频律动**：`AudioSpectrum.swift` 捕获系统声音、做频谱分析，推送 `audioSpectrum`，接上 M4 的律动组件；暂停和没有应用在放声音时不开捕获，静音时不推送；初始参数采用 Lano-Visualizer 的取值。
 - **M6 开机自启**：用 `SMAppService` 实现开机自启（在菜单栏里提供开关）。
 - **M7 项目管理**（2026-10-21 用户提出）：在桌面上添加项目（输入框粘贴路径、把文件夹拖到项目卡片上）和从列表移除项目（只改配置）。设计见 `docs/design/`（2026-10-21 定稿），规则见"配置文件示例""Bridge 接口""窗口要求"里标着 M7 的部分。
+- **M8 项目编辑**（2026-10-22 用户提出，方案 `docs/design/2026-10-22-usability-design.md` 第 3 节）：在桌面上改项目的显示名、默认应用、提醒事项列表，调整显示顺序。同批方案里的布局预设、组件显隐（M8-03、M8-04）和启动栏反馈（M8-05）2026-10-23 由用户决定作废，被 M9 取代。规则见"配置文件示例""Bridge 接口"里标着 M8 的部分。
 
 ## 后续想法
 

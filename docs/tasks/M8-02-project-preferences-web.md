@@ -1,6 +1,6 @@
 # M8-02: 项目管理模式与编辑面板
 
-- **状态**：review
+- **状态**：done
 - **里程碑**：M8
 - **依赖**：M8-01 本地实现与自查通过
 - **分支**：task/M8-02（接续 M8-01，记录起点 SHA）
@@ -103,3 +103,27 @@
   - 列表改名后绑定仍有效，重启后保持。
 - 其中"其他关联高亮仍在"一句是针对启动栏的，M9 去掉启动栏后不再适用，这次只看默认应用。
 
+### 复验（Claude Code，2026-10-23）
+
+- **范围**：Codex 的返修提交 `fdff12c`（基于 `54e0a80`）。
+- **结论**：通过，已合并到 `main`。
+- **已实际执行**：
+  - `swift build` 没有警告；`scripts/test.sh` 276/276（29 个套件）；`scripts/test-web.sh` 495/495；`git diff --check` 只报了两张任务单末尾多出的空行，审查者已删掉。
+  - `projects`、`project-editor`、`visualizer`、`appearance` 四节样式和 `docs/design/design.css` 一致；`web/styles/tokens.css` 和 `docs/design/tokens.css` 只差已知的 M4-11 那几条。
+  - 改动的文件都在 M8-01、M8-02 允许的范围里；`web`、`Tests/web` 里已经没有 `layoutOpen`。
+- **三条意见都已修好**：
+  1. 提醒列表找不到、同名有歧义、`remindersListId` 失联，三种情况都会记日志，只写项目 id，有测试确认日志里没有列表名；
+  2. 进度提示用淡色，只有出错时加 `.error` 用 `--color-danger`；
+  3. `layoutOpen` 删干净了。
+- **用户手动验证**（签名的 `.app`，从 `fdff12c` 打包；审查者先备份了 `config.json`、`ui.json`，并对照配置文件和日志核对）：
+  - 中文改名：`desktop-shell` 改名后写进了配置，`id`、`path` 没变。
+  - 默认应用：`apps` 变成 `["safari", "cursor"]`，08:23 的日志有 `openProjectWith desktop-shell safari ok`。
+  - 提醒列表：08:20 写入 `remindersListId`，选中项目后新增的提醒进了所选列表；08:21 解除后两个字段都清掉，新增的提醒进了默认列表。第一次试时停在"保持当前关联"就保存了，所以没写入，这是操作问题，不是缺陷。
+  - 列表改名后绑定仍然有效：用户确认（日志里看不到列表名，无法另行核对）。
+  - 08:28 重启后，名字、默认应用、顺序都在。
+- **审查者改动**：
+  - AGENTS.md 补上项目编辑的规范（用户 2026-10-23 同意）；
+  - `docs/design/README.md` 的 store 表加上 `editingProjectId`；
+  - M8-03～05 标为作废，M8-00 加说明；
+  - 删掉两张任务单末尾多余的空行。
+- **后续**（用户 2026-10-23 决定，放进 M9，不再改 M8）：去掉项目行的"用 <应用> 打开"按钮、编辑面板里的"默认打开应用"、`openProjectWith` 和 `apps`。
