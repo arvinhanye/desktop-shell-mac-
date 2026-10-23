@@ -1,4 +1,4 @@
-/* DesktopShell 设计规范（M3.5 定稿，2026-10-18；M8 改版 2026-10-23：去掉启动栏、压缩角色卡、加终端）。M4 原样复制到 web/styles/tokens.css。
+/* DesktopShell 设计规范（M3.5 定稿，2026-10-18；M9 改版 2026-10-23：去掉启动栏、压缩角色卡、加终端）。M4 原样复制到 web/styles/tokens.css。
    数值来源见 docs/design/parameters.md：颜色取自美化包 Ageo / prototype / Lano-Visualizer，
    并按壁纸亮度调整了底板，保证白字在头发等亮色区域上也看得清。
    组件 CSS 和 base.css 只能引用这里的变量，不写死颜色和尺寸。 */

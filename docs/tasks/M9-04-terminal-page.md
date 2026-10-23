@@ -1,9 +1,9 @@
-# M8-04: 终端页 terminal.html 和 xterm.js（网页）
+# M9-04: 终端页 terminal.html 和 xterm.js（网页）
 
 - **状态**：todo
-- **里程碑**：M8
-- **依赖**：M8-01（用到同步后的 `web/styles/tokens.css` 里的终端 token 和 `base.css` 的 `.key-hint`）。和 M8-02、M8-03 互不依赖；M8-05 依赖本任务
-- **分支**：task/M8-04
+- **里程碑**：M9
+- **依赖**：M9-01（用到同步后的 `web/styles/tokens.css` 里的终端 token 和 `base.css` 的 `.key-hint`）。和 M9-02、M9-03 互不依赖；M9-05 依赖本任务
+- **分支**：task/M9-04
 
 <!-- ===== 以下需求部分由 Claude Code 编写，Codex 不修改 ===== -->
 
@@ -11,13 +11,13 @@
 
 新建终端面板里加载的页面 `web/terminal.html`：照定稿画出标题栏和终端区，用 xterm.js 显示终端，按 AGENTS.md 的"终端页"动作和事件和 Swift 通信。在普通浏览器里打开时用一个回显的假终端，方便调样式。
 
-在应用里真正跑起来要等 M8-05。
+在应用里真正跑起来要等 M9-05。
 
 ## 背景与约束
 
 - 先读：
   - AGENTS.md：Bridge 接口里"终端页 → Swift""Swift → 终端页""终端会话"三块，"安全要求"里终端页的几条，"技术探针"的终端面板探针（xterm.js 一段）；
-  - `docs/design/README.md` 开头"M8 改版"一节。
+  - `docs/design/README.md` 开头"M9 改版"一节。
 - 定稿：
   - `docs/design/index.html` 里 `.terminal-panel` 那一块就是本页面的全部 DOM（外面的 `.mock-terminal-window` 不是）；
   - 放大 / 还原、收起按钮的图标照 `mockup.js` 里的 `MAX_ICON` / `RESTORE_ICON` 和 `index.html` 里收起按钮的 SVG；
@@ -134,14 +134,14 @@
 
   （定稿那一节开头有三行缩进的说明注释，比较时去掉。）
 - [ ] `grep -n "http" web/terminal.html web/terminal/terminal.js` 没有输出
-- [ ] `git diff --name-only main...task/M8-04` 只有上面"允许修改的文件"
+- [ ] `git diff --name-only main...task/M9-04` 只有上面"允许修改的文件"
 - [ ] （审查者复验）`node scripts/serve-web.mjs`，Safari 打开 `http://127.0.0.1:8765/terminal.html`，窗口拉到大约 1760 × 450：
   - 标题栏和效果图（`/design/index.html` 打开终端）一致：图标、"终端"、`zsh`、`⌥``、放大和收起按钮；
   - 输入中英文都能回显，中文占两格；
   - 点放大，图标换成还原；
   - Web 检查器的控制台没有错误，也没有 CSP 报错。
 
-**用户手动验证**：本任务没有，并到 M8-05。
+**用户手动验证**：本任务没有，并到 M9-05。
 
 <!-- ===== 以下由 Codex 填写 ===== -->
 

@@ -1,15 +1,15 @@
-# M8-01: 去掉启动栏、压缩角色卡、加终端入口（网页）
+# M9-01: 去掉启动栏、压缩角色卡、加终端入口（网页）
 
 - **状态**：todo
-- **里程碑**：M8
-- **依赖**：无。和 M8-02、M8-03 互不依赖；M8-04 依赖本任务（用到同步后的 `tokens.css` 和 `base.css` 的 `.key-hint`）
-- **分支**：task/M8-01
+- **里程碑**：M9
+- **依赖**：无。和 M9-02、M9-03 互不依赖；M9-04 依赖本任务（用到同步后的 `tokens.css` 和 `base.css` 的 `.key-hint`）
+- **分支**：task/M9-01
 
 <!-- ===== 以下需求部分由 Claude Code 编写，Codex 不修改 ===== -->
 
 ## 目标
 
-桌面网页照 2026-10-23 的 M8 定稿改版：
+桌面网页照 2026-10-23 的 M9 定稿改版：
 
 - 应用启动栏去掉；
 - 角色卡压成一条（高 112），播放语音时只沿圆形头像外圈亮光环（**顺带完成暂缓的 M4-11**）；
@@ -17,13 +17,13 @@
 - 待办伸到底；
 - 第一列系统状态下面多一条"终端"入口，点一下发 `openTerminal`。
 
-做完后 `web/styles/tokens.css` 和 `docs/design/tokens.css` 完全一样。在应用里，点终端入口要等 M8-05 合并后才会打开面板（之前 Swift 回复 `unknown-action`，组件接住即可）。
+做完后 `web/styles/tokens.css` 和 `docs/design/tokens.css` 完全一样。在应用里，点终端入口要等 M9-05 合并后才会打开面板（之前 Swift 回复 `unknown-action`，组件接住即可）。
 
 ## 背景与约束
 
 - 先读：
-  - `docs/design/README.md`：开头"M8 改版"一节、"组件的共同写法"、"store 里的键"；
-  - AGENTS.md：组件清单、联动规则、Bridge 接口里标着 M8 的 `openTerminal` 和 `getConfig` 的 `terminal.hotkey`。
+  - `docs/design/README.md`：开头"M9 改版"一节、"组件的共同写法"、"store 里的键"；
+  - AGENTS.md：组件清单、联动规则、Bridge 接口里标着 M9 的 `openTerminal` 和 `getConfig` 的 `terminal.hotkey`。
 - 定稿：
   - `docs/design/index.html`：`character`、`stats`、`terminal` 三节的 DOM；
   - `docs/design/design.css`：base.css、character、stats、todos、terminal 各节。`mockup.js` 只作交互参考。
@@ -90,7 +90,7 @@
 
 - 遵守 AGENTS.md "不要做的事"。
 - 不改 Swift、`docs/`、`web/index.html`。
-- 不做终端面板本身（M8-04、M8-05）。
+- 不做终端面板本身（M9-04、M9-05）。
 - 不用 `filter: drop-shadow` 做语音光环。
 
 ## 验收标准
@@ -106,7 +106,7 @@
   ```
 - [ ] `grep -rn "launcher\|launchApp\|iconUrl\|app-icons" web Tests/web` 没有输出
 - [ ] `grep -c "key-hint" web/styles/base.css` 输出 `1`
-- [ ] `git diff --name-only main...task/M8-01` 只有上面"允许修改的文件"
+- [ ] `git diff --name-only main...task/M9-01` 只有上面"允许修改的文件"
 - [ ] （审查者复验）`node scripts/serve-web.mjs`，浏览器打开 `http://127.0.0.1:8765/`，对照 `http://127.0.0.1:8765/design/index.html`：
   - 第一列从上到下是日期、角色卡、系统状态、终端入口；
   - 量一下位置：角色卡在 300–412，系统状态在 428–596，终端入口在 612–660（相对安全区域顶部），没有启动栏；
@@ -118,7 +118,7 @@
 
 **用户手动验证**：
 
-- [ ] 用 `scripts/bundle.sh --open` 打包启动：桌面布局和上面一样，没有启动栏；点头像有光环；点终端入口什么都不发生（M8-05 之前属预期），其他组件照旧可用。
+- [ ] 用 `scripts/bundle.sh --open` 打包启动：桌面布局和上面一样，没有启动栏；点头像有光环；点终端入口什么都不发生（M9-05 之前属预期），其他组件照旧可用。
 
 <!-- ===== 以下由 Codex 填写 ===== -->
 

@@ -1,9 +1,9 @@
-# M8-05: 终端面板、全局快捷键和终端 bridge（Swift）
+# M9-05: 终端面板、全局快捷键和终端 bridge（Swift）
 
 - **状态**：todo
-- **里程碑**：M8
-- **依赖**：M8-02（`HotKey.swift`、`config.terminal`）、M8-03（`TerminalSession`）、M8-04（`terminal.html`），三个都合并以后再做。M8-01 最好也已合并（终端入口在那里），不合并也能做，手动验证时用快捷键
-- **分支**：task/M8-05
+- **里程碑**：M9
+- **依赖**：M9-02（`HotKey.swift`、`config.terminal`）、M9-03（`TerminalSession`）、M9-04（`terminal.html`），三个都合并以后再做。M9-01 最好也已合并（终端入口在那里），不合并也能做，手动验证时用快捷键
+- **分支**：task/M9-05
 
 <!-- ===== 以下需求部分由 Claude Code 编写，Codex 不修改 ===== -->
 
@@ -13,9 +13,9 @@
 
 - 按 ⌥\`（或配置的快捷键），或点桌面上的终端入口，终端面板从鼠标所在屏幕的顶部滑下，直接可以打字，前台应用不变；
 - 再按一次快捷键，或点面板上的"收起"，面板收起，键盘回到原来的应用；
-- 面板里是 M8-04 的 `terminal.html`，跑着 M8-03 的会话。
+- 面板里是 M9-04 的 `terminal.html`，跑着 M9-03 的会话。
 
-这是 M8 的最后一个任务，做完后按"用户手动验证"在桌面上整体验一遍。
+这是 M9 的最后一个任务，做完后按"用户手动验证"在桌面上整体验一遍。
 
 ## 背景与约束
 
@@ -59,7 +59,7 @@
 
 ### 2. 快捷键（修改 `HotKey.swift`）
 
-- 启动时按 M8-02 解析出的配置，用 `InstallEventHandler` + `RegisterEventHotKey` 注册，收到 `kEventHotKeyPressed` 就切换面板（显示 ↔ 收起）。
+- 启动时按 M9-02 解析出的配置，用 `InstallEventHandler` + `RegisterEventHotKey` 注册，收到 `kEventHotKeyPressed` 就切换面板（显示 ↔ 收起）。
 - 日志：
   - 注册成功：`terminal hotkey registered <显示文字>`；
   - 注册失败：写错误码，终端入口照样能用。
@@ -110,7 +110,7 @@
 ## 不许做
 
 - 遵守 AGENTS.md "不要做的事"。
-- 不改网页（`web/` 下的任何文件）。如果发现 M8-04 的页面和这里的约定对不上，停下来在交付记录里说明。
+- 不改网页（`web/` 下的任何文件）。如果发现 M9-04 的页面和这里的约定对不上，停下来在交付记录里说明。
 - 不调用 `NSApp.activate`；不让组件页往终端里写任何东西；日志不写终端内容。
 - 不改 VideoWindow / WidgetWindow 的层级和行为。
 
@@ -126,7 +126,7 @@
   - [ ] `terminalState` 推送的内容。
 - [ ] `grep -n "Log\." Sources/DesktopShell/TerminalBridge.swift Sources/DesktopShell/TerminalPanel.swift`：没有一条带上输入输出的内容或长度
 - [ ] `grep -rn "NSApp.activate\|activate(ignoringOtherApps" Sources` 没有输出
-- [ ] `git diff --name-only main...task/M8-05` 只有上面"允许修改的文件"
+- [ ] `git diff --name-only main...task/M9-05` 只有上面"允许修改的文件"
 
 **用户手动验证**（`scripts/bundle.sh --open` 打包启动；审查者同时开着 `/usr/bin/log stream --style compact --predicate 'subsystem == "local.desktopshell.DesktopShell"'` 对照日志）：
 
@@ -136,7 +136,7 @@
 - [ ] **复制粘贴**：选中输出 ⌘C，再 ⌘V 粘回来。
 - [ ] **放大**：点"放大"铺满屏幕，图标变成还原；收起再呼出仍是放大的；点"还原"恢复。
 - [ ] **全屏应用**：把 Safari 切到全屏，在里面按 ⌥\`，面板盖在上面。
-- [ ] **终端入口**（M8-01 已合并时）：回到桌面点"终端"入口，面板出现。
+- [ ] **终端入口**（M9-01 已合并时）：回到桌面点"终端"入口，面板出现。
 - [ ] **重开**：输入 `exit`，看到"[shell 已退出，按任意键重新开始]"，按一个键后出现新的提示符，行列数和面板一致（`stty size`）。
 - [ ] **重新加载**：菜单栏"重新加载"后再呼出，屏幕上还是之前的内容，shell 没有重开。
 - [ ] **多屏**（有外接屏时）：鼠标放在另一块屏幕上按 ⌥\`，面板出现在那块屏幕。

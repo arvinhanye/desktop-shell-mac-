@@ -1,9 +1,9 @@
-# M8-02: 去掉 launchApp 和应用图标导出，配置里加终端快捷键（Swift）
+# M9-02: 去掉 launchApp 和应用图标导出，配置里加终端快捷键（Swift）
 
 - **状态**：todo
-- **里程碑**：M8
-- **依赖**：无。和 M8-01、M8-03、M8-04 互不依赖；M8-05 依赖本任务（用到 `HotKey.swift` 和 `config.terminal`）
-- **分支**：task/M8-02
+- **里程碑**：M9
+- **依赖**：无。和 M9-01、M9-03、M9-04 互不依赖；M9-05 依赖本任务（用到 `HotKey.swift` 和 `config.terminal`）
+- **分支**：task/M9-02
 
 <!-- ===== 以下需求部分由 Claude Code 编写，Codex 不修改 ===== -->
 
@@ -12,7 +12,7 @@
 - Swift 端去掉只给启动栏用的东西：`launchApp` 动作、启动时导出应用图标、`getConfig` 里的 `apps[].iconUrl`。
 - `config.json` 认识新的可选项 `terminal.hotkey`，解析成快捷键的键码、修饰键和显示文字；`getConfig` 和推送的 `config` 带上 `terminal.hotkey` 的显示文字。
 
-本任务**不注册**快捷键（M8-05 做），也不碰终端。
+本任务**不注册**快捷键（M9-05 做），也不碰终端。
 
 ## 背景与约束
 
@@ -88,14 +88,14 @@
 - [ ] `swift build` 无错误、无警告
 - [ ] `scripts/test.sh` 全部通过，其中有 `HotKeyTests`
 - [ ] `grep -rn "launchApp\|AppIcons\|iconUrl\|app-icons\|iconIDs" Sources Tests/DesktopShellTests` 没有输出
-- [ ] `git diff --name-only main...task/M8-02` 只有上面"允许修改的文件"
+- [ ] `git diff --name-only main...task/M9-02` 只有上面"允许修改的文件"
 - [ ] （审查者复验）打包启动后，用 Web 检查器（`DESKTOPSHELL_DEVTOOLS=1`）或日志确认：
   - `getConfig` 回复里 `config.terminal.hotkey` 是 `"⌥`"`，`apps` 里没有 `iconUrl`；
   - 页面发 `launchApp` 被回复 `unknown-action`。
 
 **用户手动验证**：
 
-- [ ] 打包启动（`scripts/bundle.sh --open`）后桌面一切照旧。启动栏（M8-01 合并前还在）的图标会变成名字的第一个字，属预期；日志里没有新的错误。
+- [ ] 打包启动（`scripts/bundle.sh --open`）后桌面一切照旧。启动栏（M9-01 合并前还在）的图标会变成名字的第一个字，属预期；日志里没有新的错误。
 
 <!-- ===== 以下由 Codex 填写 ===== -->
 
