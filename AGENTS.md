@@ -12,7 +12,7 @@
 
 - **覆盖整个桌面**，Dock 和菜单栏保留系统原生。
 - **保留访达桌面图标**（2026-10-17 改定，原方案是隐藏）：图标显示在视频壁纸之上、组件之下，可以正常选中、框选、拖动、双击打开。做法见"窗口要求"。
-- **不做终端**。
+- **终端只放在独立的终端面板里**（2026-10-23 改定，原来是"不做终端"）：按全局快捷键（默认 ⌥`）从屏幕顶部滑下、盖在应用窗口上面，桌面上有一个入口。做法见"窗口要求"里的 TerminalPanel 和"Bridge 接口"里的终端页。
 - **不做文件管理器**，文件操作一律交给 Finder 或指定应用。
 - **所有组件风格高度统一、可以互相联动**，这是核心需求。
 
@@ -29,12 +29,17 @@
   │     鼠标在组件区域内才接收点击，其余区域点击穿透给访达（动态切换 ignoresMouseEvents）
   ├─ 中间：访达的桌面图标、系统桌面小组件（系统的，不归我们管）
   └─ 下层 VideoWindow（图标之下）：AVPlayerLayer 循环播放背景视频（硬件解码，省电），不接收鼠标
+终端面板 TerminalPanel（全局唯一，M8）：不激活应用的 NSPanel，在普通窗口之上；原生毛玻璃 + 透明背景的 WKWebView 加载 terminal.html（xterm.js）
+  └─ TerminalSession：PTY 里跑用户的登录 shell，输出推给 terminal.html，按键写回 PTY
+全局快捷键（默认 ⌥`）：显示 / 收起终端面板
 系统音频捕获（全局唯一）：Core Audio process tap → 频谱分析 → 推送 audioSpectrum 给每个网页
 菜单栏 NSStatusItem：暂停动画 / 隐藏桌面文件 / 语音开关 / 重新加载 / 打开配置文件夹 / 退出
 运行时素材：~/Library/Application Support/DesktopShell/media/（视频、语音、头像、背景图）
 ```
 
 **原则：统一和联动都靠"所有组件放在同一个页面、共享一份设计规范和一份状态"实现。** 不要为每个组件开独立的窗口或独立的 WebView。
+
+**唯一的例外是终端面板**（2026-10-23 定）：它要盖在应用窗口上面，组件窗口在桌面层做不到；它又能执行任意命令，单独一个页面才能把这个能力和组件页隔开（见"安全要求"）。终端页照样引用同一份 `tokens.css`，风格不变；它和组件页之间没有共享状态，需要联动时由 Swift 传 id。
 
 ## 技术选型
 
@@ -51,6 +56,8 @@
 | 素材处理 | ffmpeg（视频转码）+ `sips`（图片缩放） | 由 `scripts/prepare-media.sh` 统一完成 |
 | 沙盒 | 关闭 App Sandbox | 自用 |
 | 签名 | 固定的自签名代码签名证书 | 避免每次编译后系统权限失效或反复弹窗 |
+| 终端 | `forkpty` + xterm.js 5.5.0（`@xterm/xterm`，加 `@xterm/addon-fit` 0.10.0） | M8 定（2026-10-23）。Swift 用伪终端跑 `$SHELL -l`；xterm.js 是 MIT 许可的单个 JS + CSS，原样放在 `web/vendor/`（附 LICENSE），不需要构建步骤。可行性见"技术探针" |
+| 全局快捷键 | Carbon `RegisterEventHotKey` | 不需要任何系统权限（2026-10-23 探针） |
 | 提醒事项 | EventKit（`requestFullAccessToReminders`） | 待办直接读写系统"提醒事项"，经 iCloud 与 iPhone 同步；需要"提醒事项"权限，`Info.plist` 写 `NSRemindersFullAccessUsageDescription`。可行性见下文"技术探针" |
 | 数据存储 | `~/Library/Application Support/DesktopShell/` 下的 JSON 文件 | Swift 负责读写（待办不在这里，在系统提醒事项里） |
 
@@ -88,6 +95,7 @@
 | 原生毛玻璃（`NSVisualEffectView`），2026-10-18 | **可行**，开销测不出来，详见下方 |
 | 播放检测（不开捕获时判断有没有应用在放声音），2026-10-19 | **可行**，不需要权限，详见下方 |
 | 开机自启（`SMAppService.mainApp`），2026-10-20 | **可行**。自签名、放在普通目录（不在"应用程序"文件夹）的 `.app` 调用 `register()` 直接成功，`status` 立刻是 `.enabled`，不需要批准；从没注册过时 `status` 是 `.notFound`。`bundle.sh` 那样在同一路径原地替换 `.app` 后仍是 `.enabled`。系统登录项记录（`sfltool dumpbtm`）记的是**注册时正在运行的那份 `.app` 的路径**，从别的副本再注册会改指向那个副本；而 `status` 只按 bundle id 判断，任何副本都显示 `.enabled`，看不出指向哪份。`unregister()` 后记录变为"已停用" |
+| 终端面板（快捷键 + 面板 + PTY + xterm.js），2026-10-23 | **可行**，详见下方 |
 
 **系统音频捕获探针**（全局 tap `CATapDescription(stereoGlobalTapButExcludeProcesses: [])`，`muteBehavior = .unmuted`，加上"默认输出设备 + tap"的私有聚合设备，再加 IOProc）：
 
@@ -136,6 +144,14 @@
 - 默认输出设备的 `kAudioDevicePropertyDeviceIsRunningSomewhere` 也会跟着变，但开着捕获时，聚合设备包含输出设备，这个属性很可能被我们自己占住，所以不用它。
 - 本应用自己不放声音（背景视频没有音轨）。点头像的语音由 WebKit 的进程播放，也算"别的进程在放声音"，会触发捕获，这是想要的。
 
+**终端面板探针**（ad-hoc 签名的 `LSUIElement` 小程序，用 `open` 启动；用户在 Safari、Cursor、Claude 里手动操作，对照日志核对）：
+
+- **快捷键**：`RegisterEventHotKey` 注册 ⌥`（`kVK_ANSI_Grave` + `optionKey`）返回 0，不弹任何权限框；在各个应用前台、开着中文拼音输入法时都能收到。**最初用的 ⌥Space 和 ChatGPT 桌面版的快捷键冲突**：两边同时响应，ChatGPT 每次都被激活，抢走面板的键盘，收起后键盘也落回 ChatGPT。别的应用占着同一个组合键时，注册照样返回 0，看不出冲突，所以快捷键做成可配置。
+- **面板**：`NSPanel`，`styleMask` 为 `.borderless` + `.nonactivatingPanel`，`canBecomeKey` 为 `true`，`hidesOnDeactivate = false`；先设 `isFloatingPanel = true` 再设 `level = .floating`（3）；`collectionBehavior` 为 `[.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]`。显示：`orderFrontRegardless()` → `makeKey()` → `makeFirstResponder(webView)`，面板直接拿到键盘，**前台应用不变**；在全屏的 Safari 上面也能显示。收起：`orderOut` 后，如果 `NSApp.isActive` 就 `NSApp.deactivate()`，键盘回到原来的应用（Safari、Cursor 都核对过）。面板显示期间点别的应用、再点回面板，都正常。
+- **PTY**：Swift 里直接调用 `forkpty`；`fork` 之前用 `strdup` 准备好 argv、envp 和工作目录，子进程里只做 `chdir` + `execve`。主端用 `DispatchSourceRead` 读，`DispatchSourceProcess`（`.exit`）知道 shell 退出。改行列数用 `ioctl(fd, TIOCSWINSZ)`（Swift 里没有这个宏，值是 `0x80087467`）。vim 的 Esc 和方向键、⌃C、codex 都正常。
+- **环境变量**：用 `open` 启动的应用**没有 `LANG`**，要补 `LANG=en_US.UTF-8`（已有就不动），否则中文文件名会乱；`PATH` 只有系统默认的几项，登录 shell 会自己补上。另设 `TERM=xterm-256color`、`COLORTERM=truecolor`。
+- **xterm.js**：在 WKWebView 里中文拼音输入正常（`compositionstart` / `compositionend` 成对出现，候选词窗口位置正常）；⌘C、⌘V 靠"编辑"菜单（M7-04 的 `EditMenu.swift`）就能用。xterm 自己接住粘贴事件，不会冒泡到 `document`。输出用 base64 经 `callAsyncJavaScript` 推给网页，网页转成 `Uint8Array` 交给 `term.write`，UTF-8 字符被切在两块之间也不会乱码。
+
 ## 窗口要求
 
 - 实测层级（本机）：系统壁纸和程序坞 ≤ -2147483624，**访达图标 = `CGWindowLevelForKey(.desktopIconWindow)`（-2147483603）**，系统桌面小组件 = 图标 +2。
@@ -147,6 +163,11 @@
   - Swift 用 `NSEvent` 的全局和本地监听（鼠标移动、拖动、松开）跟踪光标：光标在某个区域内时 `WidgetWindow.ignoresMouseEvents = false`，否则为 `true`，点击落到访达图标上。不需要任何系统权限。
   - **按住鼠标期间不切换**（`NSEvent.pressedMouseButtons != 0`），松开后再重新判断，避免打断拖动和框选。
   - **例外：拖文件时**（M7，2026-10-21 定）：按下鼠标时记下拖放剪贴板（`NSPasteboard(name: .drag)`）的 `changeCount`；按住期间如果它变了、并且里面有文件 URL，就说明用户在拖文件，这时光标进入网页上报的"拖入区域"（`setDropRegions`）就让 WidgetWindow 接收鼠标，离开就恢复穿透。框选、拖窗口这类拖动不会改拖放剪贴板，照旧不切换。2026-10-21 拖入探针实测：桌面文件夹拖进来 3/3 收到；拖动期间全局鼠标事件照常到达（每次 28–86 个），不需要轮询；框选多次都没有被当成拖文件；被拖的文件夹都留在原处。
+- **TerminalPanel**（M8，2026-10-23 定，做法见"终端面板探针"）：全局只有一个。层级 `.floating`，在普通窗口之上；不激活应用的 `NSPanel`，显示期间可以成为 key window；`collectionBehavior` 是 `[.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]`，全屏应用上面也能呼出。内容视图里先放一层 `NSVisualEffectView`（`.hudWindow`、圆角同组件底板），上面是透明的 WKWebView，铺满面板。
+  - **位置**：每次显示时放到**鼠标所在那块屏幕**：取 `visibleFrame`，左右各缩 16、离顶 8，高 45%；"放大"后上下各留 8，铺满。放大状态在收起后保留，退出应用后恢复成不放大。
+  - **显示 / 收起**：快捷键在两者之间切换；终端入口（组件页的 `openTerminal`）只负责显示；面板标题栏的"收起"按钮只负责收起。**Esc 不收起**（vim、codex 要用），点别的应用也不自动收起。滑下和收起做一个窗口动画（约 160 ms，见 `--duration-terminal`）。
+  - **键盘**：显示时 `orderFrontRegardless()` → `makeKey()` → `makeFirstResponder(webView)`，并让网页把焦点给 xterm；收起时 `orderOut`，如果 `NSApp.isActive` 就 `NSApp.deactivate()`。**不调用 `NSApp.activate`。**
+  - 点击不穿透：面板整块都接收鼠标。
 - 点在组件之外的空白处：交给访达（选择图标、框选、右键菜单），我们不做任何事。**点击语音改为点击角色卡头像触发**。
 - **隐藏桌面文件**（菜单栏勾选项，用来单纯欣赏壁纸）：把 VideoWindow 升到图标层 **+3**（与 WidgetWindow 同层，排在它下面，图标和系统小组件一起被盖住），VideoWindow **始终 `ignoresMouseEvents = true`**；同时关闭点击穿透，让最上面的 WidgetWindow **接住全部点击**，空白处的点击落在网页透明背景上，什么都不发生，不会点到看不见的图标。取消时恢复图标层 −1 并重新打开点击穿透。**不修改访达设置、不重启访达**。选择保存在 `ui.json` 的 `desktopIconsHidden`，重启后保持。（2026-10-17 实测教训：同层窗口被点击时 macOS 会把它提到同层最前面。让 VideoWindow 接收点击会盖住组件；点击后再重排又会闪烁。所以 VideoWindow 永远不接收点击。）网页要禁用右键菜单（`contextmenu` 事件 `preventDefault`），否则空白处右键会弹出 WKWebView 自带的菜单。
 - 需要输入文字的组件（待办输入框等）：WidgetWindow 的 `canBecomeKey` 只在网页文本输入框获得焦点期间为 `true`。网页在文本输入框获得焦点时发 `focusInput`，Swift 调用 `makeKey()` 并把网页设为第一响应者（不激活应用）；失去焦点或按 Esc 时发 `blurInput`，Swift 恢复为不能成为 key，如果仍是 key window 就调用 `NSApp.deactivate()`，键盘回到原来的应用。**不调用 `NSApp.activate`。**
@@ -188,8 +209,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 |---|---|---|
 | `openProject` | `projectId` | 在 Finder 中打开该项目文件夹 |
 | `openProjectWith` | `projectId`, `appId` | 用指定应用打开项目文件夹（例如 Cursor）。应用只要在 `config.apps` 里即可 |
-| `launchApp` | `appId` | 启动应用 |
-| `getConfig` | — | 回复 `{config, media, uiState}`：`config` 含 `user`（`name`）、`character`（`name`、`motto`）、`greetings`、`projects`（`id`、`name`、`tags`、`apps`、`hasReminders`）、`apps`（`id`、`name`、`iconUrl`），**不含**项目路径、应用 bundle id、提醒事项列表名和背景视频；`media.avatars`、`media.backgrounds`、`media.voices`（`media/voice/` 里的 mp3，2026-10-18 增加，点击语音用）由 Swift 扫描 `media/` 目录生成，每项 `{id, url}`；`apps[].iconUrl` 是 `/media/app-icons/<appId>.png`，应用没装或图标导出失败时为 `null`；`user.name`、`character.motto` 没有配置（或只有空白）时为 `null`；`uiState` 为 `{avatarId, backgroundId, voiceEnabled}`。待办不在这里，见推送事件 `todos` |
+| `getConfig` | — | 回复 `{config, media, uiState}`：`config` 含 `user`（`name`）、`character`（`name`、`motto`）、`greetings`、`projects`（`id`、`name`、`tags`、`apps`、`hasReminders`）、`apps`（`id`、`name`），`terminal`（`hotkey`：显示用的快捷键文字，例如 `"⌥`"`，M8），**不含**项目路径、应用 bundle id、提醒事项列表名和背景视频；`media.avatars`、`media.backgrounds`、`media.voices`（`media/voice/` 里的 mp3，2026-10-18 增加，点击语音用）由 Swift 扫描 `media/` 目录生成，每项 `{id, url}`；`user.name`、`character.motto` 没有配置（或只有空白）时为 `null`；`uiState` 为 `{avatarId, backgroundId, voiceEnabled}`。待办不在这里，见推送事件 `todos` |
 | `addTodo` | `text`, `projectId?` | 在系统提醒事项里新增一条，只设标题。放进该项目对应的列表；没有 `projectId`、为 `null`，或者该项目没有配置列表时，放进系统默认列表。`text` 去掉首尾空白后不为空、不超过 500 字。回复新提醒（格式同 `todos` 事件里的一项） |
 | `setTodoDone` | `todoId`, `done` | 勾选或取消勾选一条提醒。`todoId` 查不到 → `not-found`。**不提供删除**（删除在 iPhone 或 Mac 的提醒事项里做） |
 | `saveUiState` | `avatarId?`, `backgroundId?`（`null` 表示恢复默认） | 写入 `ui.json`，回复新的 `uiState`，并向所有页面推送 `uiState`。Swift 先核对 id 确实存在于 `media/avatars`、`media/backgrounds`，不存在就回复 `not-found` |
@@ -198,12 +218,43 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 | `setGlassRegions` | `regions`：`[[x, y, w, h, radius], …]`，CSS 像素，相对网页左上角 | 整体替换该窗口毛玻璃的位置（2026-10-18 增加）。校验同 `setHitRegions`，另外 `radius` 必须在 0 到宽高较小值的一半之间 |
 | `addProject` | `path`（非空字符串，最多 1024 个字符） | 把一个文件夹加成项目（M7，2026-10-21 增加）。**这是唯一允许传路径的动作**，见"安全要求"。Swift 展开 `~`、标准化、解析符号链接后核对：存在（否则 `not-found`）、是文件夹（否则 `not-directory`）、在个人目录（`~`）里且不是 `~` 本身（否则 `outside-home`）、还没有项目指向同一个文件夹（否则 `duplicate`）。新项目：`name` 是文件夹名，`id` 由名字生成（见"配置文件示例"），`tags` 为空，`apps` 为 `["cursor"]`（配置里没有 `cursor` 就为空），没有 `remindersList`。写回 `config.json` 后回复新项目（格式同 `getConfig` 里的一项），并向所有页面推送 `config` |
 | `removeProject` | `projectId` | 从 `config.json` 的 `projects` 里去掉这一项（M7）。**只改配置，绝不删除、移动磁盘上的文件夹**。查不到 → `not-found`。成功后回复 `null` 并推送 `config` |
+| `openTerminal` | — | 显示终端面板（M8）。已经显示就什么都不做 |
 | `setDropRegions` | `regions`：`[[x, y, w, h], …]`，CSS 像素，相对网页左上角 | 整体替换该窗口接收文件夹拖入的区域（M7；目前只有项目卡片）。校验同 `setHitRegions`，最多 8 个 |
+
+**终端页 → Swift**（M8，只接受终端面板自己那个 WKWebView 的主框架发来的消息，见"安全要求"）
+
+| action | 参数 | 行为 |
+|---|---|---|
+| `terminalReady` | `cols`, `rows`（1–1000 的整数） | 页面加载好、xterm 量好尺寸后发送。没有会话就按这个尺寸新开一个；已经有会话（例如页面重新加载）就改尺寸，并把会话最近的输出（最多 256 KB）重推一遍，屏幕不会变空 |
+| `terminalInput` | `data`（非空字符串，最多 65536 个字符） | 把按键或粘贴的内容按 UTF-8 写进 PTY。会话已经退出时，这一下按键用来新开一个会话（按上一次的行列数），按键本身丢掉 |
+| `terminalResize` | `cols`, `rows` | 改 PTY 的行列数（`TIOCSWINSZ`） |
+| `toggleTerminalMaximize` | — | 放大 / 还原面板，回复 `{maximized}` |
+| `hideTerminal` | — | 收起面板 |
+
+**Swift → 终端页**
+
+| event | 内容 | 频率 |
+|---|---|---|
+| `terminalOutput` | `data`：PTY 输出的原始字节，base64 | 有输出时。读到的数据合并后最多每 16 ms 推一次 |
+| `terminalExited` | `status`：shell 的退出状态 | shell 退出时。页面在屏幕上打一行暗色的"[shell 已退出，按任意键重新开始]" |
+| `terminalState` | `maximized`、`hotkey`（显示用的文字） | 页面加载完成时、放大状态变化时 |
+
+**终端会话**（M8）：
+
+- 用 `forkpty` 跑 `$SHELL -l`（没有 `SHELL` 就用 `/bin/zsh`），工作目录是 `~`。环境变量在应用自己的基础上补：`TERM=xterm-256color`、`COLORTERM=truecolor`，没有 `LANG` 时设 `LANG=en_US.UTF-8`。
+- 全局只有一个会话。第一次显示面板时才启动；收起面板时进程照常运行；shell 退出后不自动重开，等下一次按键（见 `terminalInput`）。退出应用时给 shell 发 `SIGHUP`。
+- 新开会话时用上一次的行列数，不用 80 × 24（探针里出过这个错）。
+- 省电规则里的暂停不影响终端：不暂停 shell，不丢输出。
 
 **安全要求**：
 
 - Bridge 只处理来自 `shell://app` **主框架**的消息（校验 `message.frameInfo.isMainFrame`，以及 `securityOrigin` 的 scheme 为 `shell`、host 为 `app`），其他来源一律忽略并记录日志。
-- 网页**只传 id，不传路径或 bundle id**。真实路径和应用由 Swift 从 `config.json` 里查。这样即使网页被塞了坏代码，也只能打开配置里列出的东西。不提供任何执行 shell 命令的动作。
+- 网页**只传 id，不传路径或 bundle id**。真实路径和应用由 Swift 从 `config.json` 里查。这样即使网页被塞了坏代码，也只能打开配置里列出的东西。**组件页**不提供任何执行 shell 命令的动作。
+- **终端页是唯一能执行命令的页面**（M8，2026-10-23 用户同意）：`terminalInput` 等于在用户的 shell 里打字。为了把这个能力关在终端页里：
+  - Swift 按**发消息的 WKWebView 是不是终端面板那一个**来区分两种页面（再加上和组件页一样的主框架、`shell://app` 来源校验），不按网址判断。终端相关的动作只接受终端页发来的，组件页发来一律回复 `untrusted` 并记录日志；终端页也只能发上面"终端页 → Swift"那几个动作，其他动作同样回复 `untrusted`。
+  - 组件页能做的仍然只有 `openTerminal`（显示面板，不带参数），不能往终端里写东西，也收不到终端的输出。
+  - 终端页同样不加载任何外部内容：xterm.js 放在 `web/vendor/` 里，从 `shell://app` 加载。
+  - **日志绝不写终端的输入和输出**，也不写长度以外的任何信息；只写会话开始、结束（退出状态）和错误码。
 - **唯一的例外是 `addProject` 的 `path`**（2026-10-21 用户同意）：用户在输入框里粘贴的路径要经过网页。范围用核对来限制：只能是个人目录里已经存在的文件夹，加进来以后能做的事和其他项目一样（在访达或配置里的应用里打开），不能执行、删除、移动任何东西。日志不写路径以外的用户内容，路径本身只在添加成功时写一行。
 - **拖入文件夹时路径不经过网页**：由 Swift 原生接住拖放（WKWebView 的拖放方法在 Swift 里改写，网页拿不到文件路径），拖放操作用"复制"（`NSDragOperation.copy`），访达不会移动被拖的文件夹。网页只收到推送事件 `projectDrop`（是否悬停、添加结果）。
 - URL 约定（同一个源）：`shell://app/<path>` 对应 `web/<path>`，`shell://app/media/<path>` 对应 `media/<path>`。
@@ -248,7 +299,8 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
   "apps": [
     { "id": "cursor", "name": "Cursor", "bundleId": "com.todesktop.230313mzl4w4u92" },
     { "id": "safari", "name": "Safari", "bundleId": "com.apple.Safari" }
-  ]
+  ],
+  "terminal": { "hotkey": { "key": "`", "modifiers": ["option"] } }
 }
 ```
 
@@ -257,6 +309,7 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 首次启动时如果配置文件不存在，就生成一份示例配置。
 
 - `background.video` 是相对 `media/` 的路径。
+- `terminal.hotkey`（可选，M8）：打开 / 收起终端面板的快捷键。`key` 是一个键（字母、数字、`` ` ``、`space`、`f1`–`f12` 等），`modifiers` 是 `command` / `option` / `control` / `shift` 的组合，至少一个。没有配置或写得不对时用 ⌥`（写得不对要记录日志）；注册失败只记录日志，终端入口照样能用。`getConfig` 里的 `terminal.hotkey` 是 Swift 生成的显示文字（例如 `"⌥`"`）。
 - 项目的 `remindersList`（可选）是系统提醒事项里一个列表的名字，按名字精确匹配；找不到时记录日志，当作没有配置。同名列表有多个时取第一个并记录日志。
 - `greetings` 按整点 `from` 升序排列，取不大于当前小时的最后一项；问候显示为 `"<title>，<user.name>"`，名字用强调色；没有 `user.name` 时只显示 `title`（2026-10-18 改定，原来是角色名）。默认文案取自美化包 `Skins/Ageo` 的配置。
 - `character.motto`（签名）显示在角色卡上名字的右边，可选，没有就不显示。
@@ -275,7 +328,6 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 | `backgrounds/` | 背景图库 | 长边超过 2400 才缩到 2400，**只缩不放**（`sips -Z` 会放大小图，必须先判断尺寸）；不透明的图转 JPEG（质量 90），带透明的角色立绘保持 PNG |
 | `ornaments/` | 心形装饰条等装饰图 | 缩到实际显示尺寸的 2 倍 |
 | `fonts/` | 用到的字体文件 | 原样复制，只复制设计定稿里用到的 |
-| `app-icons/` | 启动栏的应用图标（128px PNG） | **由 Swift 生成，不归 `prepare-media.sh` 管**（2026-10-18 定）：启动时在后台线程用 `NSWorkspace.icon(forFile:)` 为 `config.apps` 里的每个应用导出 `<appId>.png`，覆盖同名文件，不删除其他文件。实测每个约 50 ms，第一次约 0.8 秒 |
 
 文件名就是 id（去掉扩展名），例如 `avatars/12.png` 的 id 是 `12`。
 
@@ -285,17 +337,17 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 
 1. **时钟**：以大号衬线体的星期和日期为主（Mac 菜单栏已经显示时间）。同时负责计算当前时段，写入 `store.phase`：早晨 6–12 点、白天 12–18 点、傍晚 18–21 点、夜晚 21–6 点。
 2. **项目卡片**：列出 `config.projects`。点击卡片会选中它（写入 `store.selectedProject`）；每个项目有"访达"和"用 <应用> 打开"两个按钮（应用取项目 `apps` 里的第一个，例如 Cursor；没有就只有"访达"，M3.5 定）。M7 起可以在卡片上添加项目（输入框粘贴路径，或把文件夹拖到卡片上）和移除项目（只改配置）。
-3. **应用启动栏**：列出 `config.apps`，点击启动。
+3. **终端入口**（2026-10-23 替换原来的应用启动栏）：第一列系统状态下面一条，显示"终端"和快捷键提示，点一下打开终端面板（`openTerminal`）。终端本身不是组件，在独立的终端面板里，见"窗口要求"和"Bridge 接口"。
 4. **待办（系统提醒事项）**（2026-10-17 改定，原方案是自己存 `todos.json`）：直接读写系统"提醒事项"，和 iPhone 同步。显示所有列表的未完成提醒和今天完成的提醒，带到期时间的显示到期时间。可勾选完成、可新增（第一版只填文字，到期时间在 iPhone 上加），**不能删除**。项目通过配置里的 `remindersList` 对应一个列表。没有授权时显示提示，告诉用户去"系统设置 → 隐私与安全性 → 提醒事项"里允许。
 5. **系统状态**：电量、CPU、内存，外加一条 CPU 历史折线。
 6. **问候语**：按 `config.greetings` 显示当前整点对应的问候和祝福语，称呼（`user.name`）用强调色，没有配置就只显示问候。
-7. **角色卡**：圆形头像、名字、签名（签名来自 `config.character.motto`；2026-10-18 去掉了标签）。**点击头像播放语音**；卡片右上角的"外观"按钮（M3.5 定）点击后在**同一个网页里**弹出"外观"面板，可以换头像和背景图，选择结果通过 `saveUiState` 保存。
+7. **角色卡**：头像组合图（签名 + 圆形头像）、名字、签名（签名来自 `config.character.motto`；2026-10-18 去掉了标签；2026-10-23 压缩成一条，高 112）。**点击头像播放语音**；卡片右上角的"外观"按钮（M3.5 定）点击后在**同一个网页里**弹出"外观"面板，可以换头像和背景图，选择结果通过 `saveUiState` 保存。
 8. **音频律动**：冰晶心形装饰条，两侧各 12 根柱子跟随 `audioSpectrum` 跳动。
 
 两项功能：
 
 - **点击语音**：点击角色卡的**头像**随机播放 `media/voice/` 里的一句语音（播放期间不重复触发）；菜单栏可以开关。（原方案是点空白处，因保留访达图标而改为点头像）
-- **背景图库**：`media/backgrounds/` 里的图片可以作为应用启动栏和卡片的背景，在"外观"面板里切换。
+- **背景图库**：`media/backgrounds/` 里的图片可以作为角色卡的背景，在"外观"面板里切换。
 
 **不做**：Windows 开始菜单、资源管理器、设置页的换皮（Mac 上对应的是系统程序，换皮需要关闭 SIP 注入代码），以及任务栏和 Dock 的换皮。
 
@@ -307,11 +359,10 @@ AVPlayer 必须设置 `preventsDisplaySleepDuringVideoPlayback = false`，否则
 |---|---|
 | 时钟更新 `phase` | 整个页面切换对应时段的主题变量（`tokens.css` 里用 `[data-phase="night"]` 等选择器覆盖） |
 | 选中某个项目卡片 | 待办只显示该项目对应列表里的提醒（再点一次取消选中，显示全部列表）；新增的提醒放进该项目的列表。项目没有配置列表时，待办组件提示"这个项目没有对应的提醒事项列表"，新增的提醒放进默认列表 |
-| 选中某个项目卡片 | 启动栏里与该项目相关的应用高亮（项目可以配置 `apps` 字段，没有就不高亮） |
 | 时钟每分钟更新 | 问候语组件按当前整点切换问候和祝福语 |
 | `systemStats` 显示使用电池且电量低 | 写入 `paused`，背景和所有动画暂停；系统状态组件显示省电提示 |
 | `paused` 变化 | 所有组件停止或恢复动画；律动条归零静止；Swift 端停止或恢复系统音频捕获 |
-| 外观面板里换头像或背景图 | 通过 `saveUiState` 保存；Swift 推送 `uiState` 写入 `store.ui`，角色卡、启动栏立即生效 |
+| 外观面板里换头像或背景图 | 通过 `saveUiState` 保存；Swift 推送 `uiState` 写入 `store.ui`，角色卡立即生效 |
 | 菜单栏切换语音开关 | Swift 推送 `uiState`，写入 `store.ui.voiceEnabled`；关闭时点击头像不再播放语音 |
 
 ## 设计规范
@@ -368,7 +419,6 @@ desktop-shell/
 │   ├── BridgeProtocol.swift       # 来源校验、请求解析、回复和推送事件的内容（纯函数）
 │   ├── AppState.swift             # 配置、外观状态、待办存储的唯一持有者
 │   ├── MediaLibrary.swift         # 扫描 media/ 生成头像、背景、语音列表
-│   ├── AppIcons.swift             # 启动时把 config.apps 的图标导出到 media/app-icons/
 │   ├── RemindersStore.swift       # EventKit：读写系统提醒事项、监听变化
 │   ├── ProjectPath.swift          # 解析项目路径（~、绝对路径）
 │   ├── OcclusionDebouncer.swift   # 遮挡防抖
@@ -382,9 +432,15 @@ desktop-shell/
 │   ├── LaunchAtLogin.swift        # 开机自启：SMAppService 状态 → 菜单勾选、点击动作（M6）
 │   ├── ProjectEditing.swift       # 增删项目：路径核对、id 生成、改写 config.json（M7，纯函数为主）
 │   ├── FileDropTracking.swift     # 判断是否在拖文件、拖入区域命中（M7，纯函数）
+│   ├── TerminalPanel.swift        # 终端面板：NSPanel、位置和放大、显示 / 收起、键盘（M8）
+│   ├── TerminalSession.swift      # PTY：forkpty 跑登录 shell、读写、改行列数、退出（M8）
+│   ├── HotKey.swift               # 全局快捷键：解析配置、RegisterEventHotKey（M8）
 │   └── ConfigStore.swift          # 读写 JSON
 ├── web/
 │   ├── index.html
+│   ├── terminal.html              # 终端面板的页面（M8）
+│   ├── terminal/                  # terminal.js、terminal.css（照 docs/design/design.css 的 terminal.css 一节）
+│   ├── vendor/                    # xterm.js、xterm.css、addon-fit.js 和它们的 LICENSE，原样放置（M8）
 │   ├── styles/tokens.css          # 照 docs/design/tokens.css
 │   ├── styles/fonts.css           # 字体文件在 media/fonts/
 │   ├── styles/base.css
@@ -396,12 +452,12 @@ desktop-shell/
 │   ├── js/drop-regions.js         # 自动上报拖入区域（带 data-drop 的元素，M7）
 │   ├── js/glass-regions.js        # 自动上报毛玻璃区域（底板和弹层）
 │   ├── js/scroll-hints.js         # 可滚动列表上下边缘的淡出提示
-│   ├── js/media.js                # 按 store.ui 选出头像、背景图的地址（角色卡、启动栏、外观面板共用）
+│   ├── js/media.js                # 按 store.ui 选出头像、背景图的地址（角色卡、外观面板共用）
 │   ├── js/main.js                 # 页面入口
 │   └── widgets/                   # 每个组件一个 <名字>.js，样式在同名 .css（照 docs/design/design.css 对应的一节）
 │       ├── clock.js
 │       ├── projects.js
-│       ├── launcher.js
+│       ├── terminal.js            # 终端入口（M8）
 │       ├── todos.js
 │       ├── stats.js
 │       ├── greeting.js
@@ -505,23 +561,19 @@ desktop-shell/
 - **M5.5 系统音频律动**：`AudioSpectrum.swift` 捕获系统声音、做频谱分析，推送 `audioSpectrum`，接上 M4 的律动组件；暂停和没有应用在放声音时不开捕获，静音时不推送；初始参数采用 Lano-Visualizer 的取值。
 - **M6 开机自启**：用 `SMAppService` 实现开机自启（在菜单栏里提供开关）。
 - **M7 项目管理**（2026-10-21 用户提出）：在桌面上添加项目（输入框粘贴路径、把文件夹拖到项目卡片上）和从列表移除项目（只改配置）。设计见 `docs/design/`（2026-10-21 定稿），规则见"配置文件示例""Bridge 接口""窗口要求"里标着 M7 的部分。
+- **M8 桌面终端与布局改造**（2026-10-23 用户提出）：去掉应用启动栏（连同 `launchApp`、应用图标导出）、压缩角色卡、待办伸到底；加终端入口和终端面板（全局快捷键、PTY、xterm.js）。设计见 `docs/design/`（2026-10-23 定稿），规则见"窗口要求""Bridge 接口""配置文件示例"里标着 M8 的部分，可行性见"技术探针"。
 
 ## 后续想法
 
 记录用户提出、但**还没有决定要做**的功能。不属于任何里程碑，M6 之后再逐条评估；Codex 不要实现这里的内容。
 
-### 桌面终端（2026-10-17 记录）
+### 在项目里打开终端（2026-10-23 记录）
 
-在桌面上做一个可以直接输入命令的终端组件。
+项目卡片上加一个"终端"按钮，在那个项目的文件夹里打开终端。
 
-- **与现有规则的冲突**：违反"不做终端"和"不开放执行 shell 命令的 bridge 动作"两条。做之前必须由用户明确修改这两条规则，并接受安全模型的变化：目前网页只能传 id，即使页面被注入恶意代码也只能打开配置里列出的东西；有了终端，网页就等于能执行任意命令。前提是只加载我们自己的页面（"不加载外部网站"这条必须保留）。
-- **已具备的基础**：WidgetWindow 在图标之上并且可以点击（M2-05）；M3-08 实现了"组件窗口临时获得键盘焦点"（不激活应用的面板），终端可以复用；Bridge 是双向通道。
-- **还需要做的**：Swift 端用伪终端（PTY）启动用户的 shell，通过 Bridge 双向传递输入输出，窗口尺寸变化时同步行列数；处理快捷键冲突（⌘C/⌘V/⌘W 等）和中文输入法。
-- **前端两个方案**：
-  - xterm.js 放在同一个网页里，样式直接用 tokens，风格最统一；需要引入一个前端库（单个 JS 文件，不需要构建工具，按规范要先征得用户同意）；中文输入法在网页终端里可能有小问题。
-  - SwiftTerm（MIT）原生终端视图叠在网页上，输入法和性能更稳；样式要单独对齐 tokens，"所有组件在一个网页里"的原则会打折扣。
-- **工作量估计**：一个探针（验证桌面层窗口里的键盘焦点和输入法体验）加上 2–3 个 Codex 任务。
-- **更轻量的替代**（不需要改规则，可以先做）：项目卡片上加"用终端打开"按钮，复用 `openProjectWith`，用"终端"或 iTerm 打开项目目录；或者做"命令按钮"组件，命令写在 `config.json` 里，网页只传命令 id，输出显示在组件里。
+- **为什么第一版不做**：终端只有一个会话，如果里面正跑着 `codex` 之类的程序，往里打 `cd …` 会打进那个程序的输入里。要做好得先有多个会话（标签页），或者能判断 shell 是不是空闲。
+- **做法**：网页照样只传 `projectId`，由 Swift 查出路径，新开一个会话（或标签页）并把工作目录设成项目文件夹。
+- **更轻量的替代**：复用 `openProjectWith`，用系统"终端"或 iTerm 打开项目文件夹。
 
 ### 正在播放的音乐（2026-10-17 记录）
 
@@ -547,8 +599,8 @@ desktop-shell/
 
 ## 不要做的事
 
-- 不做终端、不做文件管理器、不做任何删除或移动文件的功能；不删除系统提醒事项。（M7 的"移除项目"只改 `config.json`，不碰文件夹。）
-- 不开放执行 shell 命令的 bridge 动作。
+- 终端只放在终端面板里（M8），组件页里不做终端；不做文件管理器、不做任何删除或移动文件的功能；不删除系统提醒事项。（M7 的"移除项目"只改 `config.json`，不碰文件夹。）
+- 组件页不开放执行 shell 命令的 bridge 动作；能写进终端的只有终端页的 `terminalInput`（见"安全要求"）。
 - 不引入前端框架和构建工具，除非组件数量明显增加且用户同意。
 - 不修改用户的系统设置。
 - 不加载任何外部网站到这个 WKWebView 里。
