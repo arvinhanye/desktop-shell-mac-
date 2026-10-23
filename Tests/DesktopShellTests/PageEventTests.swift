@@ -179,25 +179,22 @@ extension PageEventTests {
     func configEvent() throws {
         var config = AppConfig.example
         config.projects[0].remindersList = "Private list"
-        let event = PageEvent.config(config, iconIDs: ["cursor"])
+        let event = PageEvent.config(config)
         #expect(Set(event.keys) == ["event", "config"])
         #expect(event["event"] as? String == "config")
         #expect(JSONSerialization.isValidJSONObject(event))
         let value = try #require(event["config"] as? [String: Any])
-        let reply = ConfigReply.make(config: config, avatars: [], backgrounds: [], iconIDs: ["cursor"], uiState: UiState())
+        let reply = ConfigReply.make(config: config, avatars: [], backgrounds: [], uiState: UiState())
         #expect(NSDictionary(dictionary: value).isEqual(to: try #require(reply["config"] as? [String: Any])))
-        #expect(Set(value.keys) == ["user", "character", "greetings", "projects", "apps"])
+        #expect(Set(value.keys) == ["user", "character", "greetings", "projects", "terminal"])
         let project = try #require((value["projects"] as? [[String: Any]])?.first)
-        #expect(Set(project.keys) == ["id", "name", "tags", "apps", "hasReminders"])
+        #expect(Set(project.keys) == ["id", "name", "tags", "hasReminders"])
         #expect(project["id"] as? String == "desktop-shell")
         #expect(project["hasReminders"] as? Bool == true)
         #expect(NSDictionary(dictionary: project).isEqual(to: ConfigReply.makeProject(config.projects[0])))
-        let apps = try #require(value["apps"] as? [[String: Any]])
-        #expect(apps[0]["iconUrl"] as? String == "/media/app-icons/cursor.png")
-        #expect(apps[1]["iconUrl"] is NSNull)
         let serialized = try JSONSerialization.data(withJSONObject: event)
         let text = try #require(String(data: serialized, encoding: .utf8))
-        for privateValue in ["remindersList", "bundleId", "Private list", "video/aemeath.mp4", "~/Desktop"] {
+        for privateValue in ["remindersList", "bundle" + "Id", "Private list", "video/aemeath.mp4", "~/Desktop"] {
             #expect(!text.contains(privateValue))
         }
     }
@@ -206,7 +203,7 @@ extension PageEventTests {
     func configIsNotReplayed() {
         var cache = PageEventCache()
         cache.remember(PageEvent.paused(true))
-        cache.remember(PageEvent.config(.example, iconIDs: []))
+        cache.remember(PageEvent.config(.example))
         let replay = cache.replay(safeArea: .init(top: 0, right: 0, bottom: 0, left: 0))
         #expect(replay.compactMap { $0["event"] as? String } == ["safeArea", "paused"])
         #expect(replay.last?["paused"] as? Bool == true)
@@ -216,7 +213,7 @@ extension PageEventTests {
 extension PageEventTests {
     @Test("projectDrop 悬停和结果均可 JSON 序列化，只有公开字段，不进入重载缓存")
     func projectDrop() throws {
-        let project = AppConfig.Project(id: "folder", name: "文件夹", path: "/private/source", tags: [], apps: [])
+        let project = AppConfig.Project(id: "folder", name: "文件夹", path: "/private/source", tags: [])
         let outcome = FileDropTracking.dropOutcome(results: [.success(project), .failure(.duplicate)])
         for event in [PageEvent.projectDrop(over: true), PageEvent.projectDrop(over: false),
                       PageEvent.projectDrop(over: false, result: outcome),

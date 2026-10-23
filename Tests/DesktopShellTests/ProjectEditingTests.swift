@@ -157,13 +157,12 @@ struct ProjectEditingTests {
         #expect(ProjectEditing.makeID(name: "中文", existing: ["project", "project-2"]) == "project-3")
     }
 
-    @Test("新项目取文件夹名称和路径，仅配置过 cursor 才关联", arguments: [true, false])
-    func newProjectDefaults(_ hasCursor: Bool) {
+    @Test("新项目取文件夹名称和路径，不保存应用关联")
+    func newProjectDefaults() {
         var config = AppConfig.example
-        config.apps = hasCursor ? config.apps : []
-        config.projects = [.init(id: "my-app", name: "other", path: "~/b", tags: nil, apps: nil)]
+        config.projects = [.init(id: "my-app", name: "other", path: "~/b", tags: nil)]
         let project = ProjectEditing.newProject(folder: home.appendingPathComponent("My App"), home: home, config: config)
-        #expect(project == .init(id: "my-app-2", name: "My App", path: "~/My App", tags: [], apps: hasCursor ? ["cursor"] : [], remindersList: nil))
+        #expect(project == .init(id: "my-app-2", name: "My App", path: "~/My App", tags: [], remindersList: nil))
     }
 }
 
@@ -201,8 +200,8 @@ extension ProjectEditingTests {
         var disk = original
         disk.character.motto = "edited externally"
         disk.greetings.reverse()
-        disk.projects = [.init(id: "bad/id", name: "keep", path: "~/Other", tags: nil, apps: nil),
-                         .init(id: "my-app", name: "existing", path: "~/Elsewhere", tags: ["keep"], apps: nil)]
+        disk.projects = [.init(id: "bad/id", name: "keep", path: "~/Other", tags: nil),
+                         .init(id: "my-app", name: "existing", path: "~/Elsewhere", tags: ["keep"])]
         try store.save(disk)
         var changes = 0
         state.onConfigChanged = {
@@ -210,7 +209,7 @@ extension ProjectEditingTests {
             changes += 1
         }
         let added = try state.addProject(path: folder.path).get()
-        #expect(added == .init(id: "my-app-2", name: "My App", path: "~/My App", tags: [], apps: ["cursor"]))
+        #expect(added == .init(id: "my-app-2", name: "My App", path: "~/My App", tags: []))
         var expected = disk
         expected.projects.append(added)
         #expect(try store.loadUnfiltered() == expected)
@@ -280,7 +279,7 @@ extension ProjectEditingTests {
         let folder = try fixture.directory("home/existing").resolvingSymlinksInPath()
         let support = try fixture.directory("support")
         var config = AppConfig.example
-        config.projects = [.init(id: "bad/id", name: "keep", path: "~/existing", tags: nil, apps: nil)]
+        config.projects = [.init(id: "bad/id", name: "keep", path: "~/existing", tags: nil)]
         let store = ConfigStore(supportDir: support)
         try store.save(config)
         let state = AppState(paths: .init(supportDir: support, mediaDir: support, webDir: support), projectHome: folder.deletingLastPathComponent())

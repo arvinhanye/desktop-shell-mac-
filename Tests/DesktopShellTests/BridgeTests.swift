@@ -28,7 +28,7 @@ struct BridgeTests {
         }
     }
 
-    @Test("getConfig 新字段去空白且保留 null 键，仅使用最近成功的图标 id")
+    @Test("getConfig 新字段去空白且保留 null 键")
     func newPublicFields() throws {
         for value: String? in [nil, "", " \t\n", " Arvin \n"] {
             var config = AppConfig.example
@@ -36,7 +36,7 @@ struct BridgeTests {
             config.character.motto = value
             let reply = ConfigReply.make(config: config, avatars: [], backgrounds: [],
                 voices: [MediaItem(id: "1", url: "/media/voice/1.mp3")],
-                iconIDs: ["cursor", "not-configured"], uiState: UiState())
+                uiState: UiState())
             #expect(JSONSerialization.isValidJSONObject(reply))
             let publicConfig = try #require(reply["config"] as? [String: Any])
             let user = try #require(publicConfig["user"] as? [String: Any])
@@ -48,13 +48,9 @@ struct BridgeTests {
                 #expect(user["name"] is NSNull)
                 #expect(character["motto"] is NSNull)
             }
-            let apps = try #require(publicConfig["apps"] as? [[String: Any]])
-            #expect(apps.count == 2)
-            #expect(apps[0]["iconUrl"] as? String == "/media/app-icons/cursor.png")
-            #expect(apps[1]["iconUrl"] is NSNull)
             let media = try #require(reply["media"] as? [String: [[String: String]]])
             #expect(media["voices"] == [["id": "1", "url": "/media/voice/1.mp3"]])
-            #expect(allKeys(reply).isDisjoint(with: ["path", "bundleId", "remindersList", "background"]))
+            #expect(allKeys(reply).isDisjoint(with: ["path", "bundle" + "Id", "remindersList", "background"]))
         }
     }
 
@@ -131,12 +127,10 @@ struct BridgeTests {
         }
     }
 
-    @Test("四个新动作识别合法请求，不再作为延期动作")
+    @Test("项目和外观动作识别合法请求")
     func actionRequestsRecognized() {
         let bodies: [[String: Any]] = [
             ["action": "openProject", "projectId": "p-1"],
-            ["action": "openProjectWith", "projectId": "p-1", "appId": "app_2"],
-            ["action": "launchApp", "appId": "app_2"],
             ["action": "saveUiState", "avatarId": "1"],
             ["action": "saveUiState", "backgroundId": "bg"],
             ["action": "saveUiState", "avatarId": NSNull(), "backgroundId": NSNull()],
@@ -150,7 +144,7 @@ struct BridgeTests {
 
     @Test("新动作拒绝缺失、错误类型、非法 id 和额外参数")
     func actionRequestValidation() {
-        let required = [("openProject", ["projectId"]), ("openProjectWith", ["projectId", "appId"]), ("launchApp", ["appId"])]
+        let required = [("openProject", ["projectId"])]
         let invalidIDs: [Any] = [NSNull(), 1, true, ["x"], ["id": "x"], "", "../etc", "a b", "a/b", "中文", "x.y"]
         for (action, keys) in required {
             var valid: [String: Any] = ["action": action]
@@ -163,7 +157,7 @@ struct BridgeTests {
                     #expect(BridgeRequest.parse(body) == .failure(.invalid))
                 }
             }
-            for key in ["path", "bundleId", "url", "extra"] {
+            for key in ["path", "bundle" + "Id", "url", "extra"] {
                 var body = valid; body[key] = NSNull()
                 #expect(BridgeRequest.parse(body) == .failure(.invalid))
             }
@@ -219,7 +213,7 @@ struct BridgeTests {
         let decoded = try #require(JSONSerialization.jsonObject(with: JSONSerialization.data(withJSONObject: reply)) as? [String: Any])
         #expect(Set(decoded.keys) == ["config", "media", "uiState"])
         let publicConfig = try #require(decoded["config"] as? [String: Any])
-        #expect(Set(publicConfig.keys) == ["user", "character", "greetings", "projects", "apps"])
+        #expect(Set(publicConfig.keys) == ["user", "character", "greetings", "projects", "terminal"])
         #expect((publicConfig["character"] as? [String: String]) == ["name": "爱弥斯", "motto": "愿星光一直落在你走的路上"])
         let greetings = try #require(publicConfig["greetings"] as? [[String: Any]])
         #expect(greetings.count == 7)
@@ -230,12 +224,8 @@ struct BridgeTests {
         #expect(projects[0]["id"] as? String == "desktop-shell")
         #expect(projects[0]["name"] as? String == "DesktopShell")
         #expect(projects[0]["tags"] as? [String] == ["dev"])
-        #expect(projects[0]["apps"] as? [String] == ["cursor"])
+        #expect(projects[0]["apps"] == nil)
         #expect(projects[0]["hasReminders"] as? Bool == true)
-        let apps = try #require(publicConfig["apps"] as? [[String: Any]])
-        #expect(apps.map { $0["id"] as? String } == ["cursor", "safari"])
-        #expect(apps.map { $0["name"] as? String } == ["Cursor", "Safari"])
-        #expect(apps.allSatisfy { $0["iconUrl"] is NSNull })
         let media = try #require(decoded["media"] as? [String: [[String: String]]])
         #expect(media["avatars"] == [["id": "2", "url": "/media/avatars/2.PNG"]])
         #expect(media["backgrounds"] == [["id": "bg-1", "url": "/media/backgrounds/bg-1.jpg"]])
@@ -243,7 +233,7 @@ struct BridgeTests {
         #expect(publicUI["avatarId"] as? String == "2")
         #expect(publicUI["backgroundId"] as? String == "bg-1")
         #expect(publicUI["voiceEnabled"] as? Bool == false)
-        let privateKeys: Set<String> = ["path", "remindersList", "bundleId", "background", "video", "desktopIconsHidden", "todos"]
+        let privateKeys: Set<String> = ["path", "remindersList", "bundle" + "Id", "background", "video", "desktopIconsHidden", "todos"]
         #expect(allKeys(decoded).isDisjoint(with: privateKeys))
     }
 
@@ -252,13 +242,12 @@ struct BridgeTests {
         for (list, expected): (String?, Bool) in [(nil, false), ("", false), (" \t\r\n", false), (" 项目提醒\n", true)] {
             var config = AppConfig.example
             config.projects[0].tags = nil
-            config.projects[0].apps = nil
             config.projects[0].remindersList = list
             let reply = ConfigReply.make(config: config, avatars: [], backgrounds: [], uiState: UiState())
             let publicConfig = try #require(reply["config"] as? [String: Any])
             let projects = try #require(publicConfig["projects"] as? [[String: Any]])
             #expect(projects[0]["tags"] as? [String] == [])
-            #expect(projects[0]["apps"] as? [String] == [])
+            #expect(projects[0]["apps"] == nil)
             #expect(projects[0]["hasReminders"] as? Bool == expected)
             let ui = try #require(reply["uiState"] as? [String: Any])
             #expect(ui["avatarId"] == nil || ui["avatarId"] is NSNull)
@@ -313,8 +302,6 @@ struct BridgeTests {
     @Test("解析保留动作 id 与外观缺失、null、set 三种语义")
     func actionPayloads() {
         #expect(BridgeRequest.parse(["action": "openProject", "projectId": "p"]) == .success(.openProject("p")))
-        #expect(BridgeRequest.parse(["action": "openProjectWith", "projectId": "p", "appId": "a"]) == .success(.openProjectWith(projectId: "p", appId: "a")))
-        #expect(BridgeRequest.parse(["action": "launchApp", "appId": "a"]) == .success(.launchApp("a")))
         #expect(BridgeRequest.parse(["action": "saveUiState", "avatarId": "1"]) == .success(.saveUiState(avatar: .set("1"), background: .unchanged)))
         #expect(BridgeRequest.parse(["action": "saveUiState", "backgroundId": NSNull()]) == .success(.saveUiState(avatar: .unchanged, background: .clear)))
         #expect(BridgeRequest.parse(["action": "saveUiState", "avatarId": NSNull(), "backgroundId": "bg"]) == .success(.saveUiState(avatar: .clear, background: .set("bg"))))

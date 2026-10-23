@@ -52,7 +52,11 @@ struct ConfigStore {
         }
 
         // Decode before sanitizing, and never rewrite an existing configuration.
-        return Self.filtered(try loadUnfiltered())
+        let config = Self.filtered(try loadUnfiltered())
+        if HotKey.resolve(config.terminal?.hotkey).usedDefaultBecauseInvalid {
+            Log.error("terminal hotkey invalid, using default")
+        }
+        return config
     }
 
     static func filtered(_ input: AppConfig) -> AppConfig {
@@ -60,13 +64,6 @@ struct ConfigStore {
         config.projects = config.projects.filter { project in
             guard isValidID(project.id) else {
                 Log.error("忽略配置中 id 非法的项目：\(project.id)")
-                return false
-            }
-            return true
-        }
-        config.apps = config.apps.filter { app in
-            guard isValidID(app.id) else {
-                Log.error("忽略配置中 id 非法的应用：\(app.id)")
                 return false
             }
             return true

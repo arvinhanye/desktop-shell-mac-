@@ -261,7 +261,7 @@ final class RemindersStore {
         for list in lists where optionTokens[list.id] == nil { optionTokens[list.id] = UUID().uuidString }
     }
 
-    func projectEditOptions(project: AppConfig.Project, projects: [AppConfig.Project], appId: String?) -> [String: Any] {
+    func projectEditOptions(project: AppConfig.Project, projects: [AppConfig.Project]) -> [String: Any] {
         let access = lifecycle == nil ? "unknown" : backend.access
         let lists = access == "granted" ? backend.lists() : []
         refreshOptions(lists)
@@ -278,8 +278,7 @@ final class RemindersStore {
                 || !(project.remindersList?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
             status = hasBinding ? "missing" : "none"
         }
-        return ["project": ["id": project.id, "name": project.name,
-                             "appId": appId.map { $0 as Any } ?? NSNull()],
+        return ["project": ["id": project.id, "name": project.name],
                 "access": access,
                 "binding": ["status": status, "optionId": bound.flatMap { optionTokens[$0] }.map { $0 as Any } ?? NSNull()],
                 "lists": lists.map { list -> [String: Any] in

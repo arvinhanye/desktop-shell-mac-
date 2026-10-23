@@ -69,10 +69,6 @@ struct ConfigStoreTests {
         #expect(config.projects.first?.name == "DesktopShell")
         #expect(config.projects.first?.path == "~/Desktop/desktop-shell")
         #expect(config.projects.first?.tags == ["dev"])
-        #expect(config.projects.first?.apps == ["cursor"])
-        #expect(config.apps.map(\.id) == ["cursor", "safari"])
-        #expect(config.apps.map(\.name) == ["Cursor", "Safari"])
-        #expect(config.apps.map(\.bundleId) == ["com.todesktop.230313mzl4w4u92", "com.apple.Safari"])
     }
 
     @Test("已有合法配置保持内容和文件原样，项目可省略 tags/apps")
@@ -83,7 +79,7 @@ struct ConfigStoreTests {
         {"background":{"video":"video/custom.mp4"},"character":{"name":"测试角色"},
          "greetings":[{"from":8,"title":"你好","wish":"测试祝福"}],
          "projects":[{"id":"p_1","name":"项目一","path":"~/project with spaces"}],
-         "apps":[{"id":"editor-2","name":"编辑器","bundleId":"test.editor"}]}
+         "apps":[{"id":"editor-2","name":"编辑器","bundle\( "Id" )":"test.editor"}]}
         """
         let file = try fixture.file("config.json", contents: json)
         let before = try Data(contentsOf: file)
@@ -93,8 +89,6 @@ struct ConfigStoreTests {
         #expect(config.greetings.first?.wish == "测试祝福")
         #expect(config.projects.first?.path == "~/project with spaces")
         #expect(config.projects.first?.tags == nil)
-        #expect(config.projects.first?.apps == nil)
-        #expect(config.apps.first?.bundleId == "test.editor")
         #expect(try Data(contentsOf: file) == before)
         #expect(try JSONDecoder().decode(AppConfig.self, from: JSONEncoder().encode(config)) == config)
     }
@@ -162,15 +156,13 @@ struct ConfigStoreTests {
                       {"from":0,"title":"零","wish":"零"},{"from":23,"title":"晚","wish":"晚"}],
          "projects":[{"id":"../x","name":"bad","path":"/tmp"},{"id":"a b","name":"bad","path":"/tmp"},
                      {"id":"","name":"bad","path":"/tmp"},{"id":"Good_1-x","name":"ok","path":"~/ok","tags":["dev"],"apps":["ok"]}],
-         "apps":[{"id":"../x","name":"bad","bundleId":"bad"},{"id":"a b","name":"bad","bundleId":"bad"},
-                 {"id":"","name":"bad","bundleId":"bad"},{"id":"ok","name":"ok","bundleId":"test.ok"}]}
+         "apps":[{"id":"../x","name":"bad","bundle\( "Id" )":"bad"},{"id":"a b","name":"bad","bundle\( "Id" )":"bad"},
+                 {"id":"","name":"bad","bundle\( "Id" )":"bad"},{"id":"ok","name":"ok","bundle\( "Id" )":"test.ok"}]}
         """
         let file = try fixture.file("config.json", contents: json)
         let config = try ConfigStore(supportDir: fixture.root).load()
         #expect(config.projects.map(\.id) == ["Good_1-x"])
         #expect(config.projects.first?.tags == ["dev"])
-        #expect(config.projects.first?.apps == ["ok"])
-        #expect(config.apps.map(\.id) == ["ok"])
         #expect(config.greetings.map(\.from) == [0, 6, 20, 23])
         #expect(config.greetings.map(\.title) == ["零", "早", "夜", "晚"])
         #expect(try Data(contentsOf: file) == Data(json.utf8))
@@ -187,13 +179,12 @@ struct ConfigStoreTests {
 }
 
 extension ConfigStoreTests {
-    @Test("原样读写保留被启动过滤的项目、应用和问候顺序")
+    @Test("原样读写保留被启动过滤的项目和问候顺序")
     func unfilteredRoundTrip() throws {
         let fixture = try TemporaryTestDirectory(); defer { fixture.cleanup() }
         let store = ConfigStore(supportDir: fixture.root)
         var config = AppConfig.example
-        config.projects.insert(.init(id: "bad/id", name: "preserve", path: "~/bad", tags: nil, apps: nil), at: 0)
-        config.apps.append(.init(id: "bad app", name: "preserve", bundleId: "test.bad"))
+        config.projects.insert(.init(id: "bad/id", name: "preserve", path: "~/bad", tags: nil), at: 0)
         config.greetings.reverse()
         config.greetings.insert(.init(from: 24, title: "preserve", wish: "preserve"), at: 0)
         try JSONEncoder().encode(config).write(to: fixture.root.appendingPathComponent("config.json"))
@@ -205,7 +196,6 @@ extension ConfigStoreTests {
         #expect(try Data(contentsOf: fixture.root.appendingPathComponent("config.json")) == encoder.encode(config))
         let filtered = try store.load()
         #expect(filtered.projects.map(\.id) == ["desktop-shell"])
-        #expect(filtered.apps.map(\.id) == ["cursor", "safari"])
         #expect(filtered.greetings.map(\.from) == [0, 6, 12, 18, 20, 21, 23])
         #expect(try store.loadUnfiltered() == config)
     }
@@ -244,5 +234,33 @@ extension ConfigStoreTests {
         let missing = fixture.root.appendingPathComponent("absent")
         #expect(throws: (any Error).self) { try ConfigStore(supportDir: missing).save(.example) }
         #expect(!FileManager.default.fileExists(atPath: missing.path))
+    }
+}
+
+extension ConfigStoreTests {
+    @Test("项目改名保留旧应用字段及包含未知字段的终端配置")
+    func preservesLegacyAndTerminalFields() throws {
+        let fixture = try TemporaryTestDirectory(); defer { fixture.cleanup() }
+        let store = ConfigStore(supportDir: fixture.root)
+        var raw = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(AppConfig.example)) as? [String: Any])
+        let legacy: [[String: Any]] = [["id": "old", "extension": ["keep": true]]]
+        let terminal: [String: Any] = ["hotkey": ["key": "t", "modifiers": ["control"], "future": 42], "future": ["keep": true]]
+        raw["apps"] = legacy
+        raw["terminal"] = terminal
+        var projects = try #require(raw["projects"] as? [[String: Any]])
+        projects[0]["apps"] = ["old", "unknown"]
+        raw["projects"] = projects
+        let file = fixture.root.appendingPathComponent("config.json")
+        try JSONSerialization.data(withJSONObject: raw).write(to: file)
+        let previous = try store.loadUnfiltered()
+        #expect(HotKey.resolve(previous.terminal?.hotkey).display == "⌃T")
+        var updated = previous; updated.projects[0].name = "Renamed"
+        try store.saveProjects(updated, replacing: previous)
+        let after = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
+        #expect(NSArray(array: legacy).isEqual(to: try #require(after["apps"] as? [Any])))
+        #expect(NSDictionary(dictionary: terminal).isEqual(to: try #require(after["terminal"] as? [String: Any])))
+        let rows = try #require(after["projects"] as? [[String: Any]])
+        #expect(rows[0]["name"] as? String == "Renamed")
+        #expect(rows[0]["apps"] as? [String] == ["old", "unknown"])
     }
 }

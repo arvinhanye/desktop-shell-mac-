@@ -9,18 +9,10 @@ final class AppState {
     var onUiStateChanged: ((UiState) -> Void)?
     var onConfigChanged: (() -> Void)?
     let uiStateStore: UiStateStore
-    private let appIcons: AppIcons
     private let projectHome: URL
-    private let iconQueue = DispatchQueue(label: "DesktopShell.app-icons", qos: .userInitiated)
-    private var iconGeneration = 0
-    private var exportingIcons = false
-    private var exportedIconIDs = Set<String>()
-    private var iconWaiters: [(Set<String>) -> Void] = []
-
-    init(paths: AppPaths, appIcons: AppIcons = AppIcons(),
+    init(paths: AppPaths,
          projectHome: URL = FileManager.default.homeDirectoryForCurrentUser) {
         self.paths = paths
-        self.appIcons = appIcons
         self.projectHome = projectHome.resolvingSymlinksInPath().standardizedFileURL
         uiStateStore = UiStateStore(supportDir: paths.supportDir)
         uiState = uiStateStore.load()
@@ -30,32 +22,6 @@ final class AppState {
             Log.error("DesktopShell: configuration load failed, using in-memory example: \(String(describing: error))")
             config = .example
         }
-    }
-
-    func exportAppIcons() {
-        iconGeneration += 1
-        let generation = iconGeneration
-        let apps = config.apps
-        let mediaDir = paths.mediaDir
-        let exporter = appIcons
-        exportingIcons = true
-        // Serialize file publication so an older reload can never overwrite newer icons.
-        iconQueue.async { [weak self] in
-            let ids = exporter.export(apps: apps, mediaDir: mediaDir)
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.iconGeneration == generation else { return }
-                self.exportedIconIDs = ids
-                self.exportingIcons = false
-                let waiters = self.iconWaiters
-                self.iconWaiters.removeAll()
-                for reply in waiters { reply(ids) }
-            }
-        }
-    }
-
-    func withAppIcons(_ reply: @escaping (Set<String>) -> Void) {
-        if exportingIcons { iconWaiters.append(reply) }
-        else { reply(exportedIconIDs) }
     }
 
     func saveUiState() throws {
@@ -120,20 +86,18 @@ final class AppState {
         do {
             let latest = ConfigStore.filtered(try ConfigStore(supportDir: paths.supportDir).loadUnfiltered())
             guard let project = latest.projects.first(where: { $0.id == projectId }) else { return .failure(.notFound) }
-            let appId = project.apps?.first { id in latest.apps.contains { $0.id == id } }
             if let remindersStore {
-                return .success(remindersStore.projectEditOptions(project: project, projects: latest.projects, appId: appId))
+                return .success(remindersStore.projectEditOptions(project: project, projects: latest.projects))
             }
-            return .success(["project": ["id": project.id, "name": project.name,
-                                           "appId": appId.map { $0 as Any } ?? NSNull()],
+            return .success(["project": ["id": project.id, "name": project.name],
                              "access": "unknown", "binding": ["status": "unavailable", "optionId": NSNull()],
                              "lists": []])
         } catch { return .failure(.failed) }
     }
 
-    func updateProject(projectId: String, name: String?, appId: String?,
+    func updateProject(projectId: String, name: String?,
                        reminderListOption: UiPatch) -> Result<AppConfig.Project, BridgeError> {
-        guard name != nil || appId != nil || reminderListOption != .unchanged else { return .failure(.invalid) }
+        guard name != nil || reminderListOption != .unchanged else { return .failure(.invalid) }
         let store = ConfigStore(supportDir: paths.supportDir)
         do {
             let previous = try store.loadUnfiltered()
@@ -147,8 +111,8 @@ final class AppState {
                 patch = .set(try remindersStore.resolveReminderOption(option, projectId: projectId,
                     projects: ConfigStore.filtered(previous).projects).get())
             }
-            let project = try ProjectPreferences.updating(updated.projects[index], name: name, appId: appId,
-                reminderList: patch, apps: ConfigStore.filtered(previous).apps).get()
+            let project = try ProjectPreferences.updating(updated.projects[index], name: name,
+                reminderList: patch).get()
             updated.projects[index] = project
             try saveProjects(updated, replacing: previous, store: store)
             return .success(project)
