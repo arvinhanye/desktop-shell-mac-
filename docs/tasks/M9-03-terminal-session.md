@@ -1,6 +1,6 @@
 # M9-03: 终端会话：PTY 跑登录 shell（Swift）
 
-- **状态**：changes-requested
+- **状态**：done
 - **里程碑**：M9
 - **依赖**：无。和 M9-01、M9-02、M9-04 互不依赖；M9-05 依赖本任务
 - **分支**：task/M9-03
@@ -89,9 +89,21 @@
 
 ## 交付记录
 
-- **改动摘要**：
+- **改动摘要**：从 `main`（`d15e0a1`）独立创建 `task/M9-03`，不包含 M9-01 的网页修改。新增 `TerminalLaunch`、`@MainActor TerminalSession`、`TerminalSize.validated(cols: Double, rows: Double)`、`terminalEnvironment` 和 `TerminalOutputBuffer`。公开会话接口保持任务约定；`lastSize` 是有 `cols` / `rows` 的 `TerminalSize`，初始 80×24。默认登录 shell、环境、工作目录按规范；start 幂等，resize 无效尺寸不污染状态，退出保留输出，重开清空输出。
+  - 后台串行队列负责 PTY 读写；EINTR 重试，EAGAIN 通过可写事件继续发送，保留短写偏移，不忙等或阻塞主线程。输出以 16 ms 批次交给主线程，确认上一批已交付后才安排下一批，退出先排空尾部再回调状态。read/write source 全部完成取消后才 close，避免 fd 复用竞态；释放会话同样发送 SIGHUP 并保留退出监听直至 waitpid 回收。
+  - 最近输出上限 256 KiB，截断时避开 UTF-8 后续字节。自查发现待交付输出可能在主线程忙碌时堆积，已补读端背压：积压达到 256 KiB 时暂停 read source，主线程接收后恢复，不丢字；退出时正确恢复并取消 suspended source。
 - **自测结果**：
-- **疑问 / 偏离**：
+  - 基线 `scripts/test.sh` **276/276 PASS**；最终 **299/299 PASS（30 suites）**。新增 `TerminalSessionTests` **23/23 PASS**，覆盖环境、尺寸边界/非整数/非有限、UTF-8 分块与容量、真实 sh 退出码、cat 写入、stty 改尺寸、默认状态/幂等/重开、工作目录/环境、SIGHUP、exec/chdir 失败 127、主线程回调节流、释放后进程回收、512 KiB 写入背压、主线程阻塞后 1 MiB 输出仍完整。
+  - 先写测试验证类型缺失 RED；实现后通过。自查修复的主线程背压另有真实 RED→GREEN：旧实现会在主线程阻塞时提前写完 marker，新实现让子进程受 PTY 背压，恢复后输出和 marker 完整。
+  - 最终 `swift build` 成功、无编译错误/警告；`git diff --check` 通过。日志检查仅开始 pid、退出 status 与 errno，不含终端输入/输出或长度。子代理只读自查和 debug 目标文件反汇编核对 forkpty 子路径仅 chdir/execve/_exit，无 Swift runtime 调用（自查不是正式审查）。
+  - 证据位于 `build/m9-validation/`：`M9-03-full-tests.log`、`M9-03-build-final.log`、`M9-03-targeted-final.log`、`M9-03-backpressure-red.log`。最初沙盒运行被 Swift 模块缓存写权限阻止，以上结果均来自正常本机权限下的项目脚本；未修改签名、系统权限或运行配置。
+- **疑问 / 偏离**：无范围偏离，仅新增两份允许文件并更新本任务状态/交付记录。没有接入窗口或 bridge，不构建终端面板；交互验收按任务单留到 M9-05。M9-01 与本任务分别在独立分支交付；未合并 `main`。任务分支推送被自动审批拦截；虽然已通过 GitHub 连接器核实远端归属和推送权限，审批仍要求用户在对话中明确授权向 `https://github.com/arvinhanye/desktop-shell-mac-` 推送，故暂作本地交付。
+- **审查修改（2026-10-23，对应 `main` 的审查记录 `e8ecd0e`）**：
+  - 修复 P2：退出事件先进入排空阶段，停止写入并取消读取源（已暂停时先恢复再取消）；只有读到 EOF / EIO / EAGAIN 后才调用 `waitpid`。达到 256 KiB 积压上限时继续保留 PTY 和子进程，待主线程交付上一批输出、返回 ACK 后续读，不把一次读取预算耗尽当成排空完成。退出状态仍在最后一批 `onOutput` 完成后交付，保持原有节流、内存上限和 fd 取消顺序。
+  - 新增两项真实 PTY 检查：一项让首个输出回调暂不返回，积压 256 KiB 和中文尾串，核对恢复后的完整输出、最近 256 KiB 及退出顺序；另一项复用生产 shell 启动函数，待独立 marker 确认真实子进程已写完尾部后，人工调度后台 worker 的退出入口，强制退出处理早于首次读取。这项窄回归不声称覆盖内核退出事件的投递；通知路径由现有端到端测试与延迟监听探针覆盖。为此仅将启动函数、worker 和其串行化退出入口改为模块内可见，未改动公开会话接口、未添加运行时测试分支。高水位测试本身不保证事件顺序，也能在原版通过；原有读写背压和释放回收测试保留。
+  - 最终 `scripts/test.sh --jobs 4` **301/301 PASS（30 suites，终端组 25 项）**；`swift build --jobs 4` 成功且无编译错误/警告；`git diff --check` 通过。日志仍仅 pid、status、errno。独立子代理自查未发现新增生命周期或回调顺序问题，仅算实现自查，不代替正式复审。
+  - 同一退出入口回归对旧版逻辑 **RED**（等待 `onExit` 5 秒超时），对修复版 **GREEN**（17 字节尾部、退出码 3、退出前交付完整输出和回收均通过）。隔离旧版仅同步模块可见性及队列转发，保留先 waitpid 后读的原逻辑。最终源码另经审查者延迟监听探针 **30/30 PASS**；fd 数 **4→4**，提前释放后无残留子进程。验证产物保存在 `build/m9-validation/M9-03-revision/`：`full-tests-final.log`、`build-final.log`、`regression-scheduled-exit-original-red.log`、`regression-scheduled-exit-green.log`、`exit-tail-fixed.log`。`regression-notes.md` 区分最终证据和没有区分能力的中间测试构造，后者不算修复证明。
+  - 超时证据边界：本次原版延迟探针也会卡住，父进程采样显示终端队列已进入退出处理并阻塞在 `__wait4`（725/725 个样本）；对照副本先读后等即通过。独立 C 探针同时确认先读后回收有 4 字节、先回收后读为 0。详见 `quick-exit-diagnosis.md`、`diagnostic-parent.sample.txt`、`pty-tail-before.log`。这证明本次可复现超时受读/回收顺序影响；审查最初那次全量测试超时没有当时调用栈，**仍不能断言同因，也不以本次通过抹去**。原审查记录保留在 `main`，本次未修改审查者内容。
 
 <!-- ===== 以下由审查者填写（Claude Code，或没参与实现的另一个 Codex 会话） ===== -->
 
@@ -106,3 +118,21 @@
   - 全部 3 个变更文件（398 行实现、426 行测试、任务单）已审，覆盖率 100%，无跳过；改动范围、日志隐私、fork 子路径、source 取消/关 fd 顺序符合要求。常规额外探针：onExit 内立即重开 200 次、启动后立即释放 200 次均通过，不抵消上述确定缺陷。
   - 独立 worktree 执行 `swift build` 成功，无编译警告/错误。首次全量测试为 298/299（30 suites），`TerminalSessionTests.swift:128` 等待快速退出 shell 的 onExit 超时；随后单例 1/1、终端组 23/23、低负载全量 299/299 均通过。**首次超时根因尚未确定**，不能将其直接归因为上述尾部丢失，也不能以复跑通过抹去。人工延后监听注册仍收到退出回调，未证明存在漏退出通知竞态。
   - 完整命令与日志保存在本审查 worktree 的 `build/m9-review/M9-03/`；确定性探针源码与结果保存在其 `probes/`。初始沙盒阻止 Swift 缓存/manifest sandbox，正常权限重试完成；未修改系统权限或签名信任。审查未修改实现逻辑。
+
+### 复审（Claude Code，2026-10-23）
+
+- **范围**：实现者针对上面 P2 的返修 `20b7a93`（基于 `887344a`）。
+- **结论**：通过，已合并到 `main`。
+- **已实际执行**（在临时检出里，从 `20b7a93` 开始）：
+  - `swift build` 成功，没有警告；`git diff --check` 没有问题；改动只有 `TerminalSession.swift`、`TerminalSessionTests.swift` 和本任务单。
+  - `scripts/test.sh` 连跑 3 轮，都是 301/301（30 个套件）；`--filter TerminalSessionTests` 连跑 10 轮，25/25 全过；另外在 4 个满负载 CPU 进程的干扰下再跑 3 轮全量，也都通过。上面首次审查提到的偶发超时这次没有出现，但正如那条记录说的，没复现不等于证明了原因。
+  - 跑完没有残留的测试子进程。
+- **逐条核对**：
+  - **P2 已修好**：退出事件先进入 `drainBeforeReaping`，先把可读的输出读完（读到 EOF、`EIO` 或 `EAGAIN`）才 `waitpid`。积压到 256 KB 上限时不回收，等主线程确认收到上一批输出后接着读，然后才通知退出；`onExit` 在最后一批 `onOutput` 之后。"退出处理先于任何读取"的回归测试对旧逻辑会失败、对新逻辑会通过（见交付记录）。
+  - **子进程**：`fork` 前用 `strdup` 准备好参数；子进程里只调用 `chdir`、`execve` 和 `_exit(127)`。
+  - **日志**：只有开始（pid）、退出（status）和各处的 `errno`，不含输入、输出，也不含它们的长度。
+  - **重推缓冲区**：最多 256 KB，截断后去掉开头的 UTF-8 后续字节；重新开始时清空，退出后保留。
+  - **接口**：和任务单一致。`TerminalSize.validated` 收 `Double`，正好用于 M9-05 校验 bridge 里的 JSON 数字；非整数、非有限值和越界都会拒绝。
+- **意见（不阻塞合并）**：
+  - `FD_CLOEXEC` 是在 `forkpty` 返回后才给主端设的。如果这期间别的线程正好也在 `fork`，主端会漏到那个子进程里。本应用目前不会自己 `fork` 别的进程，所以影响很小，记下备查。
+  - 主线程长时间被阻塞时，读端会暂停，子进程也会被 PTY 的背压拖住；这是任务单要的"不丢字"取舍，M9-05 里不要在主线程上做耗时操作。
