@@ -1,0 +1,6 @@
+[data-widget="terminal"] { left: var(--column-1); top: var(--terminal-entry-top); width: var(--column-width); height: var(--terminal-entry-height); }
+.terminal-entry { display: flex; align-items: center; gap: var(--space-3); width: 100%; height: 100%; padding: 0 var(--card-padding); background: none; text-align: left; transition: border-color var(--duration-fast) var(--ease-standard); }
+.terminal-entry:hover { border-color: color-mix(in srgb, var(--color-accent) 55%, transparent); }
+.terminal-entry-icon { width: var(--icon-md); height: var(--icon-md); color: var(--color-text-muted); }
+.terminal-entry:hover .terminal-entry-icon { color: var(--color-accent); }
+.terminal-entry-label { flex: 1; font-family: var(--font-serif); font-size: var(--text-lg); letter-spacing: var(--tracking-title); }

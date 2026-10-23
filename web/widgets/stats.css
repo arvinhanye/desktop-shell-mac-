@@ -9,6 +9,7 @@
 .stat-spark { grid-column: 2; height: var(--spark-height); width: 100%; }
 .stat-spark polyline { fill: none; stroke: var(--color-ice); stroke-width: var(--spark-stroke); vector-effect: non-scaling-stroke; }
 .stat-spark polygon { fill: color-mix(in srgb, var(--color-ice) 16%, transparent); }
-.power-hint { display: none; margin: var(--space-3) 0 0; padding-top: var(--space-2); border-top: var(--border-width) solid var(--color-card-border); color: var(--color-warning); font-size: var(--text-sm); }
-.stats-card.low-battery .power-hint { display: block; }
+/* 电量低的提示放在标题行右边（2026-10-23 改，原来是卡片底部多一行）：卡片高度不变，下面的终端入口才能紧挨着放 */
+.power-hint { display: none; color: var(--color-warning); }
+.stats-card.low-battery .power-hint { display: inline; }
 .stats-card.low-battery .stat-battery .stat-bar > span { background: var(--color-warning); }

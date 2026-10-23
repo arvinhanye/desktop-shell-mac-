@@ -47,7 +47,7 @@ export default {
       grid.setAttribute('role', 'radiogroup');
       grid.setAttribute('aria-label', label);
     }
-    scroll.append(element('h3', '', '头像'), avatars, element('h3', '', '启动栏和卡片的背景'), backgrounds);
+    scroll.append(element('h3', '', '头像'), avatars, element('h3', '', '角色卡的背景'), backgrounds);
     panel.append(head, scroll);
     overlay.append(panel);
     host.append(overlay);

@@ -1,4 +1,4 @@
-[data-widget="todos"] { left: var(--column-2); top: var(--todos-top); bottom: calc(var(--launcher-bottom) + var(--launcher-height) + var(--column-gap)); width: var(--column-width); }
+[data-widget="todos"] { left: var(--column-2); top: var(--todos-top); bottom: var(--todos-bottom); width: var(--column-width); }
 .todos-card { display: flex; flex-direction: column; height: 100%; }
 .todo-add { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-sm); background: var(--color-input-bg); }
 .todo-add input { flex: 1; min-width: 0; border: 0; outline: none; background: none; color: var(--color-text); font: inherit; }

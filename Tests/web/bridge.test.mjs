@@ -5,7 +5,7 @@ import { createBridge, applyEvent } from '../../web/js/bridge.js';
 import { createMock } from '../../web/js/mock.js';
 
 const fresh = () => createStore(initialState);
-const config = () => ({ character: { name: '爱弥斯' }, greetings: [], projects: [{ id: 'p', name: '项目' }], apps: [] });
+const config = () => ({ character: { name: '爱弥斯' }, greetings: [], projects: [{ id: 'p', name: '项目' }] });
 const reply = () => ({ config: config(), media: { avatars: [], backgrounds: [] }, uiState: {} });
 const stats = () => ({ battery: { level: 80, charging: false, onBattery: true }, cpu: 25, memory: { usedBytes: 512, totalBytes: 1024, percent: 50 } });
 const todo = () => ({ id: 'a', text: '', done: false });
@@ -36,7 +36,7 @@ test('bridge: send preserves native this/reply and action cannot be overridden b
     return Promise.resolve(expected);
   } };
   const bridge = createBridge(fresh(), { target: {}, native });
-  assert.equal(await bridge.send('openProject', { action: 'launchApp', projectId: 'p' }), expected);
+  assert.equal(await bridge.send('openProject', { action: 'openTerminal', projectId: 'p' }), expected);
 });
 
 for (const [name, failure, code] of [
@@ -49,10 +49,10 @@ for (const [name, failure, code] of [
   test(`bridge: ${name} becomes Error with code and one warning`, async t => {
     const warn = t.mock.method(console, 'warn', () => {});
     const bridge = createBridge(fresh(), { target: {}, native: { postMessage: failure } });
-    const promise = bridge.send('launchApp');
+    const promise = bridge.send('openTerminal');
     assert.ok(promise instanceof Promise);
     await assert.rejects(promise, error => error instanceof Error && error.message === code && error.code === code);
-    assert.deepEqual(warn.mock.calls[0].arguments, [`bridge: launchApp 失败：${code}`]);
+    assert.deepEqual(warn.mock.calls[0].arguments, [`bridge: openTerminal 失败：${code}`]);
     assert.equal(warn.mock.callCount(), 1);
   });
 }
@@ -73,13 +73,13 @@ test('bridge: startup sanitizes optional media/UI/project fields in one atomic s
   });
   await bridge.start();
   assert.equal(notifications, 1);
-  assert.deepEqual(s.get('config').projects[0], { id: 'p', name: '项目', tags: [], apps: [], hasReminders: false });
+  assert.deepEqual(s.get('config').projects[0], { id: 'p', name: '项目', tags: [], hasReminders: false });
 });
 
 test('bridge: optional malformed media/UI defaults; valid fields survive normalization', async () => {
   const s = fresh();
   const r = reply();
-  r.config.projects = [{ id: 'p', tags: ['dev'], apps: ['cursor'], hasReminders: true }];
+  r.config.projects = [{ id: 'p', name: '项目', tags: ['dev'], hasReminders: true }];
   r.media = { avatars: [{ id: 'a', url: '/a' }], backgrounds: null };
   r.uiState = { avatarId: 'a', backgroundId: null, voiceEnabled: false };
   await createBridge(s, { target: {}, native: { postMessage: () => r } }).start();
@@ -91,7 +91,7 @@ test('bridge: optional malformed media/UI defaults; valid fields survive normali
 for (const [label, response] of [
   ['legacy undefined', undefined], ['null', null], ['array', []], ['missing config', {}],
   ['invalid character', { config: { ...config(), character: { name: 1 } } }],
-  ...['greetings', 'projects', 'apps'].map(key => [`invalid ${key}`, { config: { ...config(), [key]: null } }]),
+  ...['greetings', 'projects'].map(key => [`invalid ${key}`, { config: { ...config(), [key]: null } }]),
 ]) {
   test(`bridge: start handles ${label}, marks ready and resolves instead of rejecting`, async t => {
     const error = t.mock.method(console, 'error', () => {});
@@ -326,12 +326,10 @@ for (const value of [undefined, null, 42, false, [], {}]) {
     const r = reply();
     r.config.user = value;
     r.config.character.motto = value;
-    r.config.apps = [{ id: 'a', name: 'App', iconUrl: value }];
     r.media = { avatars: [{ id: '1', url: '/a' }], backgrounds: [{ id: 'b', url: '/b' }], voices: value };
     await createBridge(s, { target: {}, native: { postMessage: () => r } }).start();
     assert.deepEqual(s.get('config').user, { name: null });
     assert.equal(s.get('config').character.motto, null);
-    assert.equal(s.get('config').apps[0].iconUrl, null);
     assert.deepEqual(s.get('media'), { avatars: [{ id: '1', url: '/a' }], backgrounds: [{ id: 'b', url: '/b' }], voices: [] });
   });
 }
@@ -342,12 +340,10 @@ test('bridge: M4 strings survive and voices expose only id/url', async () => {
   const r = reply();
   r.config.user = { name: 'Arvin' };
   r.config.character.motto = '签名';
-  r.config.apps = [{ id: 'a', name: 'App', iconUrl: '/media/app-icons/a.png' }];
   r.media.voices = [null, { id: 1, url: '/v' }, { id: '1', url: 8 }, { id: '2', url: '/media/voice/2.mp3', extra: 'omit' }];
   await createBridge(s, { target: {}, native: { postMessage: () => r } }).start();
   assert.deepEqual(s.get('config').user, { name: 'Arvin' });
   assert.equal(s.get('config').character.motto, '签名');
-  assert.equal(s.get('config').apps[0].iconUrl, '/media/app-icons/a.png');
   assert.deepEqual(s.get('media').voices, [{ id: '2', url: '/media/voice/2.mp3' }]);
 });
 
@@ -374,7 +370,7 @@ test('bridge: config push reuses getConfig normalization and only replaces confi
 });
 
 for (const value of [null, [], {}, { ...config(), character: null }, { ...config(), greetings: null },
-  { ...config(), projects: [null] }, { ...config(), apps: [null] }, { ...config(), projects: Array(1) }]) {
+  { ...config(), projects: [null] }, { ...config(), projects: Array(1) }]) {
   test(`bridge: invalid config push ${JSON.stringify(value)} leaves state unchanged`, t => {
     const warn = t.mock.method(console, 'warn', () => {}); const s = fresh();
     s.set({ config: config() }); const before = s.getState();
@@ -408,3 +404,40 @@ for (const patch of [
   applyEvent(s, { event: 'projectDrop', ...patch });
   assert.deepEqual(s.getState(), before); assert.equal(warn.mock.callCount(), 1);
 });
+
+test('bridge: config replies and pushes ignore legacy application fields without reading them', async () => {
+  const r = reply();
+  const unreadable = { enumerable: true, get() { throw new Error('legacy field read'); } };
+  Object.defineProperty(r.config, 'apps', unreadable);
+  Object.defineProperty(r.config.projects[0], 'apps', unreadable);
+  r.config.terminal = { hotkey: '⌥`' };
+  const expected = {
+    user: { name: null }, character: { name: '爱弥斯', motto: null }, greetings: [],
+    projects: [{ id: 'p', name: '项目', tags: [], hasReminders: false }],
+    terminal: { hotkey: '⌥`' },
+  };
+  const viaReply = fresh();
+  await createBridge(viaReply, { target: {}, native: { postMessage: () => r } }).start();
+  assert.deepEqual(viaReply.get('config'), expected);
+  const viaPush = fresh();
+  applyEvent(viaPush, { event: 'config', config: r.config });
+  assert.deepEqual(viaPush.get('config'), expected);
+});
+
+for (const [label, terminal, expected] of [
+  ['absent', undefined, null], ['null', null, null], ['array', Object.assign([], { hotkey: '⌥`' }), null],
+  ['string', '⌥`', null], ['number', 7, null], ['empty object', {}, null],
+  ['null key', { hotkey: null }, null], ['number key', { hotkey: 7 }, null],
+  ['array key', { hotkey: [] }, null], ['object key', { hotkey: {} }, null],
+  ['valid key', { hotkey: '⌃⌥T' }, '⌃⌥T'], ['empty key', { hotkey: '' }, ''],
+]) {
+  test(`bridge: terminal hotkey normalization handles ${label} for reply and push`, async () => {
+    const r = reply(); r.config.terminal = terminal;
+    const viaReply = fresh();
+    await createBridge(viaReply, { target: {}, native: { postMessage: () => r } }).start();
+    assert.deepEqual(viaReply.get('config')?.terminal, { hotkey: expected });
+    const viaPush = fresh();
+    applyEvent(viaPush, { event: 'config', config: r.config });
+    assert.deepEqual(viaPush.get('config')?.terminal, { hotkey: expected });
+  });
+}

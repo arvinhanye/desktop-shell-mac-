@@ -31,7 +31,7 @@ button { font: inherit; color: inherit; }
   background: linear-gradient(var(--color-card-tint), var(--color-card-tint)), var(--color-card-bg);
   opacity: var(--card-fill-opacity);
 }
-/* 可换的背景图（角色卡、启动栏），在底色之上、内容之下 */
+/* 可换的背景图（角色卡），在底色之上、内容之下 */
 .card-art { position: absolute; inset: 0; background-size: cover; background-position: center 30%; opacity: var(--card-art-opacity); }
 /* :where() 不增加优先级，组件自己的定位规则（例如 position: absolute）照常生效 */
 .card > :where(:not(.card-art)) { position: relative; z-index: 1; }
@@ -43,6 +43,9 @@ button { font: inherit; color: inherit; }
 .ghost-button { padding: var(--space-half) var(--space-2); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-sm); background: none; font-size: var(--text-sm); color: var(--color-text-muted); }
 .ghost-button:hover { color: var(--color-text); border-color: var(--color-accent); }
 .primary-button { padding: var(--space-1) var(--space-4); border: 0; border-radius: var(--radius-sm); background: var(--color-accent); color: var(--color-accent-contrast); font-weight: var(--weight-bold); }
+
+/* 快捷键提示（终端入口、终端面板标题栏共用；2026-10-23 加） */
+.key-hint { padding: 0 var(--space-2); border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: var(--text-sm); line-height: var(--leading-loose); letter-spacing: var(--tracking-title); color: var(--color-text-muted); text-shadow: none; }
 
 /* 可滚动列表（项目、待办）：细滚动条只在鼠标移上去时出现；上下还有内容时边缘淡出（JS 切换 more-above / more-below） */
 .scroll-list { overflow-y: auto; overscroll-behavior: contain; margin-right: calc(-1 * var(--space-2)); padding-right: var(--space-2); }

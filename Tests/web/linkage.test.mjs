@@ -9,7 +9,7 @@ import { createBrowser, descendants, byClass, one } from './helpers/linkage-brow
 // main.js requires a real document and has top-level await: inspect its wiring,
 // but mount the real modules below, synchronously in the documented page order.
 const mainSource = await readFile(new URL('../../web/js/main.js', import.meta.url), 'utf8');
-const widgetNames = ['clock', 'greeting', 'projects', 'launcher', 'todos', 'stats', 'character', 'appearance', 'project-editor', 'voice', 'visualizer'];
+const widgetNames = ['clock', 'greeting', 'projects', 'todos', 'stats', 'terminal', 'character', 'appearance', 'project-editor', 'voice', 'visualizer'];
 const registered = [...(mainSource.match(/const WIDGETS\s*=\s*\[([^\]]+)\]/)?.[1] ?? '').matchAll(/'([^']+)'/g)]
   .map(match => match[1]);
 assert.deepEqual(registered, widgetNames, 'the fixture must include every main.js widget in page order');
@@ -98,8 +98,6 @@ const row = (f, name) => {
   return result;
 };
 const todoTexts = f => byClass(f.hosts.todos, 'todo-text').map(node => node.textContent).sort();
-const relatedApps = f => byClass(f.hosts.launcher, 'app')
-  .filter(node => node.classList.contains('related')).map(node => one(node, 'app-name').textContent).sort();
 const avatar = f => one(f.hosts.character, 'avatar-button');
 const bars = f => byClass(f.hosts.visualizer, 'viz-bars').flatMap(group => group.children);
 const spectrum = level => ({ event: 'audioSpectrum', bands: Array(12).fill(level) });
@@ -155,28 +153,7 @@ test('联动 2：项目点击筛选待办，回车新增经过 bridge/mock 按�
   assert.deepEqual(todoTexts(f), [...allTodos, '联动测试：项目提醒', '联动测试：默认列表提醒'].sort());
 });
 
-test('联动 3：同一次项目点击同时筛选待办并高亮关联应用，无 apps 或取消时清除', async t => {
-  const f = await page(t);
-  assert.deepEqual(relatedApps(f), []);
-  await row(f, 'DesktopShell').emit('click');
-  assert.deepEqual(todoTexts(f), desktopTodos);
-  assert.deepEqual(relatedApps(f), ['Cursor']);
-  await row(f, '课程论文').emit('click');
-  assert.deepEqual(todoTexts(f), ['回复导师的邮件', '论文第三章初稿'].sort());
-  assert.deepEqual(relatedApps(f), ['Safari', '备忘录'].sort());
-  await row(f, '课程论文').emit('click');
-  assert.equal(f.store.get('selectedProject'), null);
-  assert.deepEqual(relatedApps(f), []);
-  await row(f, 'DesktopShell').emit('click');
-  assert.deepEqual(relatedApps(f), ['Cursor']);
-  await row(f, '旅行照片整理').emit('click');
-  assert.equal(f.store.get('selectedProject'), 'photos');
-  assert.deepEqual(relatedApps(f), []);
-  await row(f, '旅行照片整理').emit('click');
-  assert.deepEqual(relatedApps(f), []);
-});
-
-test('联动 4：20:59 到 21:00 的时钟定时更新驱动祝福语和 night 主题', async t => {
+test('联动 3：20:59 到 21:00 的时钟定时更新驱动祝福语和 night 主题', async t => {
   const f = await page(t, { hour: 20, minute: 59 });
   f.mock.setSound(false); // Still run the real mock timers, without irrelevant audio frames.
   assert.equal(f.store.get('phase'), 'evening');
@@ -194,7 +171,7 @@ test('联动 4：20:59 到 21:00 的时钟定时更新驱动祝福语和 night �
   assert.equal(one(f.hosts.greeting, 'greeting-wish').textContent, '时辰已晚，且捻熄灯盏，良宵安枕');
 });
 
-test('联动 5：电池 15% 显示提示但不自行暂停，20% 边界清除提示', async t => {
+test('联动 4：电池 15% 显示提示但不自行暂停，20% 边界清除提示', async t => {
   const f = await page(t);
   const stats = level => ({ event: 'systemStats', battery: { level, charging: false, onBattery: true },
     cpu: 12, memory: { usedBytes: 4 * 1024 ** 3, totalBytes: 8 * 1024 ** 3, percent: 50 } });
@@ -202,7 +179,7 @@ test('联动 5：电池 15% 显示提示但不自行暂停，20% 边界清除提
   f.push(stats(15));
   assert.ok(card.classList.contains('low-battery'));
   assert.equal(one(card, 'stat-battery').textContent, '电量15% 用电池');
-  assert.equal(one(card, 'power-hint').textContent, '电量低于 20%，已暂停背景视频和动画来省电');
+  assert.equal(one(card, 'power-hint').textContent, '电量低，已暂停视频和动画');
   assert.equal(f.store.get('paused'), false, 'the native power policy, not the web card, owns paused');
   f.push(spectrum(0.8)); f.browser.draw();
   assert.ok(bars(f).every(bar => bar.style.transform === 'scaleY(0.8)'));
@@ -217,7 +194,7 @@ test('联动 5：电池 15% 显示提示但不自行暂停，20% 边界清除提
   assert.equal(f.store.get('paused'), false);
 });
 
-test('联动 6：暂停清空频谱和待绘帧、丢弃后续频谱，语音仍可播，恢复等待新数据', async t => {
+test('联动 5：暂停清空频谱和待绘帧、丢弃后续频谱，语音仍可播，恢复等待新数据', async t => {
   const f = await page(t);
   // Swift stopping/restarting system audio capture belongs to M5.5, not this JS test.
   assert.match(mainSource, /store\.subscribe\('paused',\s*paused\s*=>\s*document\.documentElement\.toggleAttribute\('data-paused',\s*paused\),\s*\{\s*immediate:\s*true\s*\}\)/);
@@ -252,11 +229,10 @@ test('联动 6：暂停清空频谱和待绘帧、丢弃后续频谱，语音仍
   assert.deepEqual(bars(f).map(bar => bar.style.transform), Array(24).fill('scaleY(0.4)'));
 });
 
-test('联动 7：外观只发送 id，回复先到仍等待 uiState 推送更新头像和两张背景', async t => {
+test('联动 6：外观只发送 id，回复先到仍等待 uiState 推送更新角色卡头像和背景', async t => {
   const f = await page(t);
   const image = avatar(f).children[0];
   const characterArt = one(f.hosts.character, 'card-art');
-  const launcherArt = one(f.hosts.launcher, 'card-art');
   const overlay = one(f.hosts.appearance, 'appearance-overlay');
   assert.equal(overlay.hidden, true);
   await one(f.hosts.character, 'appearance-button').emit('click');
@@ -270,7 +246,6 @@ test('联动 7：外观只发送 id，回复先到仍等待 uiState 推送更新
   const oldBackground = 'url("/media/backgrounds/folder-01.png")';
   assert.equal(image.src, '/media/avatars/1.png');
   assert.equal(characterArt.style.backgroundImage, oldBackground);
-  assert.equal(launcherArt.style.backgroundImage, oldBackground);
   f.holdUI();
   const beforeEvents = f.received.length;
   await choice.emit('click'); // Real handle/save reply finishes; only the push is held.
@@ -279,7 +254,6 @@ test('联动 7：外观只发送 id，回复先到仍等待 uiState 推送更新
   assert.equal(image.src, '/media/avatars/1.png');
   assert.equal(choice.getAttribute('aria-checked'), 'false');
   assert.equal(characterArt.style.backgroundImage, oldBackground);
-  assert.equal(launcherArt.style.backgroundImage, oldBackground);
   assert.equal(f.received.length, beforeEvents);
   f.releaseUI();
   assert.equal(image.src, '/media/avatars/2.png');
@@ -291,18 +265,16 @@ test('联动 7：外观只发送 id，回复先到仍等待 uiState 推送更新
   assert.deepEqual(f.requests.at(-1), { action: 'saveUiState', backgroundId: 'folder-02' });
   assert.equal(f.store.get('ui').backgroundId, 'folder-01');
   assert.equal(characterArt.style.backgroundImage, oldBackground);
-  assert.equal(launcherArt.style.backgroundImage, oldBackground);
   assert.equal(background.getAttribute('aria-checked'), 'false');
   f.releaseUI();
   assert.equal(f.store.get('ui').backgroundId, 'folder-02');
   assert.equal(background.getAttribute('aria-checked'), 'true');
   assert.equal(characterArt.style.backgroundImage, 'url("/media/backgrounds/folder-02.png")');
-  assert.equal(launcherArt.style.backgroundImage, 'url("/media/backgrounds/folder-02.png")');
   assert.equal(image.src, '/media/avatars/2.png');
   assert.deepEqual(f.received.slice(beforeEvents), ['uiState', 'uiState']);
 });
 
-test('联动 8：语音开关阻止新播放、停止当前播放并清除状态，再开后点击恢复', async t => {
+test('联动 7：语音开关阻止新播放、停止当前播放并清除状态，再开后点击恢复', async t => {
   const f = await page(t);
   const enable = voiceEnabled => f.push({ event: 'uiState', ...f.store.get('ui'), voiceEnabled });
   enable(false);

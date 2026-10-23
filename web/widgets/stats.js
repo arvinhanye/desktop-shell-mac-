@@ -39,7 +39,8 @@ export default {
     host.setAttribute('aria-label', '系统状态');
     const card = element('div', 'card stats-card');
     const head = element('div', 'card-head');
-    head.append(element('h2', 'card-title', '系统状态'));
+    head.append(element('h2', 'card-title', '系统状态'),
+      element('span', 'card-meta power-hint', '电量低，已暂停视频和动画'));
     card.append(head);
 
     const spark = svgElement('svg');
@@ -70,7 +71,6 @@ export default {
     const cpuValue = row('CPU', spark);
     const memoryValue = row('内存', memoryBar);
     const batteryValue = row('电量', batteryBar, 'stat-row stat-battery');
-    card.append(element('p', 'power-hint', '电量低于 20%，已暂停背景视频和动画来省电'));
     host.append(card);
 
     let history = [];

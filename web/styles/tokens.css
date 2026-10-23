@@ -1,4 +1,4 @@
-/* DesktopShell 设计规范（M3.5 定稿，2026-10-18）。M4 原样复制到 web/styles/tokens.css。
+/* DesktopShell 设计规范（M3.5 定稿，2026-10-18；M9 改版 2026-10-23：去掉启动栏、压缩角色卡、加终端）。M4 原样复制到 web/styles/tokens.css。
    数值来源见 docs/design/parameters.md：颜色取自美化包 Ageo / prototype / Lano-Visualizer，
    并按壁纸亮度调整了底板，保证白字在头发等亮色区域上也看得清。
    组件 CSS 和 base.css 只能引用这里的变量，不写死颜色和尺寸。 */
@@ -23,7 +23,6 @@
   --color-accent-contrast: rgb(52 24 40);
   --color-selected-bg: rgb(230 138 161 / 0.24);
   --color-selected-border: var(--color-sakura);
-  --color-highlight: var(--color-ice);
   --color-success: rgb(158 226 196);
   --color-warning: rgb(246 205 138);
   --color-danger: rgb(255 150 170);
@@ -33,7 +32,7 @@
   --color-card-bg: rgb(27 32 56 / 0.52);
   --color-card-tint: rgb(230 138 161 / 0.20);   /* 叠在底色上的玫瑰色，对应 prototype ColorBG */
   --card-fill-opacity: 1;                       /* 底色层的不透明度；应用里有毛玻璃时见下方 data-glass */
-  --card-art-opacity: 0.32;                     /* 角色卡、启动栏的背景图 */
+  --card-art-opacity: 0.32;                     /* 角色卡的背景图 */
   --color-card-bg-hover: rgb(230 138 161 / 0.30);
   --color-card-border: rgb(250 192 207 / 0.16);
   --color-row-bg: rgb(255 255 255 / 0.04);      /* 项目行、缩略图的底 */
@@ -102,6 +101,7 @@
   --check-border-width: 1.5px;
   --check-mark-size: 10px;
   --icon-sm: 14px;            /* 按钮里的小图标 */
+  --icon-md: 18px;            /* 终端入口的图标 */
   --focus-ring-width: 2px;
   --focus-ring-offset: 2px;
   --control-disabled-opacity: 0.45;  /* 禁用的按钮（M8，2026-10-22） */
@@ -109,10 +109,9 @@
   /* —— 阴影和光晕（box-shadow / drop-shadow 的参数） —— */
   --shadow-card: none;
   --shadow-raised: 0 18px 48px var(--color-shadow);
-  --shadow-icon: 0 2px 6px rgb(10 12 26 / 0.4);          /* 启动栏图标 */
   --shadow-avatar: 0 2px 6px rgb(10 12 26 / 0.45);       /* 头像组合图 */
-  --glow-voice: 0 0 14px var(--color-ice);               /* 播放语音时头像发光 */
-  --glow-related: 0 0 10px color-mix(in srgb, var(--color-highlight) 70%, transparent);  /* 相关应用 */
+  /* 播放语音时圆形头像外圈的光环（box-shadow，只画在圆外面）：一道细亮边加一圈柔光。2026-10-19 改，原来是整张组合图的 drop-shadow */
+  --glow-voice: 0 0 0 1.5px color-mix(in srgb, var(--color-ice) 85%, transparent), 0 0 18px 3px color-mix(in srgb, var(--color-ice) 65%, transparent);
   --glow-viz: 0 0 6px color-mix(in srgb, var(--color-ice) 55%, transparent);            /* 律动条 */
   /* 把文件夹拖到项目卡片上时：卡片内侧一道冰蓝细边加柔光（inset，不会被卡片的 overflow 裁掉）。2026-10-21 加 */
   --glow-drop: inset 0 0 0 1.5px color-mix(in srgb, var(--color-ice) 85%, transparent), inset 0 0 24px color-mix(in srgb, var(--color-ice) 35%, transparent);
@@ -140,13 +139,14 @@
   --clock-height: 278px;
   --greeting-top: 34px;       /* 第二列，右对齐 */
   --character-top: 300px;
-  --character-height: 212px;
-  --stats-top: 528px;
+  --character-height: 112px;  /* 2026-10-23 由 212 压缩：头像组合图缩到 0.64 倍，名字和签名放在头像右边 */
+  --stats-top: 428px;
   --projects-top: 222px;
   --projects-height: 300px;   /* 2026-10-21 由 252 加高：加了"添加项目"输入框，仍能看到 3 行 */
-  --todos-top: 538px;         /* 下边停在启动栏上方 --column-gap 处；2026-10-21 随项目卡片下移 48 */
-  --launcher-bottom: 12px;    /* 横跨两列 */
-  --launcher-height: 110px;
+  --todos-top: 538px;         /* 2026-10-21 随项目卡片下移 48 */
+  --todos-bottom: 12px;       /* 2026-10-23 去掉启动栏后一直伸到底 */
+  --terminal-entry-top: 612px;     /* 终端入口：第一列紧挨在系统状态下面（428 + 高 168 + 16）；2026-10-23 用户定，左下角留给壁纸 */
+  --terminal-entry-height: 48px;
   --visualizer-center: calc(50% + 264px);   /* 心形中心的横坐标 */
   --visualizer-bottom: 2px;
   --visualizer-height: 178px;
@@ -171,13 +171,15 @@
   --clock-date-y: 228px;
 
   /* —— 组件内部尺寸 —— */
-  --avatar-width: 240px;      /* 头像组合图整张显示，图片本身 480 × 300（2 倍） */
-  --avatar-height: 150px;
+  --avatar-width: 154px;      /* 头像组合图整张显示，图片本身 480 × 300；2026-10-23 由 240 × 150 缩到 0.64 倍 */
+  --avatar-height: 96px;
+  --avatar-ring-x: 58px;      /* 圆形头像在组合图里的位置和直径（2 倍图里 x 182–471、y 2–291，× 0.32），30 张头像的圆都在这里 */
+  --avatar-ring-y: 1px;
+  --avatar-ring-size: 93px;
+  --character-info-x: 172px;  /* 名字和签名的左边，在头像右边 */
   --stat-label-width: 48px;
   --spark-height: 26px;       /* CPU 历史折线 */
   --spark-stroke: 1.5;        /* 折线粗细（SVG 单位） */
-  --app-icon-size: 48px;      /* 启动栏图标（Swift 导出 128px PNG） */
-  --app-tile-width: 80px;
   --scrollbar-width: 4px;
   --scroll-fade: 28px;        /* 列表上下还有内容时的淡出高度 */
   --todo-row-padding: 7px;
@@ -191,6 +193,30 @@
   --viz-bars-center-gap: 34px; /* 柱子离心形中心，给心形留位置 */
   --viz-bar-rest: 0.02;        /* 静止时的高度比例 */
 
+  /* —— 终端面板（terminal.html，独立的 NSPanel，盖在应用窗口上面；2026-10-23 加） ——
+     面板的位置和尺寸由 Swift 定（鼠标所在屏幕的安全区域：左右各缩 16、离顶 8、高 45%，放大后上下各留 8），网页铺满面板。 */
+  --color-terminal-bg: rgb(18 20 40);           /* 夜靛，比组件底板深：面板会盖在亮色的应用窗口上 */
+  --color-terminal-tint: rgb(230 138 161 / 0.10); /* 顶部一抹玫瑰色，往下渐隐 */
+  --terminal-fill-opacity: 0.94;                /* 普通浏览器里（没有原生毛玻璃）；应用里见下方 data-glass */
+  --terminal-tint-height: 160px;
+  --terminal-bar-height: 36px;
+  --terminal-screen-padding: 10px 16px 12px;
+  --terminal-font-size: 13px;
+  --terminal-line-height: 1.25;
+  /* xterm.js 的配色（terminal.js 读出来传给 xterm，用十六进制）。从色板推出：红 = 危险色、绿 = 成功色、黄 = 警告色、品红 = 玫瑰 / 樱粉、青 = 冰蓝 */
+  --terminal-fg: #ece8f6;
+  --terminal-cursor: #fac0cf;
+  --terminal-cursor-text: #341828;
+  --terminal-selection: #fac0cf59;              /* 樱粉 35% */
+  --ansi-black: #1b2038;   --ansi-bright-black: #6e7096;
+  --ansi-red: #ff96aa;     --ansi-bright-red: #ffb8c6;
+  --ansi-green: #9ee2c4;   --ansi-bright-green: #c2f0dc;
+  --ansi-yellow: #f6cd8a;  --ansi-bright-yellow: #fadfb0;
+  --ansi-blue: #8fb0f0;    --ansi-bright-blue: #b8ccff;
+  --ansi-magenta: #e68aa1; --ansi-bright-magenta: #fac0cf;
+  --ansi-cyan: #ade1ff;    --ansi-bright-cyan: #d2efff;
+  --ansi-white: #d6d2e8;   --ansi-bright-white: #ffffff;
+
   /* —— 层级 —— */
   --z-widgets: 1;
   --z-panel: 10;
@@ -200,8 +226,11 @@
   --duration-fast: 120ms;
   --duration-normal: 200ms;
   --duration-slow: 400ms;
-  --duration-voice-pulse: 1200ms;
+  --duration-terminal: 160ms;      /* 终端面板滑下、收起（Swift 做窗口动画） */
+  --duration-voice-pulse: 1600ms;  /* 光环一呼一吸 */
+  --voice-ring-dim: 0.35;          /* 光环呼吸到最暗时的不透明度 */
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-breathe: cubic-bezier(0.45, 0, 0.55, 1);
 }
 
 /* 在应用里（底板下面垫着原生毛玻璃 NSVisualEffectView，材质 .hudWindow）时，网页底色只负责上色。
@@ -209,6 +238,7 @@
 :root[data-glass="on"] {
   --card-fill-opacity: 0.45;
   --color-panel-bg: rgb(22 26 46 / 0.6);
+  --terminal-fill-opacity: 0.85;   /* 2026-10-23 定：面板常盖在亮色窗口上，比组件浓 */
 }
 
 /* 时段主题（store.phase → <html data-phase>）：只动底板和强调色的冷暖，保持克制。白天用上面的默认值。 */

@@ -1,10 +1,7 @@
 import { installScrollHints } from '../js/scroll-hints.js';
 
-export function projectActions(project, apps) {
-  const actions = [{ label: '访达', title: '在访达中打开', action: 'openProject', payload: { projectId: project.id } }];
-  const app = (project.apps ?? []).map(id => apps.find(app => app.id === id)).find(Boolean);
-  if (app) actions.push({ label: app.name, title: `用 ${app.name} 打开`, action: 'openProjectWith', payload: { projectId: project.id, appId: app.id } });
-  return actions;
+export function projectActions(project) {
+  return [{ label: '访达', title: '在访达中打开', action: 'openProject', payload: { projectId: project.id } }];
 }
 
 export function moveProjectIds(projects, projectId, direction) {
@@ -172,7 +169,7 @@ export default {
         for (const tag of project.tags ?? []) tags.append(element('span', 'tag', tag));
         info.append(element('div', 'project-name', project.name), tags);
         const actions = element('div', 'project-actions');
-        for (const action of projectActions(project, config.apps ?? [])) {
+        for (const action of projectActions(project)) {
           const button = element('button', 'ghost-button', action.label);
           button.type = 'button';
           button.title = action.title;

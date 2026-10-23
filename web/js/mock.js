@@ -1,11 +1,11 @@
 const parameters = new Map([
   ['getConfig', []], ['setDropRegions', ['regions']], ['setHitRegions', ['regions']], ['setGlassRegions', ['regions']],
   ['focusInput', []], ['blurInput', []],
-  ['openProject', ['projectId']], ['openProjectWith', ['projectId', 'appId']],
-  ['launchApp', ['appId']], ['saveUiState', ['avatarId', 'backgroundId']],
+  ['openProject', ['projectId']], ['openTerminal', []],
+  ['saveUiState', ['avatarId', 'backgroundId']],
   ['addTodo', ['text', 'projectId']], ['setTodoDone', ['todoId', 'done']],
   ['addProject', ['path']], ['removeProject', ['projectId']],
-  ['getProjectEditOptions', ['projectId']], ['updateProject', ['projectId', 'name', 'appId', 'reminderListOptionId']],
+  ['getProjectEditOptions', ['projectId']], ['updateProject', ['projectId', 'name', 'reminderListOptionId']],
   ['reorderProjects', ['projectIds']],
 ]);
 const accessStates = new Set(['granted', 'denied', 'notDetermined', 'restricted', 'writeOnly']);
@@ -31,22 +31,14 @@ export function createMock({ timers = globalThis, now = () => Date.now(), random
       { from: 23, title: '深夜了', wish: '时辰已晚，且捻熄灯盏，良宵安枕' },
     ],
     projects: [
-      { id: 'desktop-shell', name: 'DesktopShell', tags: ['dev'], apps: ['cursor'], hasReminders: true },
-      { id: 'thesis', name: '课程论文', tags: ['写作'], apps: ['safari', 'notes'], hasReminders: true },
-      { id: 'photos', name: '旅行照片整理', tags: [], apps: [], hasReminders: false },
-      { id: 'website', name: '个人网站', tags: ['dev'], apps: ['cursor', 'safari'], hasReminders: true },
-      { id: 'reading', name: '读书笔记', tags: ['阅读'], apps: ['notes'], hasReminders: true },
-      { id: 'budget', name: '家庭账本', tags: [], apps: [], hasReminders: false },
+      { id: 'desktop-shell', name: 'DesktopShell', tags: ['dev'], hasReminders: true },
+      { id: 'thesis', name: '课程论文', tags: ['写作'], hasReminders: true },
+      { id: 'photos', name: '旅行照片整理', tags: [], hasReminders: false },
+      { id: 'website', name: '个人网站', tags: ['dev'], hasReminders: true },
+      { id: 'reading', name: '读书笔记', tags: ['阅读'], hasReminders: true },
+      { id: 'budget', name: '家庭账本', tags: [], hasReminders: false },
     ],
-    apps: [
-      { id: 'cursor', name: 'Cursor', iconUrl: '/media/app-icons/cursor.png' },
-      { id: 'safari', name: 'Safari', iconUrl: '/media/app-icons/safari.png' },
-      { id: 'notes', name: '备忘录', iconUrl: '/media/app-icons/notes.png' },
-      { id: 'music', name: '音乐', iconUrl: '/media/app-icons/music.png' },
-      { id: 'mail', name: '邮件', iconUrl: '/media/app-icons/mail.png' },
-      { id: 'calendar', name: '日历', iconUrl: '/media/app-icons/calendar.png' },
-      { id: 'missing', name: 'Figma', iconUrl: null },
-    ],
+    terminal: { hotkey: '⌥`' },
   };
   const sequence = (count, make) => Array.from({ length: count }, (_, index) => make(index + 1));
   const pad = number => String(number).padStart(2, '0');
@@ -133,14 +125,13 @@ export function createMock({ timers = globalThis, now = () => Date.now(), random
     const base = name.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase() || 'project';
     let id = base, suffix = 2;
     while (config.projects.some(project => project.id === id)) id = `${base}-${suffix++}`;
-    const project = { id, name, tags: [], apps: config.apps.some(app => app.id === 'cursor') ? ['cursor'] : [], hasReminders: false };
+    const project = { id, name, tags: [], hasReminders: false };
     config.projects.push(project);
     projectPaths.set(id, clean);
     emitConfig();
     return structuredClone(project);
   };
   const projectFor = id => config.projects.find(project => project.id === id) ?? fail('not-found');
-  const appFor = id => config.apps.find(app => app.id === id) ?? fail('not-found');
   const emitStats = () => {
     cpu = clamp(cpu + (random() - 0.5) * 10, 3, 60);
     memoryPercent = clamp(memoryPercent + (random() - 0.5) * 2, 55, 75);
@@ -167,23 +158,20 @@ export function createMock({ timers = globalThis, now = () => Date.now(), random
           requireID(message.projectId); const p = projectFor(message.projectId), id = bindings.get(p.id);
           const list = reminderLists.find(l => l.id === id);
           refreshOptions(todosAccess === 'granted' ? reminderLists : []);
-          return structuredClone({ project: { id: p.id, name: p.name, appId: p.apps.find(id => config.apps.some(a => a.id === id)) ?? null },
+          return structuredClone({ project: { id: p.id, name: p.name },
             access: todosAccess, binding: { status: todosAccess !== 'granted' ? 'unavailable' : !id ? 'none' : !list ? 'missing' : list.canWrite ? 'linked' : 'read-only',
               optionId: todosAccess === 'granted' && list ? optionTokens.get(id) : null },
             lists: todosAccess === 'granted' ? reminderLists.map(l => ({ ...l, id: optionTokens.get(l.id), assignedProjectId: assignedProject(l.id) })) : [] });
         }
         case 'updateProject': {
           requireID(message.projectId); const p = projectFor(message.projectId);
-          const fields = ['name','appId','reminderListOptionId'].filter(k => Object.hasOwn(message,k));
+          const fields = ['name','reminderListOptionId'].filter(k => Object.hasOwn(message,k));
           if (!fields.length) fail('invalid');
           const next = { ...p };
           if (Object.hasOwn(message,'name')) {
             if (typeof message.name !== 'string') fail('invalid');
             const name = message.name.trim(), count = [...segmenter.segment(name)].length;
             if (count < 1 || count > 100) fail('invalid'); next.name = name;
-          }
-          if (Object.hasOwn(message,'appId')) {
-            requireID(message.appId); appFor(message.appId); next.apps = [message.appId, ...p.apps.filter(id => id !== message.appId)];
           }
           if (Object.hasOwn(message,'reminderListOptionId')) {
             const id = message.reminderListOptionId;
@@ -229,17 +217,12 @@ export function createMock({ timers = globalThis, now = () => Date.now(), random
           if (!Array.isArray(message.regions)) fail('invalid');
           return null;
         case 'openProject':
-        case 'openProjectWith':
           requireID(message.projectId);
-          if (message.action === 'openProjectWith') requireID(message.appId);
           projectFor(message.projectId);
-          if (message.action === 'openProjectWith') appFor(message.appId);
           console.info(`mock: ${message.action} ${message.projectId}`);
           return null;
-        case 'launchApp':
-          requireID(message.appId);
-          appFor(message.appId);
-          console.info(`mock: launchApp ${message.appId}`);
+        case 'openTerminal':
+          console.info('mock: openTerminal');
           return null;
         case 'saveUiState': {
           const fields = ['avatarId', 'backgroundId'].filter(key => Object.hasOwn(message, key));

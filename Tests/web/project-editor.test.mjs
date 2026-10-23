@@ -7,8 +7,8 @@ import { createMock } from '../../web/js/mock.js';
 import { createBrowser, byClass, one } from './helpers/linkage-browser.mjs';
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const deferred = () => { let resolve, reject; const promise = new Promise((a,b) => { resolve=a; reject=b; }); return { promise, resolve, reject }; };
-const config = { projects: [{id:'a',name:'A',apps:['editor']},{id:'b',name:'B',apps:[]}], apps:[{id:'editor',name:'Editor'}] };
-const options = id => ({project:{id,name:id.toUpperCase(),appId:'editor'},access:'granted',binding:{status:'none',optionId:null},lists:[
+const config = { projects: [{id:'a',name:'A'},{id:'b',name:'B'}] };
+const options = id => ({project:{id,name:id.toUpperCase()},access:'granted',binding:{status:'none',optionId:null},lists:[
   {id:'list-1',title:'<b>Same</b>',source:'One',canWrite:true,assignedProjectId:null},
   {id:'list-2',title:'Same',source:'Two',canWrite:false,assignedProjectId:null},
 ]});
@@ -21,10 +21,26 @@ function fixture(send = async (action, p) => options(p.projectId)) {
 test('editor: grapheme counts and changed-field patches preserve untouched bindings', () => {
   assert.equal(projectNameLength('  '),0); assert.equal(projectNameLength('👨‍👩‍👧‍👦'),1);
   assert.equal(projectNameLength('家'.repeat(100)),100); assert.equal(projectNameLength('家'.repeat(101)),101);
-  const original={name:'Name',appId:'editor'};
+  const original={name:'Name'};
   assert.deepEqual(projectEditPatch(original,{...original,name:' Name '}),{});
   assert.deepEqual(projectEditPatch(original,{...original,reminderListOptionId:null}),{reminderListOptionId:null});
   assert.deepEqual(projectEditPatch(original,{...original,name:'New'}),{name:'New'});
+});
+test('editor: project options need only identity and name, and the panel edits name and reminder lists', async () => {
+  const f=fixture(async (action,payload)=>action==='getProjectEditOptions'?options(payload.projectId):null);
+  const stop=editor.mount(f.host,f);f.store.set({editingProjectId:'a'});await flush();
+  assert.doesNotMatch(f.host.textContent,/默认打开应用/);
+  const groups=byClass(f.host,'project-editor-options');
+  assert.deepEqual(groups.map(group=>group.getAttribute('aria-label')),['提醒事项列表']);
+  const name=one(f.host,'project-editor-name');assert.equal(name.value,'A');
+  name.value='Renamed';await name.emit('input');
+  const list=byClass(f.host,'project-editor-option').find(button=>button.textContent.includes('<b>Same</b>'));
+  await list.emit('click');await one(f.host,'project-editor-save').emit('click');
+  assert.deepEqual(f.calls,[
+    {action:'getProjectEditOptions',payload:{projectId:'a'}},
+    {action:'updateProject',payload:{projectId:'a',name:'Renamed',reminderListOptionId:'list-1'}},
+  ]);
+  assert.equal(f.store.get('editingProjectId'),null);stop();f.assertClean();
 });
 test('projects: move uses complete latest IDs and guards boundaries', () => {
   assert.deepEqual(moveProjectIds(config.projects,'b',-1),['b','a']);
@@ -102,11 +118,11 @@ test('projects: management buttons do not select, reorder is pending-safe and pu
 });
 test('mock: edit options, duplicate titles, read-only denial, binding and order match native', async () => {
   const mock=createMock();const first=await mock.handle({action:'getProjectEditOptions',projectId:'photos'});
-  assert.equal(first.project.appId,null);assert.equal(first.binding.status,'none');
+  assert.equal(first.project.id,'photos');assert.equal(first.binding.status,'none');
   const free=first.lists.find(x=>x.canWrite&&!x.assignedProjectId);
   const readonly=first.lists.find(x=>!x.canWrite);
   await assert.rejects(mock.handle({action:'updateProject',projectId:'photos',reminderListOptionId:readonly.id}),/failed/);
-  await mock.handle({action:'updateProject',projectId:'photos',name:' Pictures ',appId:'safari',reminderListOptionId:free.id});
+  await mock.handle({action:'updateProject',projectId:'photos',name:' Pictures ',reminderListOptionId:free.id});
   const linked=await mock.handle({action:'getProjectEditOptions',projectId:'photos'});assert.equal(linked.project.name,'Pictures');assert.equal(linked.binding.status,'linked');
   await assert.rejects(mock.handle({action:'updateProject',projectId:'budget',reminderListOptionId:free.id}),/failed/);
   await mock.handle({action:'updateProject',projectId:'photos',reminderListOptionId:null});
