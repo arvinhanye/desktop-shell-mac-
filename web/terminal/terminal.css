@@ -17,3 +17,8 @@
 .terminal-screen { flex: 1; min-height: 0; padding: var(--terminal-screen-padding); font-family: var(--font-mono); font-size: var(--terminal-font-size); line-height: var(--terminal-line-height); color: var(--terminal-fg); }
 /* xterm.css 自带的视口底色是黑的，换成透明，露出面板底色 */
 .terminal-screen .xterm-viewport { background: transparent !important; }
+/* xterm 的视口用的是系统滚动条，亮色的轨道很扎眼：换成和项目、待办列表一样的细滚动条，鼠标移上去才出现（2026-10-23 Codex 审 M9-04 时提出） */
+.terminal-screen .xterm-viewport::-webkit-scrollbar { width: var(--scrollbar-width); }
+.terminal-screen .xterm-viewport::-webkit-scrollbar-track { background: none; }
+.terminal-screen .xterm-viewport::-webkit-scrollbar-thumb { background: none; border-radius: var(--radius-full); }
+.terminal-screen:hover .xterm-viewport::-webkit-scrollbar-thumb { background: var(--color-track); }
