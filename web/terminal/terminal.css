@@ -1,0 +1,24 @@
+.terminal-panel { position: relative; height: 100%; display: flex; flex-direction: column; overflow: hidden; border: var(--border-width) solid var(--color-card-border); border-radius: var(--radius-lg); }
+.terminal-panel::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(var(--color-terminal-tint), transparent var(--terminal-tint-height)), var(--color-terminal-bg);
+  opacity: var(--terminal-fill-opacity);
+}
+.terminal-panel > * { position: relative; }
+.terminal-bar { display: flex; align-items: center; gap: var(--space-3); height: var(--terminal-bar-height); padding: 0 var(--space-2) 0 var(--space-4); border-bottom: var(--border-width) solid var(--color-card-border); flex: none; }
+.terminal-title { display: flex; align-items: center; gap: var(--space-2); font-family: var(--font-serif); font-size: var(--text-md); letter-spacing: var(--tracking-title); }
+.terminal-title svg { width: var(--icon-sm); height: var(--icon-sm); color: var(--color-accent); }
+/* 正在运行的程序设的窗口标题（xterm onTitleChange），没有时显示 shell 的名字；太长就省略 */
+.terminal-meta { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--text-sm); color: var(--color-text-faint); }
+.terminal-actions { display: flex; align-items: center; gap: var(--space-1); }
+.terminal-button { display: grid; place-items: center; width: var(--space-6); height: var(--space-6); padding: 0; border: 0; border-radius: var(--radius-sm); background: none; color: var(--color-text-muted); }
+.terminal-button:hover { background: var(--color-card-bg-hover); color: var(--color-text); }
+.terminal-button svg { width: var(--icon-sm); height: var(--icon-sm); }
+.terminal-screen { flex: 1; min-height: 0; padding: var(--terminal-screen-padding); font-family: var(--font-mono); font-size: var(--terminal-font-size); line-height: var(--terminal-line-height); color: var(--terminal-fg); }
+/* xterm.css 自带的视口底色是黑的，换成透明，露出面板底色 */
+.terminal-screen .xterm-viewport { background: transparent !important; }
+/* xterm 的视口用的是系统滚动条，亮色的轨道很扎眼：换成和项目、待办列表一样的细滚动条，鼠标移上去才出现（2026-10-23 Codex 审 M9-04 时提出） */
+.terminal-screen .xterm-viewport::-webkit-scrollbar { width: var(--scrollbar-width); }
+.terminal-screen .xterm-viewport::-webkit-scrollbar-track { background: none; }
+.terminal-screen .xterm-viewport::-webkit-scrollbar-thumb { background: none; border-radius: var(--radius-full); }
+.terminal-screen:hover .xterm-viewport::-webkit-scrollbar-thumb { background: var(--color-track); }
