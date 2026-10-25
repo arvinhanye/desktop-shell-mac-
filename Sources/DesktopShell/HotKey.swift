@@ -48,3 +48,110 @@ struct HotKey: Equatable {
         "f10": kVK_F10, "f11": kVK_F11, "f12": kVK_F12,
     ]
 }
+
+/// Owns the Carbon handler and hot key together; configuration is resolved once at launch.
+@MainActor
+final class TerminalHotKeyRegistration {
+    private final class CallbackContext {
+        let id: EventHotKeyID
+        let onPressed: @MainActor () -> Void
+
+        init(id: EventHotKeyID, onPressed: @escaping @MainActor () -> Void) {
+            self.id = id
+            self.onPressed = onPressed
+        }
+    }
+
+    private static var nextIdentifier: UInt32 = 0
+    private let hotKey: HotKey
+    private let onPressed: () -> Void
+    private var hotKeyRef: EventHotKeyRef?
+    private var handlerRef: EventHandlerRef?
+    private var context: CallbackContext?
+
+    init(hotKey: HotKey, onPressed: @escaping () -> Void) {
+        self.hotKey = hotKey
+        self.onPressed = onPressed
+    }
+
+    deinit {
+        let hotKeyRef = hotKeyRef
+        let handlerRef = handlerRef
+        let context = context
+        // Carbon registration APIs are not thread-safe. Keep the context alive until
+        // the handler is removed, even if the final owner releases us off the main thread.
+        if Thread.isMainThread {
+            Self.remove(hotKeyRef: hotKeyRef, handlerRef: handlerRef, context: context)
+        } else {
+            DispatchQueue.main.async(execute: DispatchWorkItem {
+                Self.remove(hotKeyRef: hotKeyRef, handlerRef: handlerRef, context: context)
+            })
+        }
+    }
+
+    func start() {
+        guard context == nil else { return }
+        Self.nextIdentifier &+= 1
+        let id = EventHotKeyID(signature: 0x44536854, id: Self.nextIdentifier) // DShT
+        let context = CallbackContext(id: id) { [weak self] in
+            guard let self, self.hotKeyRef != nil,
+                  self.context?.id.id == id.id else { return }
+            self.onPressed()
+        }
+        self.context = context
+        var eventType = EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
+                                      eventKind: UInt32(kEventHotKeyPressed))
+        let target = GetApplicationEventTarget()
+        let installStatus = InstallEventHandler(target, { _, event, userData in
+            guard let event, let userData else { return OSStatus(eventNotHandledErr) }
+            let context = Unmanaged<CallbackContext>.fromOpaque(userData).takeUnretainedValue()
+            var receivedID = EventHotKeyID()
+            let status = GetEventParameter(event, EventParamName(kEventParamDirectObject),
+                                          EventParamType(typeEventHotKeyID), nil,
+                                          MemoryLayout<EventHotKeyID>.size, nil, &receivedID)
+            guard status == noErr,
+                  receivedID.signature == context.id.signature,
+                  receivedID.id == context.id.id else { return OSStatus(eventNotHandledErr) }
+            let onPressed = context.onPressed
+            DispatchQueue.main.async { onPressed() }
+            return noErr
+        }, 1, &eventType, Unmanaged.passUnretained(context).toOpaque(), &handlerRef)
+        guard installStatus == noErr else {
+            Log.error("terminal hotkey registration failed \(installStatus)")
+            stop()
+            return
+        }
+        let registerStatus = RegisterEventHotKey(hotKey.keyCode, hotKey.modifiers, id,
+                                                target, 0, &hotKeyRef)
+        guard registerStatus == noErr else {
+            Log.error("terminal hotkey registration failed \(registerStatus)")
+            stop()
+            return
+        }
+        Log.notice("terminal hotkey registered \(hotKey.display)")
+    }
+
+    func stop() {
+        let oldHotKeyRef = hotKeyRef
+        let oldHandlerRef = handlerRef
+        let oldContext = context
+        hotKeyRef = nil
+        handlerRef = nil
+        context = nil
+        Self.remove(hotKeyRef: oldHotKeyRef, handlerRef: oldHandlerRef, context: oldContext)
+    }
+
+    private nonisolated static func remove(hotKeyRef: EventHotKeyRef?, handlerRef: EventHandlerRef?,
+                                          context: CallbackContext?) {
+        withExtendedLifetime(context) {
+            if let hotKeyRef {
+                let status = UnregisterEventHotKey(hotKeyRef)
+                if status != noErr { Log.error("terminal hotkey unregister failed \(status)") }
+            }
+            if let handlerRef {
+                let status = RemoveEventHandler(handlerRef)
+                if status != noErr { Log.error("terminal hotkey handler removal failed \(status)") }
+            }
+        }
+    }
+}

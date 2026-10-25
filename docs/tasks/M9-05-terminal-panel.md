@@ -1,6 +1,6 @@
 # M9-05: 终端面板、全局快捷键和终端 bridge（Swift）
 
-- **状态**：todo
+- **状态**：done（人工桌面验收待确认，见审查记录）
 - **里程碑**：M9
 - **依赖**：M9-02（`HotKey.swift`、`config.terminal`）、M9-03（`TerminalSession`）、M9-04（`terminal.html`），三个都合并以后再做。M9-01 最好也已合并（终端入口在那里），不合并也能做，手动验证时用快捷键
 - **分支**：task/M9-05
@@ -151,14 +151,47 @@
 
 ## 交付记录
 
-- **改动摘要**：
+- **改动摘要**（2026-10-25）：
+  - 新增惰性创建的全局终端面板与独立 WKWebView：原生毛玻璃、鼠标所在屏幕定位、普通 / 放大布局、160 ms 动画、最后一次显示请求生效、焦点交还及屏幕参数变化重排。
+  - 新增终端专属 bridge，校验 WebView 身份、主框架、来源及五个动作的严格参数；组件页仅能无参数 `openTerminal`，终端动作从组件页进入时拒绝。输入限额按网页既有分块的 UTF-16 长度计数。
+  - 接通 ready 启动、输出原始字节转 base64、重载期间缓冲和重放、退出后首键只重开、resize、状态推送；AppDelegate 负责快捷键、重载与退出清理，暂停动画不影响终端。
+  - Carbon 注册支持失败回滚、重复启停及停止后旧回调失效。未修改 `TerminalSession.swift`、`web/` 或桌面窗口行为。
 - **自测结果**：
-- **疑问 / 偏离**：
+  - `scripts/test.sh`：最终 **313/313**（32 suites）；新增与相关定向测试 **42/42**，覆盖尺寸 / 非法参数 / 权限隔离 / 事件内容 / ready 前拒绝输入 / 重载重放 / 退出重开 / 启动失败 / 布局和旧动画完成请求失效。
+  - `scripts/test-web.sh`：**501/501**。`scripts/bundle.sh --debug` 中 `swift build` 无错误、无警告，固定证书 `DesktopShell Self-Signed` 打包、签名及指定要求验证通过。产物：`build/DesktopShell.app`。
+  - 全量测试有一次在原有 `Log.writeStderr` 路径遇到 `NSFileHandleOperationException: Bad file descriptor`；同轮 `TodoItemsTests` 会临时重定向全进程 stderr，可能存在并发竞争。未改动该范围外代码；保留失败记录，随后完整复跑通过。不能把这次异常当作通过或认定已修复。
+  - `git diff --check` 通过；新增 bridge / panel 日志仅有动作和错误码，无终端输入输出或长度；全 `Sources` 无 `NSApp.activate` / `activate(ignoringOtherApps`；变更仅在允许列表内。
+  - HotKey 独立真实 Carbon API 编译（warnings-as-errors）及临时替身生命周期探针通过；未通过探针抢占真实快捷键。独立子代理完整差异自查未发现可确认的中高优先级问题；这仅属实现自查，不替代下面的正式审查。
+  - 已实际启动固定证书新包，运行日志确认正确的包内 webDir、`terminal hotkey registered ⌥\``，桌面窗口层级仍为 widget=icon+3 / video=icon-1。经用户同意，用活动监视器正常退出旧副本（PID 600）；新副本保留运行。
+  - 用户反馈“能呼出并正常输出”。但本轮自动化键盘未触发全局快捷键，工具只定位到壁纸窗口，且 Safari 仍有 M9-04 终端预览页；截至记录时未取得对应 PTY 启动日志佐证，故原生呼出 / 中文输入仍待补充核对，未据此勾选验收。其余焦点交还、vim/codex、复制粘贴、放大保留、全屏、原生入口、exit 重开、菜单重载、多屏与 M9-01/02 的 Finder / 提醒事项真实验收仍待正式审查逐项完成。
+  - 本地日志与过程记录：`build/m9-validation/M9-05/`（忽略目录，不随源码提交），包括基线、失败全量、通过复跑、定向测试、网页测试、打包和原生应用日志。
+- **疑问 / 偏离**：无接口或范围偏离；本次只交付任务分支，未合并 main。真实桌面验收与跨会话正式审查仍未完成。
 
 <!-- ===== 以下由审查者填写（Claude Code，或没参与实现的另一个 Codex 会话） ===== -->
 
 ## 审查记录
 
-- **审查者**：
-- **结论**：
-- **意见**：
+- **审查者**：Claude Code（2026-10-25）
+- **结论**：代码和可执行的验收通过，已合并到 `main`。**用户手动验证的各项按用户要求先跳过，记为"待确认"**（用户 2026-10-25 原话"审查M9-05，先跳过人工审查"），不算已经通过。
+- **已实际执行**（在临时检出里，从 `567838a`、基线 `37c2a0f` 开始）：
+  - `git diff --check` 没有问题；改动只在允许的文件里，没有动 `TerminalSession.swift` 和 `web/`。
+  - 冷编译 `swift build` 成功（261 秒），没有警告；`scripts/test.sh` 连跑 3 轮，都是 313/313（32 个套件）；`scripts/test-web.sh` 501/501。交付记录里提到的那次 `Log.writeStderr` 异常，这 3 轮都没有出现，没复现不代表原因已经查清。
+  - `grep -rn "NSApp.activate\|activate(ignoringOtherApps" Sources` 没有输出。
+  - 新增的日志只有动作名、错误码，以及快捷键注册结果（显示文字和 OSStatus），不含终端输入、输出和长度。
+- **逐条核对**：
+  - **面板**：`NSPanel` 的属性和调用顺序照探针（先 `isFloatingPanel` 后 `level = .floating`，`collectionBehavior` 含 `.fullScreenAuxiliary`）；显示时 `orderFrontRegardless` → `makeKey` → `makeFirstResponder` → 推 `terminalState`；收起时在动画结束后 `orderOut`，再按需 `NSApp.deactivate()`；最后一次请求说了算（`TerminalPresentation` 的 revision）。
+  - **位置**：1792 × 1003 的可见区域，平时是 x 16、宽 1760、高 451、离顶 8，放大后上下各留 8，有测试。显示时取鼠标所在的屏幕，屏幕参数变化时重新摆放。
+  - **安全边界**：终端 bridge 只注册在终端面板自己的 WKWebView 上，并核对 `message.webView` 是同一个、主框架、`shell://app` 来源。终端页发别的动作回复 `untrusted`；组件页发终端动作也回复 `untrusted`，还会记一条 `terminal action from widget page rejected`。组件页只多了一个不带参数的 `openTerminal`。终端 WebView 只允许导航到 `shell://app` 主框架，拒绝新开窗口。
+  - **会话接入**：`terminalReady` 之前不接受输入和改尺寸；页面重新加载时先停止推送，`terminalReady` 后重推最近的输出，不重开 shell；退出后第一下按键只用来重开，按上一次的行列数；启动失败回复 `failed`。
+  - **快捷键**：Carbon 的处理函数和热键一起注册、一起注销，注册失败会回滚；退出应用时注销，并给 shell 发 `SIGHUP`。
+- **意见（不阻塞合并）**：
+  - **`openTerminal` 在面板已经显示时并不是"什么都不做"**：会把面板挪到鼠标所在的屏幕，并重新拿走键盘。AGENTS.md 写的是"已经显示就什么都不做"。单屏下看不出区别，多屏时反而更顺手，桌面验收时再一起看要不要统一。
+  - **收起后的 160 ms 动画期间，面板仍是 key window**：这时打的字不会回到原来的应用，因为页面已经让 xterm 失焦，字也不会进 shell，会被丢掉。这是任务单要求"动画结束后再 `orderOut`"带来的，手速快时可能察觉得到，桌面验收时留意。
+- **待确认（用户要求先跳过）**：任务单"用户手动验证"里的全部项目，包括：
+  - 快捷键呼出 / 收起和前台应用不变；
+  - 中文输入；vim / codex；复制粘贴；
+  - 放大保留；全屏应用上呼出；终端入口；
+  - `exit` 后重开；菜单"重新加载"；多屏；
+  - 以及并进来的 M9-01、M9-02 的配置核对。
+  - 交付记录里用户说过"能呼出并正常输出"，但当时没有对应的 PTY 启动日志可以核对，所以也不算已验证。
+
