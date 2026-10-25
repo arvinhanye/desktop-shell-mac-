@@ -1,6 +1,6 @@
 # M9-05: 终端面板、全局快捷键和终端 bridge（Swift）
 
-- **状态**：todo
+- **状态**：review
 - **里程碑**：M9
 - **依赖**：M9-02（`HotKey.swift`、`config.terminal`）、M9-03（`TerminalSession`）、M9-04（`terminal.html`），三个都合并以后再做。M9-01 最好也已合并（终端入口在那里），不合并也能做，手动验证时用快捷键
 - **分支**：task/M9-05
@@ -151,9 +151,21 @@
 
 ## 交付记录
 
-- **改动摘要**：
+- **改动摘要**（2026-10-25）：
+  - 新增惰性创建的全局终端面板与独立 WKWebView：原生毛玻璃、鼠标所在屏幕定位、普通 / 放大布局、160 ms 动画、最后一次显示请求生效、焦点交还及屏幕参数变化重排。
+  - 新增终端专属 bridge，校验 WebView 身份、主框架、来源及五个动作的严格参数；组件页仅能无参数 `openTerminal`，终端动作从组件页进入时拒绝。输入限额按网页既有分块的 UTF-16 长度计数。
+  - 接通 ready 启动、输出原始字节转 base64、重载期间缓冲和重放、退出后首键只重开、resize、状态推送；AppDelegate 负责快捷键、重载与退出清理，暂停动画不影响终端。
+  - Carbon 注册支持失败回滚、重复启停及停止后旧回调失效。未修改 `TerminalSession.swift`、`web/` 或桌面窗口行为。
 - **自测结果**：
-- **疑问 / 偏离**：
+  - `scripts/test.sh`：最终 **313/313**（32 suites）；新增与相关定向测试 **42/42**，覆盖尺寸 / 非法参数 / 权限隔离 / 事件内容 / ready 前拒绝输入 / 重载重放 / 退出重开 / 启动失败 / 布局和旧动画完成请求失效。
+  - `scripts/test-web.sh`：**501/501**。`scripts/bundle.sh --debug` 中 `swift build` 无错误、无警告，固定证书 `DesktopShell Self-Signed` 打包、签名及指定要求验证通过。产物：`build/DesktopShell.app`。
+  - 全量测试有一次在原有 `Log.writeStderr` 路径遇到 `NSFileHandleOperationException: Bad file descriptor`；同轮 `TodoItemsTests` 会临时重定向全进程 stderr，可能存在并发竞争。未改动该范围外代码；保留失败记录，随后完整复跑通过。不能把这次异常当作通过或认定已修复。
+  - `git diff --check` 通过；新增 bridge / panel 日志仅有动作和错误码，无终端输入输出或长度；全 `Sources` 无 `NSApp.activate` / `activate(ignoringOtherApps`；变更仅在允许列表内。
+  - HotKey 独立真实 Carbon API 编译（warnings-as-errors）及临时替身生命周期探针通过；未通过探针抢占真实快捷键。独立子代理完整差异自查未发现可确认的中高优先级问题；这仅属实现自查，不替代下面的正式审查。
+  - 已实际启动固定证书新包，运行日志确认正确的包内 webDir、`terminal hotkey registered ⌥\``，桌面窗口层级仍为 widget=icon+3 / video=icon-1。经用户同意，用活动监视器正常退出旧副本（PID 600）；新副本保留运行。
+  - 用户反馈“能呼出并正常输出”。但本轮自动化键盘未触发全局快捷键，工具只定位到壁纸窗口，且 Safari 仍有 M9-04 终端预览页；截至记录时未取得对应 PTY 启动日志佐证，故原生呼出 / 中文输入仍待补充核对，未据此勾选验收。其余焦点交还、vim/codex、复制粘贴、放大保留、全屏、原生入口、exit 重开、菜单重载、多屏与 M9-01/02 的 Finder / 提醒事项真实验收仍待正式审查逐项完成。
+  - 本地日志与过程记录：`build/m9-validation/M9-05/`（忽略目录，不随源码提交），包括基线、失败全量、通过复跑、定向测试、网页测试、打包和原生应用日志。
+- **疑问 / 偏离**：无接口或范围偏离；本次只交付任务分支，未合并 main。真实桌面验收与跨会话正式审查仍未完成。
 
 <!-- ===== 以下由审查者填写（Claude Code，或没参与实现的另一个 Codex 会话） ===== -->
 

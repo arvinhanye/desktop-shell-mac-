@@ -12,6 +12,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statsMonitor: SystemStatsMonitor?
     private var hitTestController: HitTestController?
     private var appState: AppState?
+    private var terminalController: TerminalController?
+    private var terminalHotKey: TerminalHotKeyRegistration?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = EditMenu.makeMainMenu()
@@ -22,6 +24,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let appState = AppState(paths: paths)
         self.appState = appState
         let config = appState.config
+        let hotKey = HotKey.resolve(config.terminal?.hotkey)
+        let terminal = TerminalController(paths: paths, hotKey: hotKey)
+        terminalController = terminal
+        Bridge.openTerminal = { [weak terminal] in terminal?.show() }
+        let registration = TerminalHotKeyRegistration(hotKey: hotKey) { [weak terminal] in terminal?.toggle() }
+        terminalHotKey = registration
+        registration.start()
         let videoURL = SchemeResolver(webRoot: paths.webDir, mediaRoot: paths.mediaDir)
             .fileURL(forPath: "/media/" + config.background.video)
         if videoURL == nil {
@@ -127,6 +136,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        terminalHotKey?.stop()
+        terminalHotKey = nil
+        Bridge.openTerminal = nil
+        terminalController?.stop()
+        terminalController = nil
         screenManager?.onWindowsChanged = nil
         screenManager?.onWidgetWindowsChanged = nil
         hitTestController?.stop()
@@ -203,6 +217,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     @objc private func reloadPages() {
         appState?.reloadConfig()
         screenManager?.reloadPages()
+        terminalController?.reload()
         Log.notice("DesktopShell: reloaded config and pages; background.video changes require an app restart")
     }
 

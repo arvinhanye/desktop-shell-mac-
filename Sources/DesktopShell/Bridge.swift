@@ -2,6 +2,8 @@ import WebKit
 
 @MainActor
 final class Bridge: NSObject, WKScriptMessageHandlerWithReply {
+    // AppDelegate owns the single terminal; widget bridges only get a show action.
+    static var openTerminal: (() -> Void)?
     weak var window: WidgetWindow?
     private let appState: AppState
 
@@ -24,7 +26,17 @@ final class Bridge: NSObject, WKScriptMessageHandlerWithReply {
         let action = candidate.flatMap { isValidID($0) && $0.count <= 64 ? $0 : nil } ?? "?"
         switch BridgeRequest.parse(message.body) {
         case .failure(let error):
+            if candidate.map(TerminalRequest.actions.contains) == true {
+                Log.error("terminal action from widget page rejected")
+            }
             reject(error, action: action, replyHandler: replyHandler)
+        case .success(.openTerminal):
+            guard let openTerminal = Self.openTerminal else {
+                reject(.failed, action: action, replyHandler: replyHandler)
+                return
+            }
+            openTerminal()
+            replyHandler(nil, nil)
         case .success(.getProjectEditOptions(let id)):
             switch appState.projectEditOptions(projectId: id) {
             case .success(let options): replyHandler(options, nil)

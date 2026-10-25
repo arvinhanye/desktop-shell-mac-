@@ -389,6 +389,18 @@ struct BridgeTests {
     }
 }
 
+extension BridgeTests {
+    @Test("组件只能无参数打开终端，不能使用任何终端专属动作")
+    func terminalIsolation() {
+        #expect(BridgeRequest.parse(["action": "openTerminal"]) == .success(.openTerminal))
+        #expect(BridgeRequest.parse(["action": "openTerminal", "data": "pwd"]) == .failure(.invalid))
+        for action in ["terminalReady", "terminalInput", "terminalResize", "toggleTerminalMaximize", "hideTerminal"] {
+            #expect(BridgeRequest.parse(["action": action]) == .failure(.untrusted))
+            #expect(BridgeRequest.parse(["action": action, "data": "pwd"]) == .failure(.untrusted))
+        }
+    }
+}
+
 
 extension BridgeTests {
     @Test("提醒新增按 Character 校验并修剪标题，允许缺省或 null 项目")

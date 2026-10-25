@@ -39,6 +39,7 @@ enum BridgeRequest: Equatable {
     case setDropRegions([[Double]])
     case setGlassRegions([GlassRegion])
     case openProject(String)
+    case openTerminal
     case addProject(path: String)
     case removeProject(String)
     case getProjectEditOptions(String)
@@ -51,6 +52,11 @@ enum BridgeRequest: Equatable {
             return .failure(.invalid)
         }
         switch action {
+        case "terminalReady", "terminalInput", "terminalResize", "toggleTerminalMaximize", "hideTerminal":
+            return .failure(.untrusted)
+        case "openTerminal":
+            guard Set(body.keys) == ["action"] else { return .failure(.invalid) }
+            return .success(.openTerminal)
         case "getProjectEditOptions":
             guard Set(body.keys) == ["action", "projectId"], let id = validID(body["projectId"]) else { return .failure(.invalid) }
             return .success(.getProjectEditOptions(id))
